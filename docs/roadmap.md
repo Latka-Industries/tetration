@@ -16,7 +16,7 @@ This document captures directions that would matter to teams behind formats and 
 | 10 | Optional GPU device routing (experimental) | [`query_engine.md` — Phase 10](query_engine.md#phase-10--optional-gpu-experimental) |
 | 11 | C ABI (`tetration-ffi`) | [`ffi.md`](ffi.md) |
 
-Near-term work already tracked elsewhere: Python bindings (separate repo), [`query_engine.md` — operations roadmap](query_engine.md#operations-roadmap-planned), [`query_engine.md` — hardening roadmap](query_engine.md#hardening-roadmap), [`conversions.md`](conversions.md) (import/export formats and roadblocks).
+Near-term work already tracked elsewhere: Python bindings ([**tet-py**](https://github.com/Latka-Industries/tet-py) — [`ffi.md`](ffi.md), [issue #18](https://github.com/Latka-Industries/tetration/issues/18)), [`query_engine.md` — operations roadmap](query_engine.md#operations-roadmap-planned), [`query_engine.md` — hardening roadmap](query_engine.md#hardening-roadmap), [`conversions.md`](conversions.md) (import/export formats and roadblocks).
 
 ---
 

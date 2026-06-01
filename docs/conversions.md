@@ -234,7 +234,7 @@ These often need **scientific semantics** (units, CRS, bounds) before raw conver
 | **Rechunk policy flag** | Target chunk bytes (e.g. 4–64 MiB) on import |
 | **Cloud read source** | Convert from object store without full download |
 | **Streaming write from URL** | Pairs with cloud-native Phase 12 |
-| **Python bindings repo** | `h5py` / `xarray` / `zarr` bridges — see [`ffi.md`](ffi.md) |
+| **Python bindings repo** | [`tet-py`](https://github.com/Latka-Industries/tet-py) — `tet.convert` planned ([#10](https://github.com/Latka-Industries/tet-py/issues/10)); `h5py` / `xarray` / `zarr` via optional extras — see [`ffi.md`](ffi.md) |
 
 Fixtures policy: [`fixtures/README.md`](../fixtures/README.md) — new formats get golden files **when** convert support lands.
 
@@ -263,4 +263,4 @@ Use when validating **source → `.tet` → Zarr → `.tet`** or comparing to so
 | [`src/convert/README.md`](../src/convert/README.md) | Module map for contributors |
 | [`src/export/README.md`](../src/export/README.md) | Zarr export internals |
 
-**Discussion:** extend this doc via PR; track new format requests in [issue #17](https://github.com/Latka-Industries/tetration/issues/17).
+**Discussion:** extend this doc via PR; track new format requests in [issue #17](https://github.com/Latka-Industries/tetration/issues/17). Python-side convert orchestration: [tet-py#10](https://github.com/Latka-Industries/tet-py/issues/10).
