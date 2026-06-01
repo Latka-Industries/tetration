@@ -2,6 +2,8 @@
 
 Importers for **HDF5**, **NetCDF**, and **Zarr v3** directory stores. Used by `tet convert` and `convert_to_tet` in the library.
 
+**Docs:** [`docs/conversions.md`](../../docs/conversions.md) — supported formats, roadblocks, potential importers.
+
 ## Features
 
 | Cargo feature                | Enables                             |

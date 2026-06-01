@@ -102,6 +102,8 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [`docs/layout_v1.md`](docs/layout_v1.md)           | On-disk **layout v1**: superblock, dataset catalog, chunk index, codecs, footer metadata/history, concurrency                                        |
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
 | [`docs/ffi.md`](docs/ffi.md)                       | **C ABI** (`tetration-ffi`): [`include/tetration.h`](include/tetration.h), linking, [`examples/ffi_query.c`](examples/ffi_query.c), release archives |
+| [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
+| [`docs/conversions.md`](docs/conversions.md)       | **Format interchange** — import/export status, roadblocks, potential converters (HDF5, NetCDF, Zarr, prospects)                                      |
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
 | [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; pins **tetration 0.1.9** |
 | [`CHANGELOG.md`](CHANGELOG.md)                   | Release notes by version                                                                                                                             |
@@ -217,6 +219,6 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 
 ### Long-term / discussion
 
-- [ ] **Format conversion roadmap** ([#17](https://github.com/Latka-Industries/tetration/issues/17)) — importer roadblocks, additional sources beyond HDF5/NetCDF/Zarr v3
-- [ ] **Architecture phases** ([#16](https://github.com/Latka-Industries/tetration/issues/16)) — append protocol, distributed read, plugin codecs, etc.
+- [ ] **Format conversion roadmap** ([#17](https://github.com/Latka-Industries/tetration/issues/17)) — [`docs/conversions.md`](docs/conversions.md)
+- [ ] **Architecture phases** ([#16](https://github.com/Latka-Industries/tetration/issues/16)) — [`docs/roadmap.md`](docs/roadmap.md)
 - [ ] **1.0 API freeze** — layout v1 + query JSON/TOML wire stability; breaking changes called out in release notes until then
