@@ -4,9 +4,11 @@ Stable **`extern "C"`** entry points for non-Rust runtimes. The Rust crate (`tet
 
 ## Python
 
-Official Python bindings are **not** built from this repository. A separate PyPI project (repository **TBD**) will ship wheels (PyO3 / maturin) that depend on a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration). Use that repo for NumPy integration, packaging, and Python-specific convert paths (`h5py`, `zarr`, etc.).
+Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (e.g. **0.1.9** for tet-py **0.1.1**). Do not `pip install tetration` — that PyPI name is unrelated math code.
 
-Until then: shell **`tet`**, embed **Rust**, use this C ABI, or implement readers from [`layout_v1.md`](layout_v1.md).
+**Shipped in tet-py:** `tet.open`, JSON/TOML query + reductions, NumPy read (ram / spill / sidecar), `TetWriter` / `write_dataset` (f32/f64), `preview=N` on reductions. **Planned there:** optional convert extras (`h5py`, `netCDF4`, `zarr`), `read_numpy` preflight, integer write dtypes, zero-copy mmap reads.
+
+For hosts that are not Python: shell **`tet`**, embed **Rust**, use this C ABI, or implement readers from [`layout_v1.md`](layout_v1.md).
 
 ## Status
 

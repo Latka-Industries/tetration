@@ -103,6 +103,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
 | [`docs/ffi.md`](docs/ffi.md)                       | **C ABI** (`tetration-ffi`): [`include/tetration.h`](include/tetration.h), linking, [`examples/ffi_query.c`](examples/ffi_query.c), release archives |
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
+| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; pins **tetration 0.1.9** |
 
 ## Design stance (short)
 
@@ -168,9 +169,29 @@ Library: [`parse_query_json`](https://docs.rs/tetration/latest/tetration/query/f
 
 See **Documentation map** above for layout, query engine, FFI, fixtures, and [docs.rs](https://docs.rs/tetration).
 
+### Python (`tet-py`)
+
+Official bindings live in [**tet-py**](https://github.com/Latka-Industries/tet-py) (PyPI **`tet-py`**, **`import tet`** — not the unrelated PyPI package `tetration`). Current release **0.1.1** links **tetration 0.1.9** from [crates.io](https://crates.io/crates/tetration).
+
+```bash
+pip install tet-py
+python -c "import tet; print(tet.__version__, tet.core_version())"
+```
+
+```python
+import tet
+
+with tet.open("data.tet") as f:
+    print(f.mean("temperature"))
+    arr = f.read_numpy("temperature")  # ram
+    z = f.transform.to_numpy.zscore("temperature")
+```
+
+API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-Industries/tet-py/blob/main/docs/operations.md). Remaining tet-py work (convert extras, `read_numpy` preflight, integer write dtypes) is tracked in that repo.
+
 ---
 
 ## To do
 
-- [ ] **Python wrapper** — separate repository (TBA); will pin crates.io `tetration`
+- [x] **Python bindings** — [`tet-py`](https://github.com/Latka-Industries/tet-py) on PyPI (`0.1.1`); read/query, NumPy ram/spill/sidecar, `TetWriter`
 - [ ] **docs.rs examples** — match on-disk guarantees when the format stabilizes

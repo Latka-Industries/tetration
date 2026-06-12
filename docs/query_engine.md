@@ -229,7 +229,7 @@ Each `ReadPlan.chunks` entry names one on-disk tile that intersects the selectio
 
 ## Embedder dense export
 
-For Python bindings and other hosts that need a **full logical tensor** (not capped `*_preview` arrays), use the helpers in [`embed_materialize.rs`](../src/query/embed_materialize.rs):
+For [**tet-py**](https://github.com/Latka-Industries/tet-py) and other hosts that need a **full logical tensor** (not capped `*_preview` arrays), use the helpers in [`embed_materialize.rs`](../src/query/embed_materialize.rs) (exposed in Python as `read_numpy`, `transform.to_numpy`, etc.):
 
 | API                                                                    | Query shape                         | Returns                                                                                    |
 | ---------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -706,7 +706,7 @@ These match the product vision but belong **beside** the reduction enum:
 - Arbitrary per-chunk user callbacks (needs a sandbox and stable ABI).
 - Plugin codecs or filters beyond the v1 catalog codec tags.
 - Guarantees about numerical order beyond logical row-major **preview** order (aggregates are commutative where noted).
-- **FFT, CWT, convolution, and ML ops** — export a hyperslab, then run ecosystem libraries (future Python bindings repo — see [`ffi.md`](ffi.md)).
+- **FFT, CWT, convolution, and ML ops** — export a hyperslab, then run ecosystem libraries (e.g. NumPy / SciPy / PyTorch via [**tet-py**](https://github.com/Latka-Industries/tet-py) — see [`ffi.md`](ffi.md)).
 - **Query replay / result cache in `.tet`** — use optional client-side memoization (`tet qhist` stores recent query JSON in platform cache only; does not mutate the file or skip decode by default).
 
 When adding an op, update this table, [`Operation`](../src/query/types/document.rs), `validate_query` / `document.rs`, `reduction/` / `operations.rs` / `partial/`, and (if tier **C**) `materialize_stats.rs`.
