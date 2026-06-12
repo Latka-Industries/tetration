@@ -187,11 +187,35 @@ with tet.open("data.tet") as f:
     z = f.transform.to_numpy.zscore("temperature")
 ```
 
-API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-Industries/tet-py/blob/main/docs/operations.md). Remaining tet-py work (convert extras, `read_numpy` preflight, integer write dtypes) is tracked in that repo.
+API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-Industries/tet-py/blob/main/docs/operations.md). Open work is tracked in the [tet-py README](https://github.com/Latka-Industries/tet-py/blob/main/README.md#to-do).
 
 ---
 
 ## To do
 
-- [x] **Python bindings** — [`tet-py`](https://github.com/Latka-Industries/tet-py) on PyPI (`0.1.1`); read/query, NumPy ram/spill/sidecar, `TetWriter`
-- [ ] **docs.rs examples** — match on-disk guarantees when the format stabilizes
+### Shipped (v0.1.9)
+
+- [x] Layout v1, query engine, `tet convert` / `tet export`, verify/repair, optional GPU, C ABI
+- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) **0.1.9**
+- [x] Official Python bindings — [**tet-py**](https://github.com/Latka-Industries/tet-py) on PyPI (`import tet`)
+
+### Near-term
+
+- [ ] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19)) — estimate logical selection bytes before `materialize_query_selection`
+- [ ] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20)) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
+- [ ] **Catalog write API** — publish `TetDatasetWrite::f64_row_major` and generic `row_major(dtype, …)` on crates.io
+- [ ] **Sidecar / writer unification** — route transform `write: sidecar` through `TetWriterSession` ([`transform/sidecar.rs`](src/query/transform/sidecar.rs))
+- [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))
+
+### Docs & sites
+
+- [x] Link tet-py from [`ffi.md`](docs/ffi.md) and [`query_engine.md`](docs/query_engine.md)
+- [ ] [**tetration-docs**](https://github.com/Latka-Industries/tetration-docs) — GitHub Pages deploy + content (format spec, CLI ref, crate usage)
+- [ ] **docs.rs examples** — match on-disk layout/query guarantees when the format stabilizes toward **1.0**
+- [ ] **Response schema versioning** — document breaking `QueryResponse` changes ([`query_engine.md` — hardening](docs/query_engine.md#hardening-roadmap))
+
+### Long-term / discussion
+
+- [ ] **Format conversion roadmap** ([#17](https://github.com/Latka-Industries/tetration/issues/17)) — importer roadblocks, additional sources beyond HDF5/NetCDF/Zarr v3
+- [ ] **Architecture phases** ([#16](https://github.com/Latka-Industries/tetration/issues/16)) — append protocol, distributed read, plugin codecs, etc.
+- [ ] **1.0 API freeze** — layout v1 + query JSON/TOML wire stability; breaking changes called out in release notes until then
