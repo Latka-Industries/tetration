@@ -46,6 +46,7 @@ Foreign file ──convert──► .tet file ◄──mmap── TetFile / veri
 - Query wire + execution: [`docs/query_engine.md`](../docs/query_engine.md)
 - `tet` CLI: [`docs/cli.md`](../docs/cli.md)
 - C ABI: [`docs/ffi.md`](../docs/ffi.md)
+- User docs: [docs.tetration.sh](https://docs.tetration.sh)
 - Published Rust API: [docs.rs/tetration](https://docs.rs/tetration)
 
 ## `prelude` quick path

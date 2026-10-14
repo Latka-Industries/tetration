@@ -1,6 +1,7 @@
 # Tetration
 
 [![Crates.io](https://img.shields.io/crates/v/tetration.svg)](https://crates.io/crates/tetration)
+[![Docs](https://img.shields.io/badge/docs-docs.tetration.sh-blue)](https://docs.tetration.sh)
 [![docs.rs](https://img.shields.io/docsrs/tetration)](https://docs.rs/tetration)
 ![Build](https://github.com/Latka-Industries/tetration/workflows/Build/badge.svg)
 ![Rust](https://img.shields.io/badge/rust-1.95-orange.svg)
@@ -98,6 +99,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 
 | Doc                                                | Contents                                                                                                                                             |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**docs.tetration.sh**](https://docs.tetration.sh) | User docs — format, CLI, Rust/Python guides ([contact](https://docs.tetration.sh/contact): `tensor@tetration.sh`)                                    |
 | [`docs/cli.md`](docs/cli.md)                       | **`tet`** commands: flags and subcommands (`info`, `verify`, `repair`, `query`, `qhist`, `convert`, `export`)                                        |
 | [`docs/layout_v1.md`](docs/layout_v1.md)           | On-disk **layout v1**: superblock, dataset catalog, chunk index, codecs, footer metadata/history, concurrency                                        |
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
@@ -170,7 +172,7 @@ mean = [] # scalar reduction
 
 Library: [`parse_query_json`](https://docs.rs/tetration/latest/tetration/query/fn.parse_query_json.html), [`parse_query_toml`](https://docs.rs/tetration/latest/tetration/query/fn.parse_query_toml.html), [`parse_query_text`](https://docs.rs/tetration/latest/tetration/query/fn.parse_query_text.html) (auto-detect).
 
-See **Documentation map** above for layout, query engine, FFI, fixtures, and [docs.rs](https://docs.rs/tetration).
+See **Documentation map** above for [docs.tetration.sh](https://docs.tetration.sh), layout, query engine, FFI, fixtures, and [docs.rs](https://docs.rs/tetration).
 
 ### Python (`tet-py`)
 
@@ -213,7 +215,7 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 ### Docs & sites
 
 - [x] Link tet-py from [`ffi.md`](docs/ffi.md) and [`query_engine.md`](docs/query_engine.md)
-- [ ] [**tetration-docs**](https://github.com/Latka-Industries/tetration-docs) — GitHub Pages deploy + content (format spec, CLI ref, crate usage)
+- [x] [**docs.tetration.sh**](https://docs.tetration.sh) — VitePress site ([tetration-docs](https://github.com/Latka-Industries/tetration-docs)); contact `tensor@tetration.sh`
 - [ ] **docs.rs examples** — match on-disk layout/query guarantees when the format stabilizes toward **1.0**
 - [ ] **Response schema versioning** — document breaking `QueryResponse` changes ([`query_engine.md` — hardening](docs/query_engine.md#hardening-roadmap))
 
