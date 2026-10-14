@@ -36,18 +36,18 @@ impl CfTransform {
 }
 
 fn apply_cf_f32(cf: &CfTransform, buf: &mut [u8]) {
-    for chunk in buf.chunks_exact_mut(4) {
-        let stored = f32::from_le_bytes(chunk.try_into().expect("f32 tile"));
+    for chunk in buf.as_chunks_mut::<4>().0 {
+        let stored = f32::from_le_bytes(*chunk);
         let decoded = decode_cf_f32(stored, cf);
-        chunk.copy_from_slice(&decoded.to_le_bytes());
+        *chunk = decoded.to_le_bytes();
     }
 }
 
 fn apply_cf_f64(cf: &CfTransform, buf: &mut [u8]) {
-    for chunk in buf.chunks_exact_mut(8) {
-        let stored = f64::from_le_bytes(chunk.try_into().expect("f64 tile"));
+    for chunk in buf.as_chunks_mut::<8>().0 {
+        let stored = f64::from_le_bytes(*chunk);
         let decoded = decode_cf_f64(stored, cf);
-        chunk.copy_from_slice(&decoded.to_le_bytes());
+        *chunk = decoded.to_le_bytes();
     }
 }
 

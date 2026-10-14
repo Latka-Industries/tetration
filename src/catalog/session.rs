@@ -23,14 +23,6 @@ use super::{
 };
 use crate::layout::{self, SuperblockV1, mmap_file_read};
 
-fn empty_dataset_import_fields() -> (
-    BTreeMap<String, String>,
-    Option<Vec<String>>,
-    Option<BTreeMap<String, CoordAxisV1>>,
-) {
-    (BTreeMap::new(), None, None)
-}
-
 /// In-memory dataset queued for [`TetWriterSession::commit`].
 #[derive(Debug, Clone)]
 pub struct TetDatasetWrite {
@@ -50,6 +42,10 @@ pub struct TetDatasetWrite {
 
 impl TetDatasetWrite {
     /// Row-major `f32` tensor with raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `shape`, `chunk_shape`, or `data` are inconsistent.
     pub fn f32_row_major(
         name: impl Into<String>,
         shape: &[u64],
@@ -60,6 +56,10 @@ impl TetDatasetWrite {
     }
 
     /// Row-major `f64` tensor with raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `shape`, `chunk_shape`, or `data` are inconsistent.
     pub fn f64_row_major(
         name: impl Into<String>,
         shape: &[u64],
@@ -92,7 +92,6 @@ impl TetDatasetWrite {
             None,
         );
         super::dataset::validate_raw_array_write(&spec)?;
-        let (attrs, dim_names, coords) = empty_dataset_import_fields();
         Ok(Self {
             name,
             dtype,
@@ -100,9 +99,9 @@ impl TetDatasetWrite {
             chunk_shape: chunk_shape.to_vec(),
             chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
             data,
-            attrs,
-            dim_names,
-            coords,
+            attrs: BTreeMap::new(),
+            dim_names: None,
+            coords: None,
         })
     }
 }
@@ -121,6 +120,10 @@ pub struct TetDatasetStreamSpec {
 
 impl TetDatasetStreamSpec {
     /// Row-major `f32` grid with raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `shape` or `chunk_shape` are inconsistent.
     pub fn f32_row_major(
         name: impl Into<String>,
         shape: &[u64],
@@ -130,6 +133,10 @@ impl TetDatasetStreamSpec {
     }
 
     /// Row-major `f64` grid with raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `shape` or `chunk_shape` are inconsistent.
     pub fn f64_row_major(
         name: impl Into<String>,
         shape: &[u64],
@@ -152,15 +159,14 @@ impl TetDatasetStreamSpec {
         let name = name.into();
         let meta = ArrayWriteMeta::row_major(&name, dtype, shape, chunk_shape, None);
         validate_array_write_meta(&meta)?;
-        let (attrs, dim_names, coords) = empty_dataset_import_fields();
         Ok(Self {
             name,
             dtype,
             shape: shape.to_vec(),
             chunk_shape: chunk_shape.to_vec(),
-            attrs,
-            dim_names,
-            coords,
+            attrs: BTreeMap::new(),
+            dim_names: None,
+            coords: None,
         })
     }
 }

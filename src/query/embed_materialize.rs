@@ -74,10 +74,7 @@ pub fn materialize_query_transform_ram(
     tet_path: &Path,
     spill_allowlist: Option<&SpillPathAllowlist>,
 ) -> Result<DenseMaterializeOutcome, TetError> {
-    let Operation::Transform { .. } = doc.operation.as_ref().ok_or_else(|| {
-        TetError::Validation("transform materialize requires transform operation".into())
-    })?
-    else {
+    let Some(op @ Operation::Transform { .. }) = doc.operation.as_ref() else {
         return Err(TetError::Validation(
             "transform materialize requires transform operation".into(),
         ));
@@ -96,19 +93,17 @@ pub fn materialize_query_transform_ram(
     let summary = read_tet_summary_v1(mmap)?;
     let budget = ExecutionBudget::resolve(&summary.file_execution, doc.execution.as_ref());
     let default_spill;
-    let spill_ref = match spill_allowlist {
-        Some(p) => p,
-        None => {
-            default_spill = SpillPathAllowlist::default_for_tet(
-                tet_path,
-                std::iter::empty::<std::path::PathBuf>(),
-            )?;
-            &default_spill
-        }
+    let spill_ref = if let Some(p) = spill_allowlist {
+        p
+    } else {
+        default_spill = SpillPathAllowlist::default_for_tet(
+            tet_path,
+            std::iter::empty::<std::path::PathBuf>(),
+        )?;
+        &default_spill
     };
     let fold_policy =
         FoldIoPolicy::resolve(&planned.read_plan, &budget, doc.execution.as_ref(), dtype)?;
-    let op = doc.operation.as_ref().expect("checked transform");
     let transform_input = TransformRunInput {
         mmap,
         plan: &planned.read_plan,
