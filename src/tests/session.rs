@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use crate::catalog::{
-    CoordAxisV1, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
-    read_tet_summary_v1,
+    CoordAxisV1, DATASET_DTYPE_TAG_V1, TetDatasetStreamSpec, TetDatasetWrite, TetFile,
+    TetWriterSession, read_tet_summary_v1,
 };
 use crate::query::{
     ExecuteQueryOptions, QueryOutputFormat, execute_query_document, format_query_response,
@@ -247,4 +247,133 @@ fn writer_session_streaming_requires_fill_commit() {
         .push_dataset_streaming(TetDatasetStreamSpec::f32_row_major("x", &[4], &[2]).unwrap())
         .unwrap();
     assert!(session.commit().is_err());
+}
+
+#[test]
+fn writer_session_f64_row_major_commit_and_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("f64_session.tet");
+
+    let mut session = TetWriterSession::create(&path);
+    session
+        .push_dataset(
+            TetDatasetWrite::f64_row_major(
+                "temperature",
+                &SHAPE,
+                &CHUNK_SHAPE,
+                super::fixture::le_row_major_2x3_f64_one_to_six(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    session.commit().unwrap();
+
+    let summary = read_tet_summary_v1(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(summary.datasets.len(), 1);
+    assert_eq!(summary.datasets[0].dtype, DATASET_DTYPE_TAG_V1.f64);
+
+    let file = TetFile::open(&path).unwrap();
+    let doc = parse_query_json(r#"{"dataset":"temperature","mean":[]}"#).unwrap();
+    let response = execute_query_document(
+        &doc,
+        file.path(),
+        file.mmap(),
+        ExecuteQueryOptions::execute_no_preview(),
+        None,
+    )
+    .unwrap();
+    let line = format_query_response(&response, QueryOutputFormat::Quiet).unwrap();
+    assert!(line.contains("mean=3.5"), "{line}");
+}
+
+#[test]
+fn writer_session_row_major_i32_commit_and_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("i32_session.tet");
+
+    let mut session = TetWriterSession::create(&path);
+    session
+        .push_dataset(
+            TetDatasetWrite::row_major(
+                "counts",
+                DATASET_DTYPE_TAG_V1.i32,
+                &SHAPE,
+                &CHUNK_SHAPE,
+                super::fixture::le_row_major_2x3_i32_one_to_six(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    session.commit().unwrap();
+
+    let summary = read_tet_summary_v1(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(summary.datasets[0].dtype, DATASET_DTYPE_TAG_V1.i32);
+
+    let file = TetFile::open(&path).unwrap();
+    let doc = parse_query_json(r#"{"dataset":"counts","mean":[]}"#).unwrap();
+    let response = execute_query_document(
+        &doc,
+        file.path(),
+        file.mmap(),
+        ExecuteQueryOptions::execute_no_preview(),
+        None,
+    )
+    .unwrap();
+    let line = format_query_response(&response, QueryOutputFormat::Quiet).unwrap();
+    // Integer folds promote to f64 aggregates.
+    assert!(line.contains("mean=3.5"), "{line}");
+}
+
+#[test]
+fn writer_session_streaming_f64_row_major() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("stream_f64.tet");
+
+    let mut session = TetWriterSession::create(&path);
+    session
+        .push_dataset_streaming(TetDatasetStreamSpec::f64_row_major("field", &[4], &[2]).unwrap())
+        .unwrap();
+
+    session
+        .commit_with_fill(1, |job, buf| {
+            assert_eq!(job.dataset_name, "field");
+            assert_eq!(job.raw_byte_len as usize, buf.len());
+            for slot in buf.chunks_exact_mut(8) {
+                slot.copy_from_slice(&7.0f64.to_le_bytes());
+            }
+            Ok(())
+        })
+        .unwrap();
+
+    let summary = read_tet_summary_v1(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(summary.datasets[0].dtype, DATASET_DTYPE_TAG_V1.f64);
+
+    let file = TetFile::open(&path).unwrap();
+    let doc = parse_query_json(r#"{"dataset":"field","mean":[]}"#).unwrap();
+    let response = execute_query_document(
+        &doc,
+        file.path(),
+        file.mmap(),
+        ExecuteQueryOptions::execute_no_preview(),
+        None,
+    )
+    .unwrap();
+    let line = format_query_response(&response, QueryOutputFormat::Quiet).unwrap();
+    assert!(line.contains("mean=7"), "{line}");
+}
+
+#[test]
+fn writer_session_row_major_rejects_bad_dtype() {
+    let err = TetDatasetWrite::row_major(
+        "bad",
+        999,
+        &SHAPE,
+        &CHUNK_SHAPE,
+        super::fixture::le_row_major_2x3_f32_one_to_six(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        crate::catalog::CatalogError::InvalidWriteSpec(_)
+    ));
 }

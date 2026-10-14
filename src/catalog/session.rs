@@ -45,27 +45,56 @@ impl TetDatasetWrite {
     ///
     /// # Errors
     ///
-    /// Returns [`CatalogError`] when `shape` / `chunk_shape` / `data` are inconsistent.
+    /// Returns [`CatalogError`] when `shape`, `chunk_shape`, or `data` are inconsistent.
     pub fn f32_row_major(
         name: impl Into<String>,
         shape: &[u64],
         chunk_shape: &[u64],
         data: Vec<u8>,
     ) -> Result<Self, CatalogError> {
+        Self::row_major(name, DATASET_DTYPE_TAG_V1.f32, shape, chunk_shape, data)
+    }
+
+    /// Row-major `f64` tensor with raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `shape`, `chunk_shape`, or `data` are inconsistent.
+    pub fn f64_row_major(
+        name: impl Into<String>,
+        shape: &[u64],
+        chunk_shape: &[u64],
+        data: Vec<u8>,
+    ) -> Result<Self, CatalogError> {
+        Self::row_major(name, DATASET_DTYPE_TAG_V1.f64, shape, chunk_shape, data)
+    }
+
+    /// Row-major tensor with a supported wire dtype tag and raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `dtype`, `shape`, `chunk_shape`, or `data` are inconsistent.
+    pub fn row_major(
+        name: impl Into<String>,
+        dtype: u32,
+        shape: &[u64],
+        chunk_shape: &[u64],
+        data: Vec<u8>,
+    ) -> Result<Self, CatalogError> {
         let name = name.into();
-        let spec = RawArrayWrite {
-            name: &name,
-            dtype: DATASET_DTYPE_TAG_V1.f32,
+        let spec = RawArrayWrite::from_tensor(
+            &name,
+            dtype,
             shape,
             chunk_shape,
-            chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
-            data: &data,
-            file_execution: None,
-        };
+            CHUNK_PAYLOAD_CODEC_V1.raw,
+            &data,
+            None,
+        );
         super::dataset::validate_raw_array_write(&spec)?;
         Ok(Self {
             name,
-            dtype: DATASET_DTYPE_TAG_V1.f32,
+            dtype,
             shape: shape.to_vec(),
             chunk_shape: chunk_shape.to_vec(),
             chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
@@ -90,29 +119,49 @@ pub struct TetDatasetStreamSpec {
 }
 
 impl TetDatasetStreamSpec {
-    /// Row-major `f32` grid with raw chunk codec (**0**); validate shape/chunk grid only.
+    /// Row-major `f32` grid with raw chunk codec (**0**).
     ///
     /// # Errors
     ///
-    /// Returns [`CatalogError`] when `shape` / `chunk_shape` are inconsistent.
+    /// Returns [`CatalogError`] when `shape` or `chunk_shape` are inconsistent.
     pub fn f32_row_major(
         name: impl Into<String>,
         shape: &[u64],
         chunk_shape: &[u64],
     ) -> Result<Self, CatalogError> {
+        Self::row_major(name, DATASET_DTYPE_TAG_V1.f32, shape, chunk_shape)
+    }
+
+    /// Row-major `f64` grid with raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `shape` or `chunk_shape` are inconsistent.
+    pub fn f64_row_major(
+        name: impl Into<String>,
+        shape: &[u64],
+        chunk_shape: &[u64],
+    ) -> Result<Self, CatalogError> {
+        Self::row_major(name, DATASET_DTYPE_TAG_V1.f64, shape, chunk_shape)
+    }
+
+    /// Row-major grid with a supported wire dtype tag and raw chunk codec (**0**).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError`] when `dtype`, `shape`, or `chunk_shape` are inconsistent.
+    pub fn row_major(
+        name: impl Into<String>,
+        dtype: u32,
+        shape: &[u64],
+        chunk_shape: &[u64],
+    ) -> Result<Self, CatalogError> {
         let name = name.into();
-        let meta = ArrayWriteMeta {
-            name: &name,
-            dtype: DATASET_DTYPE_TAG_V1.f32,
-            shape,
-            chunk_shape,
-            chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
-            file_execution: None,
-        };
+        let meta = ArrayWriteMeta::row_major(&name, dtype, shape, chunk_shape, None);
         validate_array_write_meta(&meta)?;
         Ok(Self {
             name,
-            dtype: DATASET_DTYPE_TAG_V1.f32,
+            dtype,
             shape: shape.to_vec(),
             chunk_shape: chunk_shape.to_vec(),
             attrs: BTreeMap::new(),

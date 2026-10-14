@@ -406,10 +406,10 @@ impl ValueAccum {
                 }
             }
             ReductionKind::NanMean => {
-                self.push_nan_mean_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_mean_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::NanStd => {
-                self.push_nan_std_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_std_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::ArgMin | ReductionKind::ArgMax => {
                 unreachable!("argmin/argmax use ArgIndexAccum")
@@ -457,10 +457,10 @@ impl ValueAccum {
                 }
             }
             ReductionKind::NanMean => {
-                self.push_nan_mean_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_mean_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::NanStd => {
-                self.push_nan_std_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_std_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::ArgMin | ReductionKind::ArgMax => {
                 unreachable!("argmin/argmax use ArgIndexAccum")
@@ -561,10 +561,10 @@ impl ValueAccum {
                 }
             }
             ReductionKind::NanMean => {
-                self.push_nan_mean_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_mean_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::NanStd => {
-                self.push_nan_std_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_std_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::ArgMin | ReductionKind::ArgMax => {
                 unreachable!("argmin/argmax use ArgIndexAccum")
@@ -665,10 +665,10 @@ impl ValueAccum {
                 }
             }
             ReductionKind::NanMean => {
-                self.push_nan_mean_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_mean_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::NanStd => {
-                self.push_nan_std_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_std_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::ArgMin | ReductionKind::ArgMax => {
                 unreachable!("argmin/argmax use ArgIndexAccum")
@@ -717,10 +717,10 @@ impl ValueAccum {
                 }
             }
             ReductionKind::NanMean => {
-                self.push_nan_mean_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_mean_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::NanStd => {
-                self.push_nan_std_values(vals.iter().map(|&v| v as f64));
+                self.push_nan_std_values(vals.iter().map(|&v| f64::from(v)));
             }
             ReductionKind::ArgMin | ReductionKind::ArgMax => {
                 unreachable!("argmin/argmax use ArgIndexAccum")

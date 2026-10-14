@@ -18,6 +18,8 @@ All logic is in `zarr.rs`:
 
 Used by `tet export <in.tet> <out.zarr/>`. Output directory must be missing or empty.
 
+**Docs:** [`docs/conversions.md`](../../docs/conversions.md) — export limits, round-trip notes, future formats.
+
 ## Related
 
 - Import path: [`convert/zarr.rs`](../convert/README.md)

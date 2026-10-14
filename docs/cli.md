@@ -101,4 +101,6 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 
 Preserves per-dataset **raw** or **zstd** chunk bytes; slash-separated dataset names become nested groups (`primary/f32`). Library: [`export_tet_to_zarr`](https://docs.rs/tetration/latest/tetration/export/fn.export_tet_to_zarr.html).
 
+Import/export matrix, roadblocks, and future formats: [`conversions.md`](conversions.md).
+
 More examples: [`fixtures/queries/`](../fixtures/queries/), [`query_engine.md`](query_engine.md).

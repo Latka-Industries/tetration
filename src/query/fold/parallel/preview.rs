@@ -80,7 +80,7 @@ pub(crate) fn write_disjoint_preview_i16(
         preview_addr,
         preview_len,
         li,
-        v.clamp(i16::MIN as f64, i16::MAX as f64) as i16,
+        v.clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16,
     );
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn write_disjoint_preview_u32(
         preview_addr,
         preview_len,
         li,
-        v.clamp(0., u32::MAX as f64) as u32,
+        v.clamp(0., f64::from(u32::MAX)) as u32,
     );
 }
 

@@ -642,6 +642,8 @@ Supported dtypes: wire tags in [`DATASET_DTYPE_TAG_V1`](../src/catalog/mod.rs) �
 
 ## Operations roadmap (planned)
 
+Long-term product directions (cloud I/O, indexing, distributed execution, scientific semantics) live in [`roadmap.md`](roadmap.md). This section covers **query operations and tiers** only.
+
 New ops should declare which **implementation tier** they use. That keeps “huge tensor + one number” fast while harder stats stay explicit about memory.
 
 ### Implementation tiers

@@ -9,6 +9,8 @@ Spec: [`docs/layout_v1.md`](../../docs/layout_v1.md).
 | Type / fn             | Use                                                              |
 | --------------------- | ---------------------------------------------------------------- |
 | `TetWriterSession`    | Buffer datasets, `commit()` or `commit_with_fill()` → one `.tet` |
+| `TetDatasetWrite`     | In-memory row-major tiles: `f32_row_major`, `f64_row_major`, `row_major(dtype, …)` |
+| `TetDatasetStreamSpec`| Streaming geometry: same builders, fill tiles at commit          |
 | `TetFile`             | Open for mmap; `summary()`, path, backing mmap                   |
 | `read_tet_summary_v1` | Parse catalog from bytes (no extra health checks)                |
 | `TetFileSummaryV1`    | Superblock + datasets + chunks + history + metadata              |
@@ -29,7 +31,7 @@ Verify APIs are implemented in [`verify`](../verify/README.md) but re-exported h
 | `history.rs`      | `THST` footer: convert history rows, metadata blob refs                        |
 | `metadata.rs`     | Typed `metadata` JSON (axes, coord labels, file/dataset attrs)                 |
 | `execution.rs`    | Per-file defaults in chunk index header (memory budget bps)                    |
-| `session.rs`      | `TetWriterSession` / `TetFile` façade                                          |
+| `session.rs`      | `TetWriterSession` / `TetFile` façade; `TetDatasetWrite` / `TetDatasetStreamSpec` |
 
 ## Codecs and dtypes
 

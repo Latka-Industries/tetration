@@ -1,6 +1,7 @@
 # Tetration
 
 [![Crates.io](https://img.shields.io/crates/v/tetration.svg)](https://crates.io/crates/tetration)
+[![Docs](https://img.shields.io/badge/docs-docs.tetration.sh-blue)](https://docs.tetration.sh)
 [![docs.rs](https://img.shields.io/docsrs/tetration)](https://docs.rs/tetration)
 ![Build](https://github.com/Latka-Industries/tetration/workflows/Build/badge.svg)
 ![Rust](https://img.shields.io/badge/rust-1.95-orange.svg)
@@ -98,10 +99,13 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 
 | Doc                                                | Contents                                                                                                                                             |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**docs.tetration.sh**](https://docs.tetration.sh) | User docs — format, CLI, Rust/Python guides ([contact](https://docs.tetration.sh/contact): `tensor@tetration.sh`)                                    |
 | [`docs/cli.md`](docs/cli.md)                       | **`tet`** commands: flags and subcommands (`info`, `verify`, `repair`, `query`, `qhist`, `convert`, `export`)                                        |
 | [`docs/layout_v1.md`](docs/layout_v1.md)           | On-disk **layout v1**: superblock, dataset catalog, chunk index, codecs, footer metadata/history, concurrency                                        |
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
 | [`docs/ffi.md`](docs/ffi.md)                       | **C ABI** (`tetration-ffi`): [`include/tetration.h`](include/tetration.h), linking, [`examples/ffi_query.c`](examples/ffi_query.c), release archives |
+| [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
+| [`docs/conversions.md`](docs/conversions.md)       | **Format interchange** — import/export status, roadblocks, potential converters (HDF5, NetCDF, Zarr, prospects)                                      |
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
 | [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; pins **tetration 0.1.9** |
 | [`CHANGELOG.md`](CHANGELOG.md)                   | Release notes by version                                                                                                                             |
@@ -134,7 +138,7 @@ Wire details: [`docs/layout_v1.md` — Concurrency](docs/layout_v1.md#concurrenc
 
 ```toml
 [dependencies]
-tetration = "0.1.9"
+tetration = "0.1.10"
 ```
 
 ```rust
@@ -144,7 +148,7 @@ use tetration::prelude::*;
 
 ### Embedder flow
 
-1. **Write** — `TetWriterSession::create` → `push_dataset` → `commit()` (or `commit_with_fill` for streaming).
+1. **Write** — `TetWriterSession::create` → `push_dataset` with `TetDatasetWrite::f32_row_major` / `f64_row_major` / `row_major(dtype, …)` → `commit()` (or `TetDatasetStreamSpec` + `commit_with_fill` for streaming).
 2. **Read / aggregate** — `TetFile::open` → `execute_query_json` → [`QueryResponse`](https://docs.rs/tetration/latest/tetration/query/struct.QueryResponse.html).
 3. **Dense tensors (no preview cap)** — mmap the `.tet`, then [`materialize_query_selection`](https://docs.rs/tetration/latest/tetration/query/fn.materialize_query_selection.html) (selection-only) or [`materialize_query_transform_ram`](https://docs.rs/tetration/latest/tetration/query/fn.materialize_query_transform_ram.html) (`transform` + `write: ram`) → [`DenseMaterializeOutcome`](https://docs.rs/tetration/latest/tetration/query/struct.DenseMaterializeOutcome.html). See [query engine — embedder dense export](docs/query_engine.md#embedder-dense-export).
 
@@ -168,7 +172,7 @@ mean = [] # scalar reduction
 
 Library: [`parse_query_json`](https://docs.rs/tetration/latest/tetration/query/fn.parse_query_json.html), [`parse_query_toml`](https://docs.rs/tetration/latest/tetration/query/fn.parse_query_toml.html), [`parse_query_text`](https://docs.rs/tetration/latest/tetration/query/fn.parse_query_text.html) (auto-detect).
 
-See **Documentation map** above for layout, query engine, FFI, fixtures, and [docs.rs](https://docs.rs/tetration).
+See **Documentation map** above for [docs.tetration.sh](https://docs.tetration.sh), layout, query engine, FFI, fixtures, and [docs.rs](https://docs.rs/tetration).
 
 ### Python (`tet-py`)
 
@@ -194,29 +198,29 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 
 ## To do
 
-### Shipped (v0.1.9)
+### Shipped (v0.1.10)
 
 - [x] Layout v1, query engine, `tet convert` / `tet export`, verify/repair, optional GPU, C ABI
-- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) **0.1.9**
+- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) **0.1.10**
 - [x] Official Python bindings — [**tet-py**](https://github.com/Latka-Industries/tet-py) on PyPI (`import tet`)
+- [x] Catalog write API — `TetDatasetWrite` / `TetDatasetStreamSpec` `f32_row_major`, `f64_row_major`, and generic `row_major(dtype, …)`
 
 ### Near-term
 
 - [ ] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19)) — estimate logical selection bytes before `materialize_query_selection`
 - [ ] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20)) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
-- [ ] **Catalog write API** — publish `TetDatasetWrite::f64_row_major` and generic `row_major(dtype, …)` on crates.io
 - [ ] **Sidecar / writer unification** — route transform `write: sidecar` through `TetWriterSession` ([`transform/sidecar.rs`](src/query/transform/sidecar.rs))
 - [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))
 
 ### Docs & sites
 
 - [x] Link tet-py from [`ffi.md`](docs/ffi.md) and [`query_engine.md`](docs/query_engine.md)
-- [ ] [**tetration-docs**](https://github.com/Latka-Industries/tetration-docs) — GitHub Pages deploy + content (format spec, CLI ref, crate usage)
+- [x] [**docs.tetration.sh**](https://docs.tetration.sh) — VitePress site ([tetration-docs](https://github.com/Latka-Industries/tetration-docs)); contact `tensor@tetration.sh`
 - [ ] **docs.rs examples** — match on-disk layout/query guarantees when the format stabilizes toward **1.0**
 - [ ] **Response schema versioning** — document breaking `QueryResponse` changes ([`query_engine.md` — hardening](docs/query_engine.md#hardening-roadmap))
 
 ### Long-term / discussion
 
-- [ ] **Format conversion roadmap** ([#17](https://github.com/Latka-Industries/tetration/issues/17)) — importer roadblocks, additional sources beyond HDF5/NetCDF/Zarr v3
-- [ ] **Architecture phases** ([#16](https://github.com/Latka-Industries/tetration/issues/16)) — append protocol, distributed read, plugin codecs, etc.
+- [ ] **Format conversion roadmap** ([#17](https://github.com/Latka-Industries/tetration/issues/17)) — [`docs/conversions.md`](docs/conversions.md)
+- [ ] **Architecture phases** ([#16](https://github.com/Latka-Industries/tetration/issues/16)) — [`docs/roadmap.md`](docs/roadmap.md)
 - [ ] **1.0 API freeze** — layout v1 + query JSON/TOML wire stability; breaking changes called out in release notes until then
