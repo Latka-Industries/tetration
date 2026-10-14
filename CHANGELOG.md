@@ -1,13 +1,18 @@
 # Changelog
 
-## Unreleased
+## [0.1.10] - 2026-10-13
 
 ### Added
 
-- `CHANGELOG.md`
+- Catalog session writers: `TetDatasetWrite::f64_row_major` / `row_major(dtype, …)` and matching `TetDatasetStreamSpec` helpers for any supported wire dtype
+- Session tests for `f64`, `i32`, streaming `f64`, and bad-dtype rejection
+- `CHANGELOG.md`; homepage / docs links → [docs.tetration.sh](https://docs.tetration.sh)
 
 ### Changed
 
+- GitHub Release workflow publishes non-draft releases (`draft: false`)
+- `hdf5-metno-sys` / lockfile refresh for Homebrew HDF5 **2.2**
+- Clippy cleanups (`as_chunks_mut` in CF decode, pedantic nits in embed materialize / fold)
 - README to-do list; tet-py references in `README.md`, `docs/ffi.md`, and `docs/query_engine.md`
 
 ## [0.1.9] - 2026-05-29

@@ -138,7 +138,7 @@ Wire details: [`docs/layout_v1.md` — Concurrency](docs/layout_v1.md#concurrenc
 
 ```toml
 [dependencies]
-tetration = "0.1.9"
+tetration = "0.1.10"
 ```
 
 ```rust
@@ -148,7 +148,7 @@ use tetration::prelude::*;
 
 ### Embedder flow
 
-1. **Write** — `TetWriterSession::create` → `push_dataset` → `commit()` (or `commit_with_fill` for streaming).
+1. **Write** — `TetWriterSession::create` → `push_dataset` with `TetDatasetWrite::f32_row_major` / `f64_row_major` / `row_major(dtype, …)` → `commit()` (or `TetDatasetStreamSpec` + `commit_with_fill` for streaming).
 2. **Read / aggregate** — `TetFile::open` → `execute_query_json` → [`QueryResponse`](https://docs.rs/tetration/latest/tetration/query/struct.QueryResponse.html).
 3. **Dense tensors (no preview cap)** — mmap the `.tet`, then [`materialize_query_selection`](https://docs.rs/tetration/latest/tetration/query/fn.materialize_query_selection.html) (selection-only) or [`materialize_query_transform_ram`](https://docs.rs/tetration/latest/tetration/query/fn.materialize_query_transform_ram.html) (`transform` + `write: ram`) → [`DenseMaterializeOutcome`](https://docs.rs/tetration/latest/tetration/query/struct.DenseMaterializeOutcome.html). See [query engine — embedder dense export](docs/query_engine.md#embedder-dense-export).
 
@@ -198,17 +198,17 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 
 ## To do
 
-### Shipped (v0.1.9)
+### Shipped (v0.1.10)
 
 - [x] Layout v1, query engine, `tet convert` / `tet export`, verify/repair, optional GPU, C ABI
-- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) **0.1.9**
+- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) **0.1.10**
 - [x] Official Python bindings — [**tet-py**](https://github.com/Latka-Industries/tet-py) on PyPI (`import tet`)
+- [x] Catalog write API — `TetDatasetWrite` / `TetDatasetStreamSpec` `f32_row_major`, `f64_row_major`, and generic `row_major(dtype, …)`
 
 ### Near-term
 
 - [ ] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19)) — estimate logical selection bytes before `materialize_query_selection`
 - [ ] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20)) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
-- [ ] **Catalog write API** — publish `TetDatasetWrite::f64_row_major` and generic `row_major(dtype, …)` on crates.io
 - [ ] **Sidecar / writer unification** — route transform `write: sidecar` through `TetWriterSession` ([`transform/sidecar.rs`](src/query/transform/sidecar.rs))
 - [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))
 

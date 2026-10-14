@@ -1,4 +1,6 @@
-//! Create a `.tet` with [`TetWriterSession`], then query via [`TetFile`] + [`execute_query_json`].
+//! Create a `.tet` with [`TetWriterSession`] + [`TetDatasetWrite::f32_row_major`]
+//! (also `f64_row_major` / `row_major` for other wire dtypes), then query via
+//! [`TetFile`] + [`execute_query_json`].
 //!
 //! ```bash
 //! cargo run --example session_write

@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.95'
+          toolchain: "1.95"
 
       - name: Package FFI release archive
         shell: bash
@@ -48,7 +48,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Create draft GitHub release
+    name: Create GitHub release
     needs: ffi-artifacts
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
@@ -60,12 +60,12 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Create draft release with FFI assets
+      - name: Create GitHub release with FFI assets
         uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
-          draft: true
+          draft: false
           generate_release_notes: true
           files: release-assets/*.tar.gz
         env:
@@ -112,7 +112,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.95'
+          toolchain: "1.95"
 
       - name: Install HDF5 and NetCDF (Ubuntu)
         run: |
