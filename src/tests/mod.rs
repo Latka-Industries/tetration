@@ -20,6 +20,7 @@ mod fs_device;
 mod layout_roundtrip;
 mod metadata;
 mod package;
+mod package_verify;
 mod publish;
 mod query;
 mod query_fixtures;

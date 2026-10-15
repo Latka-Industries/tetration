@@ -189,7 +189,7 @@ example.tet.d/
 
 **GC (decision J):** default retain `current` and `current-1`. Deleting older `generations/<G>/` is opt-in; never unlink a `packed.tet` that may still be mmap’d.
 
-Fuzz / torn generations: [THI-466](https://linear.app/thicclatka/issue/THI-466).
+Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path.tet.d`. Repair: `tet repair path.tet.d --apply quarantine_publish` for stale locks. Reject / proptest coverage: `src/tests/package_verify.rs` ([THI-466](https://linear.app/thicclatka/issue/THI-466)).
 
 ---
 
@@ -212,7 +212,7 @@ Fuzz / torn generations: [THI-466](https://linear.app/thicclatka/issue/THI-466).
 2. Package skeleton + `PROTOCOL` / `CURRENT` roles — THI-468 (partial: `TetPackage`) ✅
 3. Shard writer API — THI-463 (`TetShardWriter` / `PartMeta`) ✅
 4. Compact-inside-publish + atomic publish — THI-464 (`publish_parts` / `merge_tet_files`)
-5. Verify / repair / fuzz — THI-466
+5. Verify / repair / fuzz — THI-466 (`verify_tet_package`, `tet verify` on `.tet.d`)
 6. CLI ingest / publish / pack — THI-467
 7. tet-py **0.2.0** + zero-copy mmap → NumPy — [THI-21](https://linear.app/thicclatka/issue/THI-21)
 

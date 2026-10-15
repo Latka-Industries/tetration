@@ -5,8 +5,8 @@ use std::path::Path;
 use crate::catalog::{CatalogError, TetFileSummaryV1, read_tet_summary_v1};
 
 use super::chunks::{
-    check_chunk_dataset_ids, check_chunk_decode, check_duplicate_payload_offsets,
-    check_payload_order,
+    check_chunk_dataset_ids, check_chunk_decode, check_duplicate_chunk_coords,
+    check_duplicate_payload_offsets, check_payload_order,
 };
 use super::datasets::check_dataset_tensor_bytes;
 use super::footer::{check_dataset_count, check_footer, check_footer_metadata_limits};
@@ -72,6 +72,11 @@ fn verify_chunks_and_datasets(
 
     if let Some(f) = check_duplicate_payload_offsets(&summary.chunks) {
         findings.push(f);
+    }
+    if let Some(f) = check_duplicate_chunk_coords(&summary.chunks) {
+        findings.push(f);
+    } else {
+        findings.push(ok_finding("chunk_coords", None));
     }
     if let Some(f) = check_payload_order(&summary.chunks) {
         findings.push(f);

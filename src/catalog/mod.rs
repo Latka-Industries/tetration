@@ -68,8 +68,8 @@ pub use write::{write_multi_raw_array_file, write_one_chunk_raw_file, write_raw_
 /// Verify APIs moved to [`crate::verify`]; re-exported for compatibility.
 pub use crate::verify::{
     TetVerifyReport, VerifyFinding, VerifyFixHint, VerifyRecommendation, VerifySeverity,
-    VerifySummary, format_verify_json, format_verify_quiet, format_verify_text, verify_tet_bytes,
-    verify_tet_file,
+    VerifySummary, format_verify_json, format_verify_quiet, format_verify_text,
+    looks_like_tet_package, verify_tet_bytes, verify_tet_file, verify_tet_package,
 };
 
 /// v1 chunk payload codec wire tags (`u32` values written per chunk in the index).

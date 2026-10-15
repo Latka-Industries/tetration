@@ -56,6 +56,24 @@ pub(crate) fn check_duplicate_payload_offsets(
     None
 }
 
+/// Reject duplicate `(dataset_id, chunk_index)` pairs (torn / overlapping shard merge).
+pub(crate) fn check_duplicate_chunk_coords(chunks: &[ChunkIndexEntryV1]) -> Option<VerifyFinding> {
+    let mut seen = std::collections::BTreeSet::new();
+    for (i, ch) in chunks.iter().enumerate() {
+        let key = (ch.dataset_id, ch.chunk_index);
+        if !seen.insert(key) {
+            return Some(err_finding(
+                "chunk_coords",
+                format!(
+                    "duplicate chunk coords at index {i} (dataset_id={}, coords={:?})",
+                    ch.dataset_id, ch.chunk_index
+                ),
+            ));
+        }
+    }
+    None
+}
+
 /// Decode chunk payloads to confirm stored bytes match codec and lengths.
 pub(crate) fn check_chunk_decode(
     data: &[u8],

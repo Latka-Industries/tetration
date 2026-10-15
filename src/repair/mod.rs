@@ -67,7 +67,7 @@ pub fn repair_command_line(path: &Path, code: &str, dry_run: bool) -> String {
 /// Whether this recommendation code has an in-place repair implementation.
 #[must_use]
 pub fn is_repairable_code(code: &str) -> bool {
-    matches!(code, "footer_invalid")
+    matches!(code, "footer_invalid" | "quarantine_publish")
 }
 
 /// Suggested CLI command for a recommendation code, if repairable.
@@ -113,7 +113,7 @@ pub fn repair_tet_file(
     path: &Path,
     options: &RepairOptions,
 ) -> Result<TetRepairReport, CatalogError> {
-    let verify = crate::verify::verify_tet_file(path)?;
+    let verify = verify_path(path)?;
     let plan = repair_plan_from_verify(path, &verify);
     let mut actions = Vec::new();
 
@@ -159,7 +159,7 @@ pub fn repair_tet_file(
     let verify_after_ok = if options.dry_run {
         None
     } else {
-        Some(crate::verify::verify_tet_file(path)?.ok)
+        Some(verify_path(path)?.ok)
     };
 
     Ok(TetRepairReport {
@@ -168,6 +168,14 @@ pub fn repair_tet_file(
         actions,
         verify_after_ok,
     })
+}
+
+fn verify_path(path: &Path) -> Result<TetVerifyReport, CatalogError> {
+    if crate::verify::looks_like_tet_package(path) {
+        crate::verify::verify_tet_package(path)
+    } else {
+        crate::verify::verify_tet_file(path)
+    }
 }
 
 /// Apply repairable fixes from a verify report (used by `tet verify --repair`).
@@ -188,7 +196,7 @@ pub fn repair_from_verify_report(
     let verify_after_ok = if dry_run {
         None
     } else {
-        Some(crate::verify::verify_tet_file(path)?.ok)
+        Some(verify_path(path)?.ok)
     };
     Ok(TetRepairReport {
         path: path.to_path_buf(),

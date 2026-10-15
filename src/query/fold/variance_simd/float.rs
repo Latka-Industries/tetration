@@ -141,6 +141,7 @@ mod minmax_arch {
 
 #[cfg(target_arch = "x86_64")]
 mod minmax_arch {
+    #[allow(clippy::wildcard_imports)]
     use std::arch::x86_64::*;
 
     #[inline]

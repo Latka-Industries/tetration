@@ -98,9 +98,9 @@ pub enum Commands {
         #[arg(long, value_name = "DEVICE", requires = "execute")]
         device: Option<String>,
     },
-    /// Verify a `.tet` file (layout, catalog, chunk index, payloads, footer).
+    /// Verify a `.tet` file or `.tet.d` package (layout / protocol health).
     Verify {
-        /// Path to `.tet` file.
+        /// Path to `.tet` file or `.tet.d` package directory.
         path: PathBuf,
         /// Pretty JSON report (automation / CI).
         #[arg(long)]

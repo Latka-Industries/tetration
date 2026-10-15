@@ -5,8 +5,8 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | Command                                            | Alias  | Role                                                        |
 | -------------------------------------------------- | ------ | ----------------------------------------------------------- |
 | [`tet info`](#tet-info) `<path.tet>`               | —      | Summarize a file (default: dataset table)                   |
-| [`tet verify`](#tet-verify) `<path.tet>`           | —      | Layout health check (exit 1 on failure); `--json` / `-q`    |
-| [`tet repair`](#tet-repair) `<path.tet>`           | —      | Plan or apply safe in-place fixes (e.g. bad footer)         |
+| [`tet verify`](#tet-verify) `<path.tet\|.tet.d>`   | —      | Layout / package health check (exit 1 on failure); `--json` / `-q` |
+| [`tet repair`](#tet-repair) `<path.tet\|.tet.d>`   | —      | Plan or apply safe in-place fixes (footer, stale publish)   |
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 → `.tet`                            |
@@ -27,13 +27,19 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 
 ## `tet verify`
 
+Accepts a standalone `.tet` **or** a `.tet.d` package directory (`PROTOCOL` present).
+
 | Flag        | Effect                                                                               |
 | ----------- | ------------------------------------------------------------------------------------ |
 | _(default)_ | Human-readable check list + summary (decodes up to **128** chunks on large files)    |
-| `--deep`    | Decode **every** chunk payload (not just the quick sample)                           |
+| `--deep`    | Decode **every** chunk payload (not just the quick sample; package: each `packed.tet`) |
 | `--repair`  | After verify, apply safe in-place repairs for repairable findings (see `tet repair`) |
 | `--json`    | Pretty JSON [`TetVerifyReport`](../src/verify/report.rs)                             |
 | `-q`        | One line (`status=ok` / `failed`)                                                    |
+
+**Standalone `.tet`:** superblock, catalog, chunk index, payloads, duplicate chunk coords, footer.
+
+**Package `.tet.d`:** `PROTOCOL` / `CURRENT` → sealed generation, `MANIFEST` length + SHA-256, layout-v1 on `packed.tet`, warn on incomplete/stale `publishing/` and orphan `staging/`. See [writer protocol v2](writer_protocol_v2.md#verify--repair-expectations).
 
 Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`fixtures/small/tet/README.md`](../fixtures/small/tet/README.md).
 
@@ -42,7 +48,7 @@ Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`
 | Flag           | Effect                                                                   |
 | -------------- | ------------------------------------------------------------------------ |
 | _(default)_    | Plan from verify recommendations (no writes)                             |
-| `--apply CODE` | Apply fix (repeatable); today: `footer_invalid` strips a bad `THST` tail |
+| `--apply CODE` | Apply fix (repeatable): `footer_invalid`, `quarantine_publish`           |
 | `--dry-run`    | With `--apply`, show changes without writing                             |
 | `--json`       | Pretty JSON plan or repair report                                        |
 

@@ -103,6 +103,53 @@ fn recommendation_for_finding(f: &VerifyFinding) -> Option<VerifyRecommendation>
                 command: None,
             }),
         }),
+        "current_packed" | "current_manifest" | "manifest_generation" | "manifest_protocol"
+        | "manifest_byte_len" | "manifest_sha256" | "packed_layout" | "protocol" | "current" => {
+            Some(VerifyRecommendation {
+                code: "package_corrupt".to_owned(),
+                message: "Package PROTOCOL / CURRENT / generation manifest is inconsistent."
+                    .to_owned(),
+                fix: Some(VerifyFixHint {
+                    summary: "Republish from sealed staging parts, or restore generations/ from backup."
+                        .to_owned(),
+                    command: None,
+                }),
+            })
+        }
+        "publishing_stale" => Some(VerifyRecommendation {
+            code: "quarantine_publish".to_owned(),
+            message: "A stale publish lock is blocking retry for that generation.".to_owned(),
+            fix: Some(VerifyFixHint {
+                summary: "Quarantine the stale publishing/<G>/ directory, then republish."
+                    .to_owned(),
+                command: None,
+            }),
+        }),
+        "publishing_incomplete" => Some(VerifyRecommendation {
+            code: "abort_or_finish_publish".to_owned(),
+            message: "An incomplete publish lock is present; CURRENT is unchanged.".to_owned(),
+            fix: Some(VerifyFixHint {
+                summary: "Wait for the committer, abort_publish, or quarantine if stale."
+                    .to_owned(),
+                command: None,
+            }),
+        }),
+        "staging" if f.severity == VerifySeverity::Warning => Some(VerifyRecommendation {
+            code: "staging_gc_optional".to_owned(),
+            message: "Staging sessions remain after publish (allowed by protocol).".to_owned(),
+            fix: Some(VerifyFixHint {
+                summary: "Optional GC of sealed staging once CURRENT is healthy.".to_owned(),
+                command: None,
+            }),
+        }),
+        "chunk_coords" => Some(VerifyRecommendation {
+            code: "duplicate_chunk_coords".to_owned(),
+            message: "Packed image has duplicate dataset chunk coordinates.".to_owned(),
+            fix: Some(VerifyFixHint {
+                summary: "Republish without overlapping shard claims.".to_owned(),
+                command: None,
+            }),
+        }),
         _ => None,
     }
 }
