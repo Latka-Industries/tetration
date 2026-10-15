@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1] - 2026-10-15
+
+### Added
+
+- Package verify rejects a missing `CURRENT` when sealed `generations/` exist; finding-code tables in CLI / writer-protocol docs (THI-480)
+- Mid-publish crash tests: torn `publishing/` and rename-before-`set_current` keep the prior generation readable
+- cargo-fuzz target `verify_tet_package` (`mise fuzz-package` / `fuzz-package-smoke`; THI-481)
+
+### Changed
+
+- Split long verify, recommendation, and CLI dispatch functions (`clippy::too_many_lines`)
+
 ## [0.2.0] - 2026-10-15
 
 ### Added
