@@ -13,6 +13,7 @@ mod file_layout;
 mod history;
 mod index;
 pub mod metadata;
+pub mod package;
 pub mod session;
 mod stream_write;
 pub mod tile;
@@ -43,6 +44,10 @@ pub use history::{
 pub use index::{CHUNK_INDEX_HEADER_V1, ChunkIndexEntryV1, ChunkIndexHeaderV1};
 pub use metadata::{
     CoordAxisV1, DatasetMetadataV1, FileMetadataV1, MetadataLimitsV1, TetMetadataV1,
+};
+pub use package::{
+    DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION, PackageProtocol,
+    TetPackage, format_generation_id,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
@@ -401,6 +406,22 @@ pub enum CatalogError {
     InvalidWriteSpec(&'static str),
     #[error("catalog numeric value too large for this platform ({field}={value})")]
     TooLargeForPlatform { field: &'static str, value: u64 },
+    #[error("tet package: {0}")]
+    Package(&'static str),
+    #[error("not a tetration package (missing PROTOCOL): {0}")]
+    NotAPackage(std::path::PathBuf),
+    #[error("package path already exists: {0}")]
+    PackagePathExists(std::path::PathBuf),
+    #[error("unsupported package protocol_version: {0}")]
+    UnsupportedProtocolVersion(u32),
+    #[error("invalid package PROTOCOL / JSON: {0}")]
+    InvalidPackageProtocol(String),
+    #[error("invalid package CURRENT pointer")]
+    InvalidCurrent,
+    #[error("package generation {0} is not sealed (missing packed.tet)")]
+    GenerationNotSealed(u64),
+    #[error("publish lock held for generation {0}")]
+    PublishLockHeld(u64),
     #[error(transparent)]
     Io(#[from] io::Error),
 }

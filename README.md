@@ -102,6 +102,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [**docs.tetration.sh**](https://docs.tetration.sh) | User docs — format, CLI, Rust/Python guides ([contact](https://docs.tetration.sh/contact): `tensor@tetration.sh`)                                    |
 | [`docs/cli.md`](docs/cli.md)                       | **`tet`** commands: flags and subcommands (`info`, `verify`, `repair`, `query`, `qhist`, `convert`, `export`)                                        |
 | [`docs/layout_v1.md`](docs/layout_v1.md)           | On-disk **layout v1**: superblock, dataset catalog, chunk index, codecs, footer metadata/history, concurrency                                        |
+| [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md) | **Draft RFC (0.2)** — multi-writer via shards, generations, atomic publish (not live TIDX)                                                    |
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
 | [`docs/ffi.md`](docs/ffi.md)                       | **C ABI** (`tetration-ffi`): [`include/tetration.h`](include/tetration.h), linking, [`examples/ffi_query.c`](examples/ffi_query.c), release archives |
 | [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
@@ -127,7 +128,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | **Reader**    | Any number of processes or hosts may **mmap read-only** the same sealed `.tet` and run independent queries. The OS shares cold pages via the page cache; each query touches only chunks in its [`ReadPlan`](https://docs.rs/tetration/latest/tetration/query/struct.ReadPlan.html). |
 | **Per query** | Tier-A/B folds merge **chunk-local** partials (parallel Rayon when in-core; linear scan when out-of-core). Temp spills use unique paths (`pid` + timestamp); export **`spill`** paths must differ per worker.                                                                       |
 
-**Not supported without extra coordination:** multiple writers on one file, read-while-write, or two workers writing the same export spill path.
+**Not supported on one live `.tet`:** multiple writers, read-while-write, or two workers writing the same export spill path. **Multi-writer ingest (0.2 draft):** immutable shards + single publish — [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md).
 
 **CPU workers:** scale out with **N processes × independent queries** (or datasets), not by sharding one query inside the engine today. **Phase 10 GPU** uses the same chunk-parallel shape: dense materialize when RAM allows, else **streaming device fold** ([`gpu/streaming_fold.rs`](src/query/gpu/streaming_fold.rs)); **`cuda:multi` / `rocm:multi`** shard chunks across devices — see [query engine — scalability](docs/query_engine.md#scalability-read-many-and-phase-10).
 
