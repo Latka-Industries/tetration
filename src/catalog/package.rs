@@ -6,11 +6,12 @@
 //! Spec: [`docs/writer_protocol_v2.md`](../../docs/writer_protocol_v2.md).
 
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::CatalogError;
 use super::session::TetFile;
@@ -53,7 +54,7 @@ pub struct GenerationManifest {
     pub part_ids: Vec<String>,
     /// Byte length of `packed.tet` at seal time.
     pub packed_byte_len: u64,
-    /// Optional content hash; checksum verification lands with package verify (THI-466).
+    /// Hex SHA-256 of `packed.tet` at seal time (required for new seals; verified by package verify).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packed_sha256: Option<String>,
 }
@@ -308,12 +309,13 @@ impl TetPackage {
         }
 
         let packed_byte_len = fs::metadata(packed_tet)?.len();
+        let packed_sha256 = sha256_file_hex(packed_tet)?;
         let manifest = GenerationManifest {
             generation,
             protocol_version: PACKAGE_PROTOCOL_VERSION,
             part_ids,
             packed_byte_len,
-            packed_sha256: None,
+            packed_sha256: Some(packed_sha256),
         };
 
         let staged_packed = lock_dir.join(PACKED_TET);
@@ -464,4 +466,19 @@ fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+/// Hex-encoded SHA-256 of a file (streaming read).
+pub(crate) fn sha256_file_hex(path: &Path) -> Result<String, CatalogError> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024].into_boxed_slice();
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }

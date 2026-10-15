@@ -33,6 +33,7 @@ fn n_shards_publish_matches_union_of_datasets() {
     let manifest = publish_parts(&pkg, 1, &["p0".into(), "p1".into()]).unwrap();
     assert_eq!(manifest.generation, 1);
     assert_eq!(manifest.part_ids, vec!["p0", "p1"]);
+    assert!(manifest.packed_sha256.is_some());
     assert_eq!(pkg.current().unwrap(), Some(1));
 
     let file = pkg.open_current().unwrap();

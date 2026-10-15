@@ -9,18 +9,16 @@
 //!
 //! Spec: [`docs/writer_protocol_v2.md`](../../docs/writer_protocol_v2.md).
 
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use super::CatalogError;
 use super::append::merge_tet_files;
 use super::package::{
     GenerationManifest, PACKAGE_PROTOCOL_VERSION, TetPackage, is_safe_path_segment, read_json,
-    write_json_atomic,
+    sha256_file_hex, write_json_atomic,
 };
 use super::session::{TetDatasetWrite, TetFile, TetWriterSession};
 use crate::utils::fs_device;
@@ -418,18 +416,4 @@ pub fn publish_parts(
     let _ = fs::remove_file(&packed_tmp);
     seal?;
     package.read_manifest(generation)
-}
-
-fn sha256_file_hex(path: &Path) -> Result<String, CatalogError> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 64 * 1024].into_boxed_slice();
-    loop {
-        let n = file.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
 }

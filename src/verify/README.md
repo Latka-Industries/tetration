@@ -8,6 +8,7 @@ Distinct from [`catalog`](../catalog/README.md): parsing may succeed while verif
 
 - `verify_tet_file` / `verify_tet_file_with_options`
 - `verify_tet_bytes` — in-memory buffer + optional path for messages
+- `verify_tet_package` / `verify_tet_package_with_options` / `looks_like_tet_package` — `.tet.d` (THI-466)
 - `VerifyOptions` — `--deep` decode all chunks vs quick sample (`DEEP_DECODE_MAX_CHUNKS`)
 - Formatters: `format_verify_text`, `format_verify_json`, `format_verify_quiet`
 
@@ -16,6 +17,7 @@ Distinct from [`catalog`](../catalog/README.md): parsing may succeed while verif
 | File           | Role                                              |
 | -------------- | ------------------------------------------------- |
 | `run.rs`       | Orchestrate all check phases                      |
+| `package.rs`   | `.tet.d` PROTOCOL / CURRENT / MANIFEST / packed   |
 | `datasets.rs`  | Dataset record vs chunk grid / byte lengths       |
 | `chunks.rs`    | Index entries, payload spans, codec decode sample |
 | `footer.rs`    | `THST` magic, history JSON, metadata              |
