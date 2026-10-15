@@ -151,6 +151,15 @@ pub(super) fn parse_chunk_index(
         field: "chunk_index_entry_count",
         value: count,
     })?;
+    // `need == idx_bytes.len()` above bounds `n` by the mmap region; still avoid trusting
+    // a mismatched count if length math ever drifts.
+    let max_fit = idx_bytes.len().saturating_sub(hdr.header_len) / ChunkIndexEntryV1::WIRE_LEN;
+    if n > max_fit {
+        return Err(CatalogError::BadIndexLength {
+            count,
+            region: idx_bytes.len() as u64,
+        });
+    }
     let mut out = Vec::with_capacity(n);
     let mut off = hdr.header_len;
     for _ in 0..n {

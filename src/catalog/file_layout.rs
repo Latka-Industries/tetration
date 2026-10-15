@@ -50,7 +50,7 @@ pub(crate) fn sum_chunk_counts<'a>(
 ) -> Result<u64, CatalogError> {
     let mut total = 0u64;
     for (shape, chunk_shape) in shapes {
-        let counts = tile::chunk_grid_counts(shape, chunk_shape);
+        let counts = tile::chunk_grid_counts(shape, chunk_shape)?;
         total = total
             .checked_add(tile::total_chunk_count(&counts)?)
             .ok_or(CatalogError::InvalidWriteSpec("chunk index size overflow"))?;

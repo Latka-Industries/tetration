@@ -169,3 +169,42 @@ fn tet_verify_binary_smoke() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("status: ok"));
 }
+
+/// LibFuzzer crash (THI-376): malformed chunk coords used to panic in `tile_extent` overflow.
+#[test]
+fn verify_tet_bytes_no_panic_on_overflow_tile_extent_fixture() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures/small/tet/reject/overflow_tile_extent.tet");
+    let data = std::fs::read(&path).expect("reject fixture present");
+    let report = verify_tet_bytes(&data, Some(&path), VerifyOptions::default());
+    assert!(!report.ok, "malformed fixture must fail verify: {report:?}");
+}
+
+/// LibFuzzer crash (THI-376): huge `dataset_count` must not `Vec::with_capacity` OOM.
+#[test]
+fn verify_tet_bytes_no_oom_on_inflated_dataset_count_fixture() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures/small/tet/reject/oom_dataset_count.tet");
+    let data = std::fs::read(&path).expect("reject fixture present");
+    let report = verify_tet_bytes(&data, Some(&path), VerifyOptions::default());
+    assert!(!report.ok, "malformed fixture must fail verify: {report:?}");
+}
+
+/// LibFuzzer crash (THI-376): zero `chunk_shape` must not `div_ceil` panic.
+#[test]
+fn verify_tet_bytes_no_panic_on_zero_chunk_shape_fixture() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures/small/tet/reject/zero_chunk_shape.tet");
+    let data = std::fs::read(&path).expect("reject fixture present");
+    let report = verify_tet_bytes(&data, Some(&path), VerifyOptions::default());
+    assert!(!report.ok, "malformed fixture must fail verify: {report:?}");
+}
+
+#[test]
+fn tile_extent_out_of_grid_coords_do_not_panic() {
+    use crate::catalog::tile::tile_extent;
+    // coord * chunk_shape would overflow or land past shape — must not panic.
+    let extent = tile_extent(&[2, 3], &[2, 2], &[u64::MAX / 2, 0], 2);
+    assert_eq!(extent.len(), 2);
+    let _ = tile_extent(&[2, 3], &[2, 2], &[0, u64::MAX], 2);
+}

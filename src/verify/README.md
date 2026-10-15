@@ -31,3 +31,14 @@ Read-only by default. [`repair`](../repair/README.md) applies fixes for codes li
 ## CLI
 
 `tet verify` → exit **1** on failure (CI-friendly). `tet verify --repair` runs safe repairs after verify.
+
+## Fuzzing
+
+LibFuzzer harness over `verify_tet_bytes` (untrusted bytes must not panic):
+
+```bash
+mise fuzz
+# or: cargo +nightly fuzz run verify_tet_bytes
+```
+
+See [`fuzz/README.md`](../../fuzz/README.md) (THI-376).

@@ -1,0 +1,27 @@
+[package]
+name = "tetration-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+# No HDF5/NetCDF for the fuzz binary (native deps + slower builds).
+tetration = { path = "..", default-features = false }
+
+[[bin]]
+name = "verify_tet_bytes"
+path = "fuzz_targets/verify_tet_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verify_tet_bytes_deep"
+path = "fuzz_targets/verify_tet_bytes_deep.rs"
+test = false
+doc = false
+bench = false

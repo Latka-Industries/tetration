@@ -10,6 +10,9 @@ Tracked binaries for **manual** CLI checks and `src/tests/small_tet_fixtures.rs`
 | `multichunk_u8.tet`  | Multichunk `u8`, values 1..6                                             |
 | `multichunk_u32.tet` | Multichunk `u32`, values 1..6                                            |
 | `multichunk_f16.tet` | Multichunk `f16`, values 1..6                                            |
+| `reject/overflow_tile_extent.tet` | Malformed chunk coords (libFuzzer); `tet verify` must fail without panic |
+| `reject/oom_dataset_count.tet` | Inflated superblock `dataset_count` (libFuzzer); must reject without OOM |
+| `reject/zero_chunk_shape.tet` | Zero `chunk_shape` entry (libFuzzer); must fail without `div_ceil` panic |
 
 **Dataset names:** `sample.tet` → **`temperature`**; `multichunk_*.tet` → **`a`**.
 

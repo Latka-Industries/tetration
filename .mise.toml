@@ -128,3 +128,65 @@ case "$(uname -s)" in
 esac
 cargo clippy --features "$FEAT" -- -D warnings
 '''
+
+[tasks.fuzz-build]
+description = "Build cargo-fuzz verify_tet_bytes target (THI-376; needs nightly)"
+run = "cargo +nightly fuzz build verify_tet_bytes"
+
+[tasks.fuzz]
+description = "Run cargo-fuzz verify_tet_bytes quick scan (THI-376; needs nightly)"
+run = "cargo +nightly fuzz run verify_tet_bytes"
+
+[tasks.fuzz-deep]
+description = "Run cargo-fuzz verify_tet_bytes_deep (THI-376; needs nightly)"
+run = "cargo +nightly fuzz run verify_tet_bytes_deep"
+
+[tasks.fuzz-clean]
+description = "Remove mutated fuzz corpus + crash artifacts; keep *.tet seeds"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$root"
+removed=0
+if [[ -d fuzz/corpus ]]; then
+  while IFS= read -r -d '' f; do
+    rm -f "$f"
+    removed=$((removed + 1))
+  done < <(find fuzz/corpus -type f ! -name '*.tet' -print0 2>/dev/null)
+fi
+rm -rf fuzz/artifacts
+echo "fuzz-clean: removed $removed mutated corpus file(s); artifacts wiped; *.tet seeds kept"
+"""
+
+[tasks.fuzz-reseed]
+description = "Refresh fuzz corpus *.tet seeds from fixtures/small/tet/ (+ tiny reject stubs)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$root"
+mkdir -p fuzz/corpus/verify_tet_bytes fuzz/corpus/verify_tet_bytes_deep
+cp fixtures/small/tet/sample.tet \\
+   fixtures/small/tet/plan.tet \\
+   fixtures/small/tet/multichunk_u8.tet \\
+   fixtures/small/tet/multichunk_u32.tet \\
+   fixtures/small/tet/multichunk_f16.tet \\
+   fuzz/corpus/verify_tet_bytes/
+cp fixtures/small/tet/sample.tet \\
+   fixtures/small/tet/plan.tet \\
+   fixtures/small/tet/multichunk_u8.tet \\
+   fuzz/corpus/verify_tet_bytes_deep/
+if [[ -d fixtures/small/tet/reject ]]; then
+  cp fixtures/small/tet/reject/*.tet fuzz/corpus/verify_tet_bytes/ 2>/dev/null || true
+  cp fixtures/small/tet/reject/*.tet fuzz/corpus/verify_tet_bytes_deep/ 2>/dev/null || true
+fi
+: > fuzz/corpus/verify_tet_bytes/empty.tet
+printf 'TET\\x00' > fuzz/corpus/verify_tet_bytes/too_short.tet
+printf 'XXXX\\x00\\x00\\x00\\x00' > fuzz/corpus/verify_tet_bytes/bad_magic.tet
+cp fuzz/corpus/verify_tet_bytes/empty.tet \\
+   fuzz/corpus/verify_tet_bytes/too_short.tet \\
+   fuzz/corpus/verify_tet_bytes/bad_magic.tet \\
+   fuzz/corpus/verify_tet_bytes_deep/
+echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick seed(s); $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep seed(s)"
+"""
