@@ -111,12 +111,13 @@ pub(super) fn parse_chunk_index(
     idx_bytes: &[u8],
 ) -> Result<(Vec<ChunkIndexEntryV1>, FileExecutionSettingsV1), CatalogError> {
     let hdr = CHUNK_INDEX_HEADER_V1;
-    let mut r = LeReader::require(idx_bytes, "chunk_index_header", hdr.header_len).map_err(
-        |e| CatalogError::TooShort {
-            need: e.need,
-            got: e.got,
-        },
-    )?;
+    let mut r =
+        LeReader::require(idx_bytes, "chunk_index_header", hdr.header_len).map_err(|e| {
+            CatalogError::TooShort {
+                need: e.need,
+                got: e.got,
+            }
+        })?;
     let m = r.take_4();
     if &m != hdr.magic {
         return Err(CatalogError::BadIndexMagic(m));

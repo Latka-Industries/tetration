@@ -101,9 +101,8 @@ impl ChunkPayloadCodecV1 {
         codec: u32,
         tile_bytes: Vec<u8>,
     ) -> Result<Vec<u8>, CatalogError> {
-        let payload = PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec {
-            codec,
-        })?;
+        let payload =
+            PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec { codec })?;
         // Keep raw path zero-copy on the owned tile buffer (argus::encode would re-allocate).
         if matches!(payload, PayloadCodec::Raw) {
             return Ok(tile_bytes);
@@ -124,9 +123,8 @@ impl ChunkPayloadCodecV1 {
         stored_byte_len: u64,
         codec: u32,
     ) -> Result<Cow<'_, [u8]>, CatalogError> {
-        let payload = PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec {
-            codec,
-        })?;
+        let payload =
+            PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec { codec })?;
         if matches!(payload, PayloadCodec::Raw) && stored_byte_len != raw_byte_len {
             return Err(CatalogError::RawStoredMismatch {
                 raw: raw_byte_len,
