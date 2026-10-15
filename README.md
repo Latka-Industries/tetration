@@ -108,7 +108,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
 | [`docs/conversions.md`](docs/conversions.md)       | **Format interchange** — import/export status, roadblocks, potential converters (HDF5, NetCDF, Zarr, prospects)                                      |
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
-| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; PyPI **0.1.x** pins older tetration until **tet-py 0.2.0** |
+| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write (incl. zero-copy memmap), query reductions, transform ram/spill/sidecar; PyPI **0.2.0** pins tetration **0.2.0** |
 | [`CHANGELOG.md`](CHANGELOG.md)                   | Release notes by version                                                                                                                             |
 | [`fuzz/README.md`](fuzz/README.md)               | **cargo-fuzz** over `verify_tet_bytes` (`mise fuzz`; nightly + `cargo-fuzz`)                                                                         |
 
@@ -215,7 +215,7 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 - [x] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19) / THI-16) — `estimate_query_selection_bytes` + budget check on `materialize_query_selection`
 - [x] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20) / THI-15) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
 - [x] **Sidecar / writer unification** (THI-61) — transform `write: sidecar` drafts via `TetWriterSession`, then publishes
-- [ ] **tet-py 0.2.0** — pin tetration **0.2.0** + zero-copy mmap → NumPy ([THI-21](https://linear.app/thicclatka/issue/THI-21))
+- [x] **tet-py 0.2.0** — pin tetration **0.2.0** + zero-copy mmap → NumPy ([THI-21](https://linear.app/thicclatka/issue/THI-21))
 - [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))
 
 ### Docs & sites

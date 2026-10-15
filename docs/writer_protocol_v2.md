@@ -214,7 +214,7 @@ Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path
 4. Compact-inside-publish + atomic publish — THI-464 (`publish_parts` / `merge_tet_files`)
 5. Verify / repair / fuzz — THI-466 (`verify_tet_package`, `tet verify` on `.tet.d`)
 6. CLI ingest / publish / pack — THI-467 (`tet ingest` / `publish` / `compact` / `pack`)
-7. tet-py **0.2.0** + zero-copy mmap → NumPy — [THI-21](https://linear.app/thicclatka/issue/THI-21)
+7. ~~tet-py **0.2.0** + zero-copy mmap → NumPy~~ — [THI-21](https://linear.app/thicclatka/issue/THI-21) **Done**
 
 ---
 
