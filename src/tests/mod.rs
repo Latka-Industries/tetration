@@ -22,6 +22,7 @@ mod metadata;
 mod query;
 mod query_fixtures;
 mod reduction;
+mod reject_corpus;
 mod repair;
 mod resolve_axes;
 mod resolve_selection;

@@ -6,6 +6,11 @@ Tracks [THI-376](https://linear.app/thicclatka/issue/THI-376) / parent [THI-375]
 Structured **valid-write** offset/round-trip invariants (CI `proptest`, not libFuzzer) live in
 [`src/tests/write_invariants.rs`](../src/tests/write_invariants.rs) — [THI-377](https://linear.app/thicclatka/issue/THI-377).
 
+Conformance **reject** fixtures (TIDX / payload faults) live under
+[`fixtures/small/tet/reject/`](../fixtures/small/tet/reject/) and are tested in
+[`src/tests/reject_corpus.rs`](../src/tests/reject_corpus.rs) — [THI-378](https://linear.app/thicclatka/issue/THI-378).
+`mise fuzz-reseed` copies them into both corpora below.
+
 ## Setup
 
 ```bash
