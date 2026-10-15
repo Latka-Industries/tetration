@@ -4,9 +4,9 @@ Stable **`extern "C"`** entry points for non-Rust runtimes. The Rust crate (`tet
 
 ## Python
 
-Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (tet-py **0.1.1** still links **0.1.9**; crate head is **0.1.11**). Do not `pip install tetration` — that PyPI name is unrelated math code.
+Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (tet-py **0.1.1** still links **0.1.9**; crate head is **0.1.12**). Do not `pip install tetration` — that PyPI name is unrelated math code.
 
-**Shipped in tet-py:** `tet.open`, JSON/TOML query + reductions, NumPy read (ram / spill / sidecar), `TetWriter` / `write_dataset` (f32/f64), `preview=N` on reductions. **Upstream (post-0.1.11):** selection budget preflight (THI-16) and `DenseBuffer` **`f16`/`u32`/`u64`** (THI-15) — tet-py inherits once pinned + NumPy mapping updated. **Planned there:** optional convert extras (`h5py`, `netCDF4`, `zarr`), integer write dtypes, zero-copy mmap reads.
+**Shipped in tet-py:** `tet.open`, JSON/TOML query + reductions, NumPy read (ram / spill / sidecar), `TetWriter` / `write_dataset` (f32/f64), `preview=N` on reductions. **Upstream (0.1.12):** selection budget preflight (THI-16), `DenseBuffer` **`f16`/`u32`/`u64`** (THI-15), sidecar via `TetWriterSession` (THI-61) — tet-py inherits once pinned + NumPy mapping updated. **Planned there:** optional convert extras (`h5py`, `netCDF4`, `zarr`), integer write dtypes, zero-copy mmap reads.
 
 For hosts that are not Python: shell **`tet`**, embed **Rust**, use this C ABI, or implement readers from [`layout_v1.md`](layout_v1.md).
 
