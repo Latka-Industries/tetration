@@ -59,7 +59,15 @@ fn check_one_dataset_tensor_bytes(
             ),
         )];
     };
-    let counts = chunk_grid_counts(&ds.shape, &ds.chunk_shape);
+    let counts = match chunk_grid_counts(&ds.shape, &ds.chunk_shape) {
+        Ok(c) => c,
+        Err(e) => {
+            return vec![err_finding(
+                "dataset_tensor_bytes",
+                format!("dataset {ds_id} ({:?}): {e}", ds.name),
+            )];
+        }
+    };
     let expected_chunks = match total_chunk_count(&counts) {
         Ok(n) => n,
         Err(e) => {

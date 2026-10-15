@@ -109,6 +109,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
 | [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; pins **tetration 0.1.9** |
 | [`CHANGELOG.md`](CHANGELOG.md)                   | Release notes by version                                                                                                                             |
+| [`fuzz/README.md`](fuzz/README.md)               | **cargo-fuzz** over `verify_tet_bytes` (`mise fuzz`; nightly + `cargo-fuzz`)                                                                         |
 
 ## Design stance (short)
 

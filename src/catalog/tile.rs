@@ -3,11 +3,26 @@
 use super::{CatalogError, MAX_NDIM};
 
 /// Number of chunks along each axis: `ceil(shape[d] / chunk_shape[d])`.
-pub(crate) fn chunk_grid_counts(shape: &[u64], chunk_shape: &[u64]) -> Vec<u64> {
+///
+/// # Errors
+///
+/// Returns [`CatalogError::InvalidWriteSpec`] when any `chunk_shape[d] == 0` (avoids
+/// `div_ceil` panic on untrusted catalog records — THI-376).
+pub(crate) fn chunk_grid_counts(
+    shape: &[u64],
+    chunk_shape: &[u64],
+) -> Result<Vec<u64>, CatalogError> {
     shape
         .iter()
         .zip(chunk_shape.iter())
-        .map(|(&s, &cs)| s.div_ceil(cs))
+        .map(|(&s, &cs)| {
+            if cs == 0 {
+                return Err(CatalogError::InvalidWriteSpec(
+                    "chunk_shape entries must be non-zero",
+                ));
+            }
+            Ok(s.div_ceil(cs))
+        })
         .collect()
 }
 
@@ -40,6 +55,9 @@ pub(crate) fn tile_raw_byte_len(
 }
 
 /// Per-axis extent of the tile for this chunk (may be smaller than `chunk_shape` at edges).
+///
+/// Uses saturating arithmetic so malformed / out-of-grid `chunk_coord` values never panic
+/// (verify and decode paths must stay panic-free on untrusted `.tet` bytes — THI-376).
 pub(crate) fn tile_extent(
     shape: &[u64],
     chunk_shape: &[u64],
@@ -48,9 +66,9 @@ pub(crate) fn tile_extent(
 ) -> Vec<u64> {
     (0..ndim)
         .map(|d| {
-            let start = chunk_coord[d] * chunk_shape[d];
-            let end = (start + chunk_shape[d]).min(shape[d]);
-            end - start
+            let start = chunk_coord[d].saturating_mul(chunk_shape[d]);
+            let end = start.saturating_add(chunk_shape[d]).min(shape[d]);
+            end.saturating_sub(start)
         })
         .collect()
 }
@@ -86,11 +104,17 @@ pub(crate) fn linear_elem_row_major(
 }
 
 /// Decode `k` into local tile coordinates (last axis varies fastest).
+///
+/// Empty axes (`tile[d] == 0`) yield `0` for that axis and leave `rem` unchanged (no `% 0`).
 pub(crate) fn local_coords_from_linear(k: u64, tile: &[u64], ndim: usize) -> [u64; MAX_NDIM] {
     let mut rem = k;
     let mut local = [0u64; MAX_NDIM];
     for d in (0..ndim).rev() {
         let td = tile[d];
+        if td == 0 {
+            local[d] = 0;
+            continue;
+        }
         local[d] = rem % td;
         rem /= td;
     }
@@ -178,7 +202,7 @@ pub fn chunk_coords_intersecting_strided(
             ));
         }
     }
-    let counts = chunk_grid_counts(shape, chunk_shape);
+    let counts = chunk_grid_counts(shape, chunk_shape)?;
     let n = total_chunk_count(&counts)?;
     let mut out = Vec::new();
     for k in 0..n {
@@ -269,7 +293,12 @@ pub(crate) fn extract_tile_row_major(
         let local = local_coords_from_linear(k, &tile, ndim);
         let mut global = [0u64; MAX_NDIM];
         for d in 0..ndim {
-            global[d] = chunk_coord[d] * chunk_shape[d] + local[d];
+            global[d] = chunk_coord[d]
+                .checked_mul(chunk_shape[d])
+                .and_then(|s| s.checked_add(local[d]))
+                .ok_or(CatalogError::InvalidWriteSpec(
+                    "tile global coordinate overflow",
+                ))?;
         }
         let li = linear_elem_row_major(&global[..ndim], shape, ndim)?;
         let src = usize::try_from(li)

@@ -101,7 +101,7 @@ pub(super) fn validate_tensor_geometry(
     }
     let _ = super::tensor_bytes_from_shape(shape, dtype)
         .ok_or(CatalogError::InvalidWriteSpec("payload size overflow"))?;
-    let counts = tile::chunk_grid_counts(shape, chunk_shape);
+    let counts = tile::chunk_grid_counts(shape, chunk_shape)?;
     tile::total_chunk_count(&counts)?;
     Ok(())
 }
@@ -133,7 +133,7 @@ pub(super) fn validate_write_spec(spec: &OneChunkRawWrite<'_>) -> Result<(), Cat
         data: spec.payload,
         file_execution: None,
     })?;
-    let counts = tile::chunk_grid_counts(spec.shape, spec.chunk_shape);
+    let counts = tile::chunk_grid_counts(spec.shape, spec.chunk_shape)?;
     let n = tile::total_chunk_count(&counts)?;
     if n != 1 {
         return Err(CatalogError::InvalidWriteSpec(

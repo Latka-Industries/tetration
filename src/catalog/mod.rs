@@ -299,7 +299,7 @@ pub(crate) fn chunk_grid_plan(
     dtype: u32,
 ) -> Result<ChunkGridPlan, CatalogError> {
     let ndim = shape.len();
-    let counts = tile::chunk_grid_counts(shape, chunk_shape);
+    let counts = tile::chunk_grid_counts(shape, chunk_shape)?;
     let n_chunks = tile::total_chunk_count(&counts)?;
     let elem_size = elem_size_for_wire_tag(dtype)?;
     Ok(ChunkGridPlan {
@@ -364,6 +364,14 @@ pub enum CatalogError {
     BadNdim { ndim: usize },
     #[error("dataset blob length mismatch: declared {declared}, parsed {parsed}")]
     DatasetBlobMismatch { declared: u64, parsed: u64 },
+    #[error(
+        "dataset_count {count} cannot fit in dataset blob of {blob_len} bytes (min {min_record} B/record)"
+    )]
+    DatasetCountExceedsBlob {
+        count: u32,
+        blob_len: u64,
+        min_record: u64,
+    },
     #[error("chunk index offset mismatch: superblock says {sb}, expected {expected}")]
     ChunkIndexOffsetMismatch { sb: u64, expected: u64 },
     #[error("bad chunk index magic: expected TIDX, got {0:?}")]
@@ -446,6 +454,17 @@ pub fn read_tet_summary_v1(data: &[u8]) -> Result<TetFileSummaryV1, CatalogError
         });
     }
 
+    // Minimum v1 record: 16 B header + ≥1 axis × 16 B shapes (name may be empty).
+    // Bound before `Vec::with_capacity` so untrusted superblock counts cannot OOM (THI-376).
+    const MIN_DATASET_RECORD_V1: u64 = 32;
+    let max_fit = (dataset_blob_len as u64) / MIN_DATASET_RECORD_V1;
+    if u64::from(sb.dataset_count) > max_fit {
+        return Err(CatalogError::DatasetCountExceedsBlob {
+            count: sb.dataset_count,
+            blob_len: dataset_blob_len as u64,
+            min_record: MIN_DATASET_RECORD_V1,
+        });
+    }
     let mut datasets = Vec::with_capacity(sb.dataset_count as usize);
     let mut cursor = blob_start;
     for _ in 0..sb.dataset_count {
