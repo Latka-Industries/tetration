@@ -57,13 +57,16 @@ cargo +nightly fuzz build verify_tet_bytes
 
 ## CI smoke (THI-379)
 
-Nightly (and manual) GitHub Actions job [`.github/workflows/fuzz-smoke.yml`](../.github/workflows/fuzz-smoke.yml):
+Manual GitHub Actions job [`.github/workflows/fuzz-smoke.yml`](../.github/workflows/fuzz-smoke.yml)
+(`workflow_dispatch` only — no nightly schedule):
 
 - Ubuntu + nightly toolchain
 - `cargo fuzz run verify_tet_bytes -- -max_total_time=60`
 - Not part of the PR Test Suite / MSRV matrix
 
 ```bash
-# local equivalent
+# local equivalent (prefer this day-to-day)
+mise fuzz-smoke
+# or:
 cargo +nightly fuzz run verify_tet_bytes -- -max_total_time=60 -timeout=10
 ```
