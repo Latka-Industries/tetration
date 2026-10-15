@@ -76,6 +76,7 @@ macro_rules! with_f32_min_max_loop {
 
 #[cfg(target_arch = "x86_64")]
 pub(super) mod x86 {
+    #[allow(clippy::wildcard_imports)]
     use std::arch::x86_64::*;
 
     #[inline]
@@ -111,7 +112,7 @@ pub(super) mod x86 {
     #[inline]
     pub unsafe fn accum_i32x4(sum: &mut f64, sumsq: &mut f64, ptr: *const i32) {
         let (lo_arr, hi_arr) = unsafe {
-            let v = _mm_loadu_si128(ptr as *const __m128i);
+            let v = _mm_loadu_si128(ptr.cast::<__m128i>());
             let lo = _mm_cvtepi32_pd(v);
             let hi = _mm_cvtepi32_pd(_mm_shuffle_epi32(v, 0xEE));
             let mut lo_arr = [0.0f64; 2];
@@ -128,7 +129,7 @@ pub(super) mod x86 {
     pub unsafe fn accum_i64x2(sum: &mut f64, sumsq: &mut f64, ptr: *const i64) {
         // SAFETY: caller aligns `ptr` to a 2-lane chunk inside the slice.
         unsafe {
-            let v = _mm_loadu_si128(ptr as *const __m128i);
+            let v = _mm_loadu_si128(ptr.cast::<__m128i>());
             let lo = _mm_cvtsi128_si64(v) as f64;
             let hi = _mm_cvtsi128_si64(_mm_unpackhi_epi64(v, v)) as f64;
             accum_f64_pair(sum, sumsq, lo, hi);

@@ -20,7 +20,7 @@ use crate::utils::fs_device;
 pub const PACKAGE_PROTOCOL_VERSION: u32 = 2;
 
 /// Default stale publish-lock age before verify/repair may quarantine (decision G).
-pub const DEFAULT_PUBLISH_LOCK_STALE: Duration = Duration::from_secs(60 * 60);
+pub const DEFAULT_PUBLISH_LOCK_STALE: Duration = Duration::from_hours(1);
 
 const PROTOCOL_FILE: &str = "PROTOCOL";
 const CURRENT_FILE: &str = "CURRENT";
@@ -463,6 +463,5 @@ fn touch_heartbeat(dir: &Path) -> Result<(), CatalogError> {
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }

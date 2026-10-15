@@ -423,7 +423,7 @@ pub fn publish_parts(
 fn sha256_file_hex(path: &Path) -> Result<String, CatalogError> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
+    let mut buf = vec![0u8; 64 * 1024].into_boxed_slice();
     loop {
         let n = file.read(&mut buf)?;
         if n == 0 {

@@ -91,6 +91,7 @@ pub(crate) fn scalar_u8_sum_sumsq(vals: &[u8]) -> (f64, f64) {
 
 #[cfg(target_arch = "x86_64")]
 mod u8_arch {
+    #[allow(clippy::wildcard_imports)]
     use std::arch::x86_64::*;
 
     #[inline]
@@ -120,7 +121,7 @@ mod u8_arch {
                 // SAFETY: `*i` is chunk-aligned within `vals`.
                 unsafe {
                     let zero = _mm_setzero_si128();
-                    let v = _mm_loadu_si128(ptr.add(*i) as *const __m128i);
+                    let v = _mm_loadu_si128(ptr.add(*i).cast::<__m128i>());
                     let lo16 = _mm_unpacklo_epi8(v, zero);
                     let hi16 = _mm_unpackhi_epi8(v, zero);
                     accum_epi32_pd(sum, sumsq, _mm_unpacklo_epi16(lo16, zero));
@@ -233,6 +234,7 @@ pub(crate) fn scalar_u32_sum_sumsq(vals: &[u32]) -> (f64, f64) {
 
 #[cfg(target_arch = "x86_64")]
 mod u32_arch {
+    #[allow(clippy::wildcard_imports)]
     use std::arch::x86_64::*;
 
     #[inline]
@@ -252,7 +254,7 @@ mod u32_arch {
             simd: |ptr, i, sum, sumsq| {
                 // SAFETY: `*i` is chunk-aligned within `vals`.
                 unsafe {
-                    let v = _mm_loadu_si128(ptr.add(*i) as *const __m128i);
+                    let v = _mm_loadu_si128(ptr.add(*i).cast::<__m128i>());
                     accum_u32_pair(sum, sumsq, _mm_cvtsi128_si64(v) as u64);
                     accum_u32_pair(
                         sum,
@@ -304,7 +306,7 @@ mod u64_arch {
             lanes: 2,
             simd: |ptr, i, sum, sumsq| {
                 // SAFETY: `*i` is chunk-aligned within `vals`; `u64` lanes match `i64` load width.
-                unsafe { x86::accum_i64x2(sum, sumsq, ptr.add(*i) as *const i64) };
+                unsafe { x86::accum_i64x2(sum, sumsq, ptr.add(*i).cast::<i64>()) };
                 *i += 2;
             },
             tail_load: |p: *const u64| *p as f64
@@ -342,6 +344,7 @@ pub(crate) fn scalar_u16_sum_sumsq(vals: &[u16]) -> (f64, f64) {
 #[cfg(target_arch = "x86_64")]
 mod u16_arch {
     use super::u8_arch::accum_epi32_pd;
+    #[allow(clippy::wildcard_imports)]
     use std::arch::x86_64::*;
 
     #[target_feature(enable = "sse2")]
@@ -353,7 +356,7 @@ mod u16_arch {
                 // SAFETY: `*i` is chunk-aligned within `vals`.
                 unsafe {
                     let zero = _mm_setzero_si128();
-                    let v = _mm_loadu_si128(ptr.add(*i) as *const __m128i);
+                    let v = _mm_loadu_si128(ptr.add(*i).cast::<__m128i>());
                     accum_epi32_pd(sum, sumsq, _mm_unpacklo_epi16(v, zero));
                     accum_epi32_pd(sum, sumsq, _mm_unpackhi_epi16(v, zero));
                 }
