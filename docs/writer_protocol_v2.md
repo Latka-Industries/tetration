@@ -1,6 +1,6 @@
 # Writer protocol v2 — shards, generations, publish
 
-**Status:** draft RFC (0.2) — **decisions A–L locked** (2026-10-15); implement against this; revise only by explicit amendment until tetration **0.2.0**.  
+**Status:** shipped in tetration **0.2.0** — **decisions A–L locked** (2026-10-15); revise only by explicit amendment.  
 **Tracks:** [THI-462](https://linear.app/thicclatka/issue/THI-462) · series [THI-458](https://linear.app/thicclatka/issue/THI-458) · umbrella [THI-19](https://linear.app/thicclatka/issue/THI-19)  
 **Depends on:** sealed layout v1 ([`layout_v1.md`](layout_v1.md)) as the **reader-visible** byte image.
 

@@ -100,15 +100,15 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | Doc                                                | Contents                                                                                                                                             |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [**docs.tetration.sh**](https://docs.tetration.sh) | User docs — format, CLI, Rust/Python guides ([contact](https://docs.tetration.sh/contact): `tensor@tetration.sh`)                                    |
-| [`docs/cli.md`](docs/cli.md)                       | **`tet`** commands: flags and subcommands (`info`, `verify`, `repair`, `query`, `qhist`, `convert`, `export`)                                        |
+| [`docs/cli.md`](docs/cli.md)                       | **`tet`** commands: flags and subcommands (`info`, `verify`, `repair`, `query`, `qhist`, `convert`, `export`, `ingest` / `publish` / `pack`) |
 | [`docs/layout_v1.md`](docs/layout_v1.md)           | On-disk **layout v1**: superblock, dataset catalog, chunk index, codecs, footer metadata/history, concurrency                                        |
-| [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md) | **Draft RFC (0.2)** — multi-writer via shards, generations, atomic publish; library: `TetPackage` / `TetShardWriter`                          |
+| [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md) | **Writer protocol v2 (0.2)** — multi-writer via shards, generations, atomic publish; library: `TetPackage` / `TetShardWriter`                  |
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
 | [`docs/ffi.md`](docs/ffi.md)                       | **C ABI** (`tetration-ffi`): [`include/tetration.h`](include/tetration.h), linking, [`examples/ffi_query.c`](examples/ffi_query.c), release archives |
 | [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
 | [`docs/conversions.md`](docs/conversions.md)       | **Format interchange** — import/export status, roadblocks, potential converters (HDF5, NetCDF, Zarr, prospects)                                      |
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
-| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; PyPI **0.1.1** still links **tetration 0.1.9** (bump to **0.1.12** pending) |
+| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; PyPI **0.1.x** pins older tetration until **tet-py 0.2.0** |
 | [`CHANGELOG.md`](CHANGELOG.md)                   | Release notes by version                                                                                                                             |
 | [`fuzz/README.md`](fuzz/README.md)               | **cargo-fuzz** over `verify_tet_bytes` (`mise fuzz`; nightly + `cargo-fuzz`)                                                                         |
 
@@ -124,11 +124,12 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 
 | Role          | Contract                                                                                                                                                                                                                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Writer**    | One process (or coordinated [`TetWriterSession`](https://docs.rs/tetration/latest/tetration/catalog/struct.TetWriterSession.html) / `tet convert`) finishes the file before readers rely on it. v1 defines **no** file locking or live append protocol.                             |
-| **Reader**    | Any number of processes or hosts may **mmap read-only** the same sealed `.tet` and run independent queries. The OS shares cold pages via the page cache; each query touches only chunks in its [`ReadPlan`](https://docs.rs/tetration/latest/tetration/query/struct.ReadPlan.html). |
-| **Per query** | Tier-A/B folds merge **chunk-local** partials (parallel Rayon when in-core; linear scan when out-of-core). Temp spills use unique paths (`pid` + timestamp); export **`spill`** paths must differ per worker.                                                                       |
+| **Writer (standalone `.tet`)** | One process (or coordinated [`TetWriterSession`](https://docs.rs/tetration/latest/tetration/catalog/struct.TetWriterSession.html) / `tet convert`) finishes the file before readers rely on it. v1 defines **no** file locking or live append protocol. |
+| **Writer (`.tet.d` package)** | N shard writers → staging parts → one `tet publish` / [`publish_parts`](https://docs.rs/tetration/latest/tetration/catalog/fn.publish_parts.html) → sealed generation ([writer protocol v2](docs/writer_protocol_v2.md)). |
+| **Reader**    | Any number of processes may **mmap read-only** a sealed `.tet` or a package’s `CURRENT` `packed.tet`. Each query touches only chunks in its [`ReadPlan`](https://docs.rs/tetration/latest/tetration/query/struct.ReadPlan.html). |
+| **Per query** | Tier-A/B folds merge **chunk-local** partials (parallel Rayon when in-core; linear scan when out-of-core). Temp spills use unique paths (`pid` + timestamp); export **`spill`** paths must differ per worker. |
 
-**Not supported on one live `.tet`:** multiple writers, read-while-write, or two workers writing the same export spill path. **Multi-writer ingest (0.2 draft):** immutable shards + single publish — [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md).
+**Not supported on one live `.tet`:** multiple writers, read-while-write, or two workers writing the same export spill path. Use a **`.tet.d` package** for multi-writer ingest.
 
 **CPU workers:** scale out with **N processes × independent queries** (or datasets), not by sharding one query inside the engine today. **Phase 10 GPU** uses the same chunk-parallel shape: dense materialize when RAM allows, else **streaming device fold** ([`gpu/streaming_fold.rs`](src/query/gpu/streaming_fold.rs)); **`cuda:multi` / `rocm:multi`** shard chunks across devices — see [query engine — scalability](docs/query_engine.md#scalability-read-many-and-phase-10).
 
@@ -140,7 +141,7 @@ Wire details: [`docs/layout_v1.md` — Concurrency](docs/layout_v1.md#concurrenc
 
 ```toml
 [dependencies]
-tetration = "0.1.12"
+tetration = "0.2.0"
 ```
 
 ```rust
@@ -178,7 +179,7 @@ See **Documentation map** above for [docs.tetration.sh](https://docs.tetration.s
 
 ### Python (`tet-py`)
 
-Official bindings live in [**tet-py**](https://github.com/Latka-Industries/tet-py) (PyPI **`tet-py`**, **`import tet`** — not the unrelated PyPI package `tetration`). Current release **0.1.1** still links **tetration 0.1.9**; crate/CLI head is **0.1.12**.
+Official bindings live in [**tet-py**](https://github.com/Latka-Industries/tet-py) (PyPI **`tet-py`**, **`import tet`** — not the unrelated PyPI package `tetration`). PyPI **0.1.x** still pins an older tetration; crate/CLI head is **0.2.0** (tet-py **0.2.0** will align).
 
 ```bash
 pip install tet-py
@@ -200,11 +201,12 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 
 ## To do
 
-### Shipped (v0.1.12)
+### Shipped (v0.2.0)
 
 - [x] Layout v1, query engine, `tet convert` / `tet export`, verify/repair, optional GPU, C ABI
-- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) through **0.1.11**; **0.1.12** = selection preflight + DenseBuffer f16/u32/u64 + sidecar→TetWriterSession
-- [x] Official Python bindings — [**tet-py**](https://github.com/Latka-Industries/tet-py) on PyPI (`import tet`)
+- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) through **0.2.0**
+- [x] **Writer protocol v2** — `.tet.d` packages, `TetPackage` / `TetShardWriter`, `publish_parts`, package verify, CLI `ingest` / `publish` / `pack`
+- [x] Official Python bindings — [**tet-py**](https://github.com/Latka-Industries/tet-py) on PyPI (`import tet`; **0.2.0** alignment pending)
 - [x] Catalog write API — `TetDatasetWrite` / `TetDatasetStreamSpec` `f32_row_major`, `f64_row_major`, and generic `row_major(dtype, …)`
 - [x] Verify fuzz harness + reject corpus + write-offset proptest ([`fuzz/README.md`](fuzz/README.md))
 
@@ -213,6 +215,7 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 - [x] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19) / THI-16) — `estimate_query_selection_bytes` + budget check on `materialize_query_selection`
 - [x] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20) / THI-15) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
 - [x] **Sidecar / writer unification** (THI-61) — transform `write: sidecar` drafts via `TetWriterSession`, then publishes
+- [ ] **tet-py 0.2.0** — pin tetration **0.2.0** + zero-copy mmap → NumPy ([THI-21](https://linear.app/thicclatka/issue/THI-21))
 - [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))
 
 ### Docs & sites

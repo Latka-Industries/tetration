@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0] - 2026-10-15
+
+### Added
+
+- **Writer protocol v2** (local packages): `.tet.d` with `PROTOCOL` / `CURRENT` / `staging` / `generations` / `publishing` ([`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md); THI-462 / THI-468)
+- [`TetPackage`](src/catalog/package.rs) — create/open, publish locks, seal generation, `pack_generation`, `next_generation`
+- [`TetShardWriter`](src/catalog/shard.rs) / `PartMeta` — concurrent staging parts (THI-463)
+- [`publish_parts`](src/catalog/shard.rs) / `merge_tet_files` — freeze part ids → packed layout-v1 → flip `CURRENT` (THI-464)
+- [`ingest_tet_file`](src/catalog/shard.rs) — stage an existing `.tet` as a sealed part
+- [`verify_tet_package`](src/verify/package.rs) — PROTOCOL / CURRENT / MANIFEST / packed SHA + layout checks; stale publish quarantine (THI-466)
+- CLI: `tet ingest` / `tet publish` / `tet compact` (publish alias) / `tet pack`; `tet info` / `tet query -t` / `tet verify` accept `.tet.d` (THI-467)
+- Repair code `quarantine_publish` for stale `publishing/<G>/` locks
+- Package reject / proptest coverage (`src/tests/package_verify.rs`); CLI smoke ingest → publish → query → pack
+
+### Changed
+
+- Pedantic clippy nits outside `cast_*` (duration units, heap SHA buffer, SIMD `pointer::cast` / wildcard allows)
+
 ## [0.1.12] - 2026-10-15
 
 ### Added
