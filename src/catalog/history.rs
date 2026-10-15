@@ -5,6 +5,7 @@ use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+use argus::{LeReader, LeWriter};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::layout::{SUPERBLOCK_FLAG_HISTORY_FOOTER, SUPERBLOCK_V1_LEN, SuperblockV1};
@@ -464,10 +465,16 @@ fn rewrite_footer_bytes_with_spill(
         f.write_all(&spill)?;
     }
     f.write_all(&footer_bytes)?;
-    f.write_all(&json_len.to_le_bytes())?;
     let wire = HistoryFooterWireV1::DEFAULT;
-    f.write_all(&wire.version.to_le_bytes())?;
-    f.write_all(&wire.magic)?;
+    let mut tail = [0u8; HistoryFooterWireV1::DEFAULT.tail_len];
+    {
+        let mut w = LeWriter::new(&mut tail);
+        w.put_u64(json_len);
+        w.put_u32(wire.version);
+        w.put_bytes(&wire.magic);
+        debug_assert_eq!(w.position(), wire.tail_len);
+    }
+    f.write_all(&tail)?;
 
     let mut sb_bytes = [0u8; SUPERBLOCK_V1_LEN];
     f.seek(SeekFrom::Start(0))?;
@@ -528,16 +535,18 @@ fn history_footer_len(data: &[u8]) -> Result<Option<usize>, CatalogError> {
         return Ok(None);
     }
     let tail = data.len() - wire.tail_len;
-    if data[tail + 12..tail + 16] != wire.magic {
+    let mut r = LeReader::new(&data[tail..tail + wire.tail_len]);
+    let json_len = r.take_u64();
+    let version = r.take_u32();
+    let magic = r.take_4();
+    if magic != wire.magic {
         return Ok(None);
     }
-    let version = u32::from_le_bytes(data[tail + 8..tail + 12].try_into().unwrap());
     if version != wire.version {
         return Err(CatalogError::InvalidWriteSpec(
             "unsupported history footer version",
         ));
     }
-    let json_len = u64::from_le_bytes(data[tail..tail + 8].try_into().unwrap());
     let json_len_usize =
         usize::try_from(json_len).map_err(|_| CatalogError::TooLargeForPlatform {
             field: "history_json_len",

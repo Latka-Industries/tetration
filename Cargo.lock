@@ -68,6 +68,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "argus-chunk"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51e49f146a7293e50f2605f4f673b9d6f38a6b98f0bb7d3d579f72daa4e6f50f"
+dependencies = [
+ "memmap2",
+ "thiserror",
+ "zstd",
+]
+
+[[package]]
 name = "ascii"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1275,6 +1286,7 @@ name = "tetration"
 version = "0.1.10"
 dependencies = [
  "anyhow",
+ "argus-chunk",
  "bytemuck",
  "clap",
  "cudarc",

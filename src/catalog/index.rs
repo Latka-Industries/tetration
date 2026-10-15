@@ -1,5 +1,6 @@
 //! Chunk index region (`TIDX` header + fixed-size entries).
 
+use argus::{LeReader, LeWriter};
 use serde::Serialize;
 
 use crate::utils::wire;
@@ -62,17 +63,17 @@ impl ChunkIndexEntryV1 {
 
     pub(super) fn to_bytes(&self) -> [u8; Self::WIRE_LEN] {
         let mut out = [0u8; Self::WIRE_LEN];
-        let mut o = 0usize;
-        wire::put_u64_le(&mut out, &mut o, self.dataset_id);
+        let mut w = LeWriter::new(&mut out);
+        w.put_u64(self.dataset_id);
         for c in &self.chunk_index {
-            wire::put_u64_le(&mut out, &mut o, *c);
+            w.put_u64(*c);
         }
-        wire::put_u64_le(&mut out, &mut o, self.payload_offset);
-        wire::put_u64_le(&mut out, &mut o, self.raw_byte_len);
-        wire::put_u64_le(&mut out, &mut o, self.stored_byte_len);
-        wire::put_u32_le(&mut out, &mut o, self.codec);
-        wire::put_u32_le(&mut out, &mut o, 0);
-        debug_assert_eq!(o, Self::WIRE_LEN);
+        w.put_u64(self.payload_offset);
+        w.put_u64(self.raw_byte_len);
+        w.put_u64(self.stored_byte_len);
+        w.put_u32(self.codec);
+        w.put_u32(0);
+        debug_assert_eq!(w.position(), Self::WIRE_LEN);
         out
     }
 
@@ -84,17 +85,17 @@ impl ChunkIndexEntryV1 {
                 got: data.len(),
             });
         }
-        let mut o = off;
-        let dataset_id = wire::take_u64_le(data, &mut o);
+        let mut r = LeReader::new(&data[off..off + Self::WIRE_LEN]);
+        let dataset_id = r.take_u64();
         let mut chunk_index = [0u64; MAX_NDIM];
         for slot in &mut chunk_index {
-            *slot = wire::take_u64_le(data, &mut o);
+            *slot = r.take_u64();
         }
-        let payload_offset = wire::take_u64_le(data, &mut o);
-        let raw_byte_len = wire::take_u64_le(data, &mut o);
-        let stored_byte_len = wire::take_u64_le(data, &mut o);
-        let codec = wire::take_u32_le(data, &mut o);
-        let _pad = wire::take_u32_le(data, &mut o);
+        let payload_offset = r.take_u64();
+        let raw_byte_len = r.take_u64();
+        let stored_byte_len = r.take_u64();
+        let codec = r.take_u32();
+        r.skip(4);
         Ok(Self {
             dataset_id,
             chunk_index,
@@ -110,24 +111,23 @@ pub(super) fn parse_chunk_index(
     idx_bytes: &[u8],
 ) -> Result<(Vec<ChunkIndexEntryV1>, FileExecutionSettingsV1), CatalogError> {
     let hdr = CHUNK_INDEX_HEADER_V1;
-    if idx_bytes.len() < hdr.header_len {
-        return Err(CatalogError::TooShort {
-            need: hdr.header_len,
-            got: idx_bytes.len(),
-        });
-    }
-    let mut m = [0u8; 4];
-    m.copy_from_slice(&idx_bytes[0..4]);
+    let mut r = LeReader::require(idx_bytes, "chunk_index_header", hdr.header_len).map_err(
+        |e| CatalogError::TooShort {
+            need: e.need,
+            got: e.got,
+        },
+    )?;
+    let m = r.take_4();
     if &m != hdr.magic {
         return Err(CatalogError::BadIndexMagic(m));
     }
-    let ver = wire::u32_le_at(idx_bytes, 4);
+    let ver = r.take_u32();
     if ver != hdr.version {
         return Err(CatalogError::UnsupportedIndexVersion(ver));
     }
+    let count = r.take_u64();
     let file_execution =
         FileExecutionSettingsV1::from_index_header_tail(&idx_bytes[16..hdr.header_len]);
-    let count = wire::u64_le_at(idx_bytes, 8);
     let entries_bytes = count
         .checked_mul(ChunkIndexEntryV1::WIRE_LEN as u64)
         .ok_or(CatalogError::BadIndexLength {
@@ -176,11 +176,17 @@ pub(super) fn write_chunk_index_header(
     file_execution: FileExecutionSettingsV1,
 ) {
     let hdr = CHUNK_INDEX_HEADER_V1;
-    out.extend_from_slice(hdr.magic);
-    out.extend_from_slice(&hdr.version.to_le_bytes());
-    out.extend_from_slice(&entry_count.to_le_bytes());
-    out.resize(hdr.header_len, 0);
-    file_execution.write_index_header_tail(&mut out[16..hdr.header_len]);
+    let mut header = [0u8; 32];
+    {
+        let mut w = LeWriter::new(&mut header);
+        w.put_bytes(hdr.magic);
+        w.put_u32(hdr.version);
+        w.put_u64(entry_count);
+        w.put_zeros(16);
+        debug_assert_eq!(w.position(), hdr.header_len);
+    }
+    file_execution.write_index_header_tail(&mut header[16..hdr.header_len]);
+    out.extend_from_slice(&header);
 }
 
 /// Validate chunk index payload spans against a file length.

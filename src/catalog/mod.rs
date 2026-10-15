@@ -21,6 +21,7 @@ mod write;
 use std::borrow::Cow;
 use std::io;
 
+use argus::{LeReader, PayloadCodec};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -100,13 +101,14 @@ impl ChunkPayloadCodecV1 {
         codec: u32,
         tile_bytes: Vec<u8>,
     ) -> Result<Vec<u8>, CatalogError> {
-        if self.is_raw(codec) {
+        let payload = PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec {
+            codec,
+        })?;
+        // Keep raw path zero-copy on the owned tile buffer (argus::encode would re-allocate).
+        if matches!(payload, PayloadCodec::Raw) {
             return Ok(tile_bytes);
         }
-        if self.is_zstd(codec) {
-            return zstd::encode_all(tile_bytes.as_slice(), 0).map_err(CatalogError::Io);
-        }
-        Err(CatalogError::UnsupportedCodec { codec })
+        argus::encode(payload, &tile_bytes).map_err(map_codec_error)
     }
 
     /// Decode stored chunk bytes to uncompressed tile payload (`raw_byte_len` bytes).
@@ -122,27 +124,31 @@ impl ChunkPayloadCodecV1 {
         stored_byte_len: u64,
         codec: u32,
     ) -> Result<Cow<'_, [u8]>, CatalogError> {
-        if self.is_raw(codec) {
-            if stored_byte_len != raw_byte_len {
-                return Err(CatalogError::RawStoredMismatch {
-                    raw: raw_byte_len,
-                    stored: stored_byte_len,
-                });
-            }
-            return Ok(Cow::Borrowed(stored));
+        let payload = PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec {
+            codec,
+        })?;
+        if matches!(payload, PayloadCodec::Raw) && stored_byte_len != raw_byte_len {
+            return Err(CatalogError::RawStoredMismatch {
+                raw: raw_byte_len,
+                stored: stored_byte_len,
+            });
         }
-        if self.is_zstd(codec) {
-            let dec =
-                zstd::decode_all(stored).map_err(|e| CatalogError::ZstdDecode(e.to_string()))?;
-            if dec.len() as u64 != raw_byte_len {
-                return Err(CatalogError::DecodedLengthMismatch {
-                    decoded: dec.len(),
-                    raw: raw_byte_len,
-                });
-            }
-            return Ok(Cow::Owned(dec));
+        // Slice length is the authoritative stored span for argus raw checks.
+        let _ = stored_byte_len;
+        argus::decode(payload, stored, raw_byte_len).map_err(map_codec_error)
+    }
+}
+
+fn map_codec_error(err: argus::CodecError) -> CatalogError {
+    match err {
+        argus::CodecError::Unsupported { codec } => CatalogError::UnsupportedCodec { codec },
+        argus::CodecError::RawStoredMismatch { raw, stored } => {
+            CatalogError::RawStoredMismatch { raw, stored }
         }
-        Err(CatalogError::UnsupportedCodec { codec })
+        argus::CodecError::DecodedLengthMismatch { decoded, raw } => {
+            CatalogError::DecodedLengthMismatch { decoded, raw }
+        }
+        argus::CodecError::Zstd(msg) => CatalogError::ZstdDecode(msg),
     }
 }
 
@@ -434,7 +440,15 @@ pub fn read_tet_summary_v1(data: &[u8]) -> Result<TetFileSummaryV1, CatalogError
         });
     }
 
-    let dataset_blob_len_u64 = wire::u64_le_at(data, 32);
+    let dataset_blob_len_u64 = {
+        let mut r = LeReader::require(&data[32..], "dataset_blob_len", 8).map_err(|e| {
+            CatalogError::TooShort {
+                need: 32 + e.need,
+                got: data.len(),
+            }
+        })?;
+        r.take_u64()
+    };
     let dataset_blob_len =
         usize::try_from(dataset_blob_len_u64).map_err(|_| CatalogError::TooLargeForPlatform {
             field: "dataset_blob_len",

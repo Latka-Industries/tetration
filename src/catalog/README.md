@@ -35,6 +35,7 @@ Verify APIs are implemented in [`verify`](../verify/README.md) but re-exported h
 
 ## Codecs and dtypes
 
+- **LE wire + span helpers:** [`argus-chunk`](https://docs.rs/argus-chunk) (`LeReader` / `LeWriter`, align8, byte-span checks); payload encode/decode via `argus::encode` / `argus::decode`
 - **Payload codecs:** `raw` (0), `zstd` (1) — `ChunkPayloadCodecV1::encode_tile_payload` / `decode_tile_payload`
 - **Element dtypes:** wire tags 1–10 (`f32` … `u64`) — `DATASET_DTYPE_TAG_V1`, `ElementDtype` in `utils`
 
