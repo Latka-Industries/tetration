@@ -27,10 +27,15 @@ pub const SUPERBLOCK_FLAG_HISTORY_FOOTER: u32 = 1 << 0;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SuperblockV1 {
+    /// On-disk layout version (must be [`LAYOUT_VERSION_V1`] for this reader).
     pub layout_version: u32,
+    /// Number of dataset directory records in the blob after the superblock.
     pub dataset_count: u32,
+    /// Bit flags (e.g. [`SUPERBLOCK_FLAG_HISTORY_FOOTER`]).
     pub flags: u32,
+    /// File offset of the `TIDX` chunk index.
     pub chunk_index_offset: u64,
+    /// Byte length of the chunk index region.
     pub chunk_index_length: u64,
 }
 

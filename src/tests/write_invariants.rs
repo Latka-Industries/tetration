@@ -1,8 +1,19 @@
 //! THI-377: structured proptest — valid write → TIDX / payload offset invariants.
 //!
-//! Generates small legal tensors (dtype × chunk geometry × raw/zstd), writes via
-//! public catalog APIs, then checks summary geometry, non-overlapping payloads,
-//! and full-selection materialize round-trip.
+//! Byte fuzz ([THI-376](https://linear.app/thicclatka/issue/THI-376)) finds parser
+//! crashes on untrusted input. This suite instead generates **legal** tensors, writes
+//! them with public catalog APIs, and checks that the resulting TIDX ↔ payload geometry
+//! is consistent:
+//!
+//! - every `payload_offset + stored_byte_len ≤ file_len`
+//! - payload spans never overlap; offsets are unique
+//! - chunk coords cover `ceil(shape/chunk)` without holes or duplicates
+//! - each entry’s `raw_byte_len` matches [`tile_raw_byte_len`]
+//! - sampled logical indices map to the expected chunk + in-tile coords
+//! - full-selection materialize reconstitutes the written bytes
+//!
+//! Caps ([`MAX_ELEMS`], [`MAX_CHUNKS`]) keep CI fast under zstd + materialize.
+//! Parent track: [THI-375](https://linear.app/thicclatka/issue/THI-375).
 
 use std::collections::HashSet;
 
@@ -21,22 +32,30 @@ use crate::query::{
 };
 use crate::utils::dtype::ElementDtype;
 
+/// Single-dataset name used for every generated file.
 const DATASET: &str = "field";
 
-/// Cap product(shape) so CI stays fast under zstd + materialize.
+/// Cap `product(shape)` so CI stays fast under zstd + materialize.
 const MAX_ELEMS: u64 = 48;
-/// Cap chunk tiles so index enumeration stays small.
+/// Cap chunk-tile count so index enumeration stays small.
 const MAX_CHUNKS: u64 = 16;
 
+/// One generated legal write: geometry + codec + row-major payload bytes.
 #[derive(Debug, Clone)]
 struct LegalTensor {
+    /// Catalog wire dtype tag (`DATASET_DTYPE_TAG_V1`).
     dtype: u32,
+    /// Full tensor shape (1–3 axes in this suite).
     shape: Vec<u64>,
+    /// Chunk shape; each axis satisfies `1 <= chunk[d] <= shape[d]`.
     chunk_shape: Vec<u64>,
+    /// Payload codec (`CHUNK_PAYLOAD_CODEC_V1.raw` or `.zstd`).
     codec: u32,
+    /// Row-major LE bytes for the full tensor (`nelem * elem_size`).
     data: Vec<u8>,
 }
 
+/// Map a free `u8` into one of the three dtypes exercised here (`f32` / `f64` / `i32`).
 fn dtype_tag(choice: u8) -> u32 {
     let tags = DATASET_DTYPE_TAG_V1;
     match choice % 3 {
@@ -46,6 +65,7 @@ fn dtype_tag(choice: u8) -> u32 {
     }
 }
 
+/// Deterministic row-major LE fill so round-trip compares are stable across codecs.
 fn fill_pattern(dtype: u32, nelem: usize) -> Vec<u8> {
     let elem = ElementDtype::try_from_wire_tag(dtype).expect("supported dtype");
     let es = elem.elem_size();
@@ -67,6 +87,7 @@ fn fill_pattern(dtype: u32, nelem: usize) -> Vec<u8> {
     data
 }
 
+/// Build a [`LegalTensor`] when geometry fits the CI caps; otherwise `None` (proptest filter).
 fn try_build(
     dtype: u32,
     codec: u32,
@@ -92,11 +113,12 @@ fn try_build(
     })
 }
 
-/// One axis: extent + chunk size with `1 <= chunk <= extent <= 6`.
+/// One axis: `(extent, chunk)` with `1 <= chunk <= extent <= 6`.
 fn axis_strategy() -> impl Strategy<Value = (u64, u64)> {
     (1u64..=6).prop_flat_map(|extent| (Just(extent), 1u64..=extent))
 }
 
+/// Union of 1-D / 2-D / 3-D legal tensors × dtype × raw/zstd.
 fn legal_tensor_strategy() -> impl Strategy<Value = LegalTensor> {
     prop_oneof![
         (any::<u8>(), any::<bool>()).prop_flat_map(|(dtype_choice, use_zstd)| {
@@ -138,6 +160,7 @@ fn legal_tensor_strategy() -> impl Strategy<Value = LegalTensor> {
     ]
 }
 
+/// Full-selection materialize as LE bytes (same dtype family as `t.dtype`).
 fn materialize_full_le(mmap: &[u8], dtype: u32) -> Vec<u8> {
     let doc = parse_query_json(&format!(r#"{{"dataset":"{DATASET}"}}"#)).unwrap();
     validate_query(&doc).unwrap();
@@ -158,6 +181,9 @@ fn materialize_full_le(mmap: &[u8], dtype: u32) -> Vec<u8> {
     }
 }
 
+/// Write `t`, parse the summary, and assert TIDX / payload / round-trip invariants.
+///
+/// Failures shrink via proptest to a minimal `LegalTensor` that still breaks an assert.
 fn assert_write_invariants(t: &LegalTensor) -> Result<(), TestCaseError> {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("prop.tet");
@@ -192,6 +218,7 @@ fn assert_write_invariants(t: &LegalTensor) -> Result<(), TestCaseError> {
     let elem_size = elem_size_for_wire_tag(t.dtype).unwrap();
     let ndim = t.shape.len();
     let mut seen_coords: HashSet<Vec<u64>> = HashSet::new();
+    // Half-open `[start, end)` payload spans for overlap checks.
     let mut spans: Vec<(u64, u64)> = Vec::with_capacity(summary.chunks.len());
 
     for c in &summary.chunks {
@@ -232,6 +259,7 @@ fn assert_write_invariants(t: &LegalTensor) -> Result<(), TestCaseError> {
     }
     prop_assert_eq!(seen_coords.len(), summary.chunks.len());
 
+    // Writers must emit abutting or gapped but never overlapping payloads.
     spans.sort_by_key(|&(start, _)| start);
     for w in spans.windows(2) {
         let (_, end0) = w[0];
@@ -240,6 +268,7 @@ fn assert_write_invariants(t: &LegalTensor) -> Result<(), TestCaseError> {
         prop_assert_ne!(w[0].0, w[1].0);
     }
 
+    // Sample up to 8 logical indices across the tensor; check chunk + in-tile mapping.
     let nelem = t.shape.iter().product::<u64>();
     let sample_n = usize::try_from(nelem.min(8)).unwrap();
     for k in 0..sample_n {
@@ -285,6 +314,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    /// Property: every legal write satisfies TIDX/payload invariants and round-trips.
     #[test]
     fn valid_write_offset_and_roundtrip_invariants(t in legal_tensor_strategy()) {
         assert_write_invariants(&t)?;

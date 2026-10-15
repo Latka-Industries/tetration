@@ -89,13 +89,15 @@ impl ChunkPayloadCodecV1 {
         self.is_raw(codec) || self.is_zstd(codec)
     }
 
-    /// Encode one tile’s uncompressed `f32` row-major bytes for the given wire `codec`.
+    /// Encode one tile’s uncompressed row-major bytes for the given wire `codec`.
+    ///
+    /// Raw (`0`) returns `tile_bytes` without copying. Zstd (`1`) compresses via
+    /// [`argus::encode`].
     ///
     /// # Errors
     ///
     /// Returns [`CatalogError::UnsupportedCodec`] when `codec` is neither [`ChunkPayloadCodecV1::raw`]
-    /// nor [`ChunkPayloadCodecV1::zstd`] for this table, and [`CatalogError::Io`] when zstd
-    /// compression fails.
+    /// nor [`ChunkPayloadCodecV1::zstd`], or maps zstd failures from argus.
     pub fn encode_tile_payload(
         self,
         codec: u32,
@@ -125,18 +127,19 @@ impl ChunkPayloadCodecV1 {
     ) -> Result<Cow<'_, [u8]>, CatalogError> {
         let payload =
             PayloadCodec::from_u32(codec).map_err(|_| CatalogError::UnsupportedCodec { codec })?;
+        // Catalog index carries stored_byte_len; argus raw checks use `stored.len()`.
         if matches!(payload, PayloadCodec::Raw) && stored_byte_len != raw_byte_len {
             return Err(CatalogError::RawStoredMismatch {
                 raw: raw_byte_len,
                 stored: stored_byte_len,
             });
         }
-        // Slice length is the authoritative stored span for argus raw checks.
         let _ = stored_byte_len;
         argus::decode(payload, stored, raw_byte_len).map_err(map_codec_error)
     }
 }
 
+/// Map [`argus::CodecError`] into the catalog error surface (stable wire messages).
 fn map_codec_error(err: argus::CodecError) -> CatalogError {
     match err {
         argus::CodecError::Unsupported { codec } => CatalogError::UnsupportedCodec { codec },
