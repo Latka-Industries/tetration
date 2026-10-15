@@ -17,8 +17,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::CatalogError;
+use super::append::merge_tet_files;
 use super::package::{
-    PACKAGE_PROTOCOL_VERSION, TetPackage, is_safe_path_segment, read_json, write_json_atomic,
+    GenerationManifest, PACKAGE_PROTOCOL_VERSION, TetPackage, is_safe_path_segment, read_json,
+    write_json_atomic,
 };
 use super::session::{TetDatasetWrite, TetFile, TetWriterSession};
 use crate::utils::fs_device;
@@ -343,6 +345,79 @@ pub fn find_claim_overlap(parts: &[(PathBuf, PartMeta)]) -> Option<(String, Stri
         }
     }
     None
+}
+
+/// Resolve a frozen `part_ids` list against sealed staging (decision C).
+///
+/// # Errors
+///
+/// Missing part id, verify failure, or I/O.
+pub fn resolve_part_ids(
+    package: &TetPackage,
+    part_ids: &[String],
+) -> Result<Vec<(PathBuf, PartMeta)>, CatalogError> {
+    if part_ids.is_empty() {
+        return Err(CatalogError::Package(
+            "publish requires a frozen part-id list",
+        ));
+    }
+    let sealed = list_sealed_parts(package)?;
+    let mut out = Vec::with_capacity(part_ids.len());
+    for id in part_ids {
+        let found = sealed.iter().find(|(_, m)| m.part_id == *id).cloned();
+        let Some(pair) = found else {
+            return Err(CatalogError::Package("frozen part id not found in staging"));
+        };
+        out.push(pair);
+    }
+    Ok(out)
+}
+
+/// Single committer: freeze `part_ids` → merge into `packed.tet` → seal generation `G`.
+///
+/// Rejects overlapping claims. Does not GC staging. Crash before seal leaves `CURRENT` unchanged.
+///
+/// # Errors
+///
+/// Missing parts, claim overlap, publish lock held, merge failure, or I/O.
+pub fn publish_parts(
+    package: &TetPackage,
+    generation: u64,
+    part_ids: &[String],
+) -> Result<GenerationManifest, CatalogError> {
+    let frozen = resolve_part_ids(package, part_ids)?;
+    if let Some((a, b, name)) = find_claim_overlap(&frozen) {
+        let _ = (a, b, name);
+        return Err(CatalogError::Package(
+            "overlapping dataset claims in publish set",
+        ));
+    }
+
+    let part_paths: Vec<PathBuf> = frozen
+        .iter()
+        .map(|(dir, meta)| dir.join(meta.part_file_name()))
+        .collect();
+    let path_refs: Vec<&Path> = part_paths.iter().map(PathBuf::as_path).collect();
+
+    let packed_tmp = package
+        .root()
+        .join(format!(".publish-{generation}.tet.tmp"));
+    // Best-effort cleanup if we fail after creating the temp.
+    let merge_result = merge_tet_files(&packed_tmp, &path_refs);
+    if let Err(e) = merge_result {
+        let _ = fs::remove_file(&packed_tmp);
+        return Err(e);
+    }
+
+    if let Err(e) = package.begin_publish(generation) {
+        let _ = fs::remove_file(&packed_tmp);
+        return Err(e);
+    }
+
+    let seal = package.seal_generation(generation, &packed_tmp, part_ids.to_vec());
+    let _ = fs::remove_file(&packed_tmp);
+    seal?;
+    package.read_manifest(generation)
 }
 
 fn sha256_file_hex(path: &Path) -> Result<String, CatalogError> {

@@ -32,6 +32,7 @@ use crate::utils::{dtype::ElementDtype, wire};
 
 pub use append::{
     append_multi_mixed, append_multi_raw_array_file, append_multi_raw_array_streaming,
+    merge_tet_files,
 };
 pub use dataset::{DatasetRecordV1, RawArrayWrite};
 pub use execution::{DEFAULT_MEMORY_BUDGET_PERCENT_BPS, FileExecutionSettingsV1};
@@ -55,7 +56,7 @@ pub use session::{
 };
 pub use shard::{
     DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, list_sealed_parts,
-    open_sealed_part, read_part_meta, verify_part_meta,
+    open_sealed_part, publish_parts, read_part_meta, resolve_part_ids, verify_part_meta,
 };
 pub use stream_write::{
     ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,
