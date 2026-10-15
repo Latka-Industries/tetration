@@ -16,7 +16,9 @@ This document captures directions that would matter to teams behind formats and 
 | 10 | Optional GPU device routing (experimental) | [`query_engine.md` — Phase 10](query_engine.md#phase-10--optional-gpu-experimental) |
 | 11 | C ABI (`tetration-ffi`) | [`ffi.md`](ffi.md) |
 
-Near-term work already tracked elsewhere: Python bindings ([**tet-py**](https://github.com/Latka-Industries/tet-py) — [`ffi.md`](ffi.md), [issue #18](https://github.com/Latka-Industries/tetration/issues/18)), [`query_engine.md` — operations roadmap](query_engine.md#operations-roadmap-planned), [`query_engine.md` — hardening roadmap](query_engine.md#hardening-roadmap), [`conversions.md`](conversions.md) (import/export formats and roadblocks).
+User-facing copy (no issue tracker links): **[docs.tetration.sh/roadmap](https://docs.tetration.sh/roadmap)**.
+
+Near-term work also tracked in [`query_engine.md` — operations roadmap](query_engine.md#operations-roadmap-planned), [hardening](query_engine.md#hardening-roadmap), [`conversions.md`](conversions.md), and [**tet-py**](https://github.com/Latka-Industries/tet-py).
 
 ---
 
@@ -107,7 +109,7 @@ Not always “more features.” Three cross-cutting qualities:
 
 ### Transaction safety and mutability
 
-v1 is **write-once, read-many** on a single `.tet` — no locking, no live append ([`layout_v1.md` — Concurrency](layout_v1.md#concurrency-informative)). Post-v1 concurrent ingest is specified as **shards → publish → sealed generation** (not multi-writer on one live TIDX): draft RFC [`writer_protocol_v2.md`](writer_protocol_v2.md) (Phase **17** / Linear 0.2.x).
+v1 is **write-once, read-many** on a single `.tet` — no locking, no live append ([`layout_v1.md` — Concurrency](layout_v1.md#concurrency-informative)). Concurrent ingest is **shards → publish → sealed generation** (not multi-writer on one live TIDX): [`writer_protocol_v2.md`](writer_protocol_v2.md) (**shipped** in 0.2 / Phase **17**).
 
 ### Formal specification
 
@@ -149,7 +151,7 @@ A plausible north star: **scientific knowledge infrastructure** — not only a f
 | **14** | Distributed query execution | Tier-A/B merge semantics | Product boundary vs “just a format” |
 | **15** | Group-by, pipelines, controlled joins | Axes + metadata | Avoid full SQL complexity |
 | **16** | Units, CRS, provenance, uncertainty | Footer history + attrs | Standards alignment (CF, PROV, etc.) |
-| **17** | Shards, generations, atomic publish | Writer protocol v2 RFC | Draft: [`writer_protocol_v2.md`](writer_protocol_v2.md); still WORM per sealed `G` |
+| **17** | Shards, generations, atomic publish | Writer protocol v2 | **Shipped** in 0.2 — [`writer_protocol_v2.md`](writer_protocol_v2.md); WORM per sealed `G` |
 | **18** | Normative spec + conformance suite | Layout + query wire frozen | Enables third-party implementations |
 
 Phases are **not ordered commitments** — e.g. formal spec (18) might parallelize early work on cloud reads (12).
