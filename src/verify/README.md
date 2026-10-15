@@ -8,7 +8,7 @@ Distinct from [`catalog`](../catalog/README.md): parsing may succeed while verif
 
 - `verify_tet_file` / `verify_tet_file_with_options`
 - `verify_tet_bytes` — in-memory buffer + optional path for messages
-- `verify_tet_package` / `verify_tet_package_with_options` / `looks_like_tet_package` — `.tet.d` (THI-466)
+- `verify_tet_package` / `verify_tet_package_with_options` / `looks_like_tet_package` — `.tet.d` (THI-466 / THI-480); finding `check` table in [`docs/cli.md`](../../docs/cli.md#package-finding-check-names)
 - `VerifyOptions` — `--deep` decode all chunks vs quick sample (`DEEP_DECODE_MAX_CHUNKS`)
 - Formatters: `format_verify_text`, `format_verify_json`, `format_verify_quiet`
 

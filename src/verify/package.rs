@@ -71,10 +71,20 @@ pub fn verify_tet_package_with_options(
     };
 
     match current {
-        None => findings.push(ok_finding(
-            "current",
-            Some("absent (empty package)".to_owned()),
-        )),
+        None => {
+            if sealed_generation_dirs_present(&package) {
+                // Empty package may omit CURRENT; sealed gens without a pointer are corrupt.
+                findings.push(err_finding(
+                    "current",
+                    "CURRENT absent but sealed generations/ present".to_owned(),
+                ));
+            } else {
+                findings.push(ok_finding(
+                    "current",
+                    Some("absent (empty package)".to_owned()),
+                ));
+            }
+        }
         Some(g) => {
             findings.push(ok_finding("current", Some(format!("generation={g}"))));
             match verify_sealed_generation(&package, g, opts, /*is_current*/ true) {
@@ -91,29 +101,17 @@ pub fn verify_tet_package_with_options(
     }
 
     // Prior sealed generations (retain current-1 by default policy); soft-check all present.
-    if let Ok(entries) = fs::read_dir(package.generations_dir()) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let Some(name_s) = name.to_str() else {
-                continue;
-            };
-            if !entry.path().is_dir() || name_s.contains("quarantine") {
-                continue;
-            }
-            let Ok(g) = name_s.parse::<u64>() else {
-                findings.push(warn_finding(
-                    "generations",
-                    format!("unexpected generations/ entry: {name_s}"),
-                ));
-                continue;
-            };
-            if current == Some(g) {
-                continue;
-            }
-            match verify_sealed_generation(&package, g, opts, /*is_current*/ false) {
+    for entry in visit_generation_dirs(&package) {
+        match entry {
+            GenDirEntry::Sealed(g) if current == Some(g) => {}
+            GenDirEntry::Sealed(g) => match verify_sealed_generation(&package, g, opts, false) {
                 Ok((extra, _)) => findings.extend(extra),
                 Err(fatal) => findings.extend(fatal),
-            }
+            },
+            GenDirEntry::Unexpected(name_s) => findings.push(warn_finding(
+                "generations",
+                format!("unexpected generations/ entry: {name_s}"),
+            )),
         }
     }
 
@@ -121,6 +119,41 @@ pub fn verify_tet_package_with_options(
     findings.extend(check_staging_orphans(&package));
 
     Ok(finish_package(path_s, findings, current_summary))
+}
+
+enum GenDirEntry {
+    Sealed(u64),
+    Unexpected(String),
+}
+
+fn visit_generation_dirs(package: &TetPackage) -> Vec<GenDirEntry> {
+    let Ok(entries) = fs::read_dir(package.generations_dir()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_s) = name.to_str() else {
+            continue;
+        };
+        if name_s.contains("quarantine") {
+            continue;
+        }
+        match name_s.parse::<u64>() {
+            Ok(g) => out.push(GenDirEntry::Sealed(g)),
+            Err(_) => out.push(GenDirEntry::Unexpected(name_s.to_owned())),
+        }
+    }
+    out
+}
+
+fn sealed_generation_dirs_present(package: &TetPackage) -> bool {
+    visit_generation_dirs(package)
+        .iter()
+        .any(|e| matches!(e, GenDirEntry::Sealed(_)))
 }
 
 fn finish_package(
