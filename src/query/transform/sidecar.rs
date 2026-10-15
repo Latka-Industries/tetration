@@ -1,12 +1,12 @@
-//! Transform sidecar: draft `.tet` in platform cache, then publish beside the source file.
+//! Transform sidecar: draft `.tet` via [`TetWriterSession`], then publish beside the source file.
+//!
+//! Policy (paths, naming, lineage) lives here; payload persistence uses the catalog writer so
+//! query sinks and embedder `TetWriterSession` share one on-disk write stack.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::catalog::{
-    DatasetMetadataV1, FooterBlobV1, HistoryEvent, OneChunkRawWrite, TetMetadataV1,
-    unix_timestamp_now, write_footer_blob, write_one_chunk_raw_file,
-};
+use crate::catalog::{HistoryEvent, TetDatasetWrite, TetWriterSession};
 use crate::query::engine::spill_policy::{self, SpillPathAllowlist};
 use crate::query::types::{ReadPlan, TetError, TransformMethod, WriteHints, WriteTarget};
 use crate::utils::dtype::ElementDtype;
@@ -83,7 +83,7 @@ pub(crate) fn resolve_sidecar_paths(
     })
 }
 
-/// Write transformed tensor bytes to `paths.draft`, attach footer history/metadata, publish to `paths.dest`.
+/// Write transformed tensor bytes through [`TetWriterSession`] to `paths.draft`, then publish.
 ///
 /// # Errors
 ///
@@ -97,31 +97,30 @@ pub(crate) fn write_and_publish_sidecar(
     payload: &[u8],
 ) -> Result<(), TetError> {
     let shape = &plan.logical_selection_shape;
-    let spec = OneChunkRawWrite {
-        name: &paths.dataset_name,
-        dtype: dtype.wire_tag(),
+    let mut dataset = TetDatasetWrite::row_major(
+        paths.dataset_name.clone(),
+        dtype.wire_tag(),
         shape,
-        chunk_shape: shape,
-        payload,
-    };
-    write_one_chunk_raw_file(&paths.draft, &spec).map_err(TetError::Catalog)?;
-
-    let history = build_transform_history(ctx, plan, &paths.dataset_name);
-    let parent_meta = parent_dataset_meta(mmap, ctx.source_dataset);
-    let metadata = build_sidecar_metadata(
-        parent_meta.as_ref(),
-        &paths.dataset_name,
-        ctx.source_dataset,
-    );
-    write_footer_blob(
-        &paths.draft,
-        &FooterBlobV1 {
-            history,
-            metadata,
-            metadata_ref: None,
-        },
+        shape,
+        payload.to_vec(),
     )
     .map_err(TetError::Catalog)?;
+
+    if let Some(parent) = parent_dataset_meta(mmap, ctx.source_dataset) {
+        dataset.attrs = parent.attrs;
+        dataset.dim_names = parent.dim_names;
+        dataset.coords = parent.coords;
+    }
+    dataset
+        .attrs
+        .insert("derived_from".to_owned(), ctx.source_dataset.to_owned());
+
+    let mut session = TetWriterSession::create(&paths.draft);
+    session.metadata.tool = Some("tet query transform".to_owned());
+    session.metadata.library_version = Some(env!("CARGO_PKG_VERSION").to_owned());
+    session.push_history(build_transform_history(ctx, plan, &paths.dataset_name));
+    session.push_dataset(dataset).map_err(TetError::Catalog)?;
+    session.commit().map_err(TetError::Catalog)?;
 
     spill_policy::publish_output_file(&paths.draft, &paths.dest)?;
     Ok(())
@@ -131,7 +130,7 @@ fn build_transform_history(
     ctx: SidecarContext<'_>,
     plan: &ReadPlan,
     output_dataset: &str,
-) -> Vec<HistoryEvent> {
+) -> HistoryEvent {
     let mut event = HistoryEvent::new("transform", ctx.tet_path.display().to_string());
     event.parents.push(ctx.tet_path.display().to_string());
     event
@@ -144,7 +143,7 @@ fn build_transform_history(
         .params
         .insert("output_dataset".to_owned(), output_dataset.to_owned());
     append_selection_params(&mut event.params, plan);
-    vec![event]
+    event
 }
 
 fn append_selection_params(params: &mut BTreeMap<String, String>, plan: &ReadPlan) {
@@ -178,30 +177,10 @@ fn shape_wire(shape: &[u64]) -> String {
         .join("x")
 }
 
-fn build_sidecar_metadata(
-    parent: Option<&DatasetMetadataV1>,
-    output_dataset: &str,
+fn parent_dataset_meta(
+    mmap: &[u8],
     source_dataset: &str,
-) -> Option<TetMetadataV1> {
-    let mut meta = TetMetadataV1::default();
-    let out = meta.dataset_mut(output_dataset);
-    if let Some(parent) = parent {
-        out.attrs.clone_from(&parent.attrs);
-        out.dim_names.clone_from(&parent.dim_names);
-        out.coords.clone_from(&parent.coords);
-    }
-    out.attrs
-        .insert("derived_from".to_owned(), source_dataset.to_owned());
-    meta.file = Some(crate::catalog::FileMetadataV1 {
-        tool: Some("tet query transform".to_owned()),
-        library_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
-        created_at: Some(unix_timestamp_now()),
-    });
-    meta.validate().ok()?;
-    Some(meta)
-}
-
-fn parent_dataset_meta(mmap: &[u8], source_dataset: &str) -> Option<DatasetMetadataV1> {
+) -> Option<crate::catalog::DatasetMetadataV1> {
     let summary = crate::catalog::read_tet_summary_v1(mmap).ok()?;
     summary.metadata.datasets.get(source_dataset).cloned()
 }

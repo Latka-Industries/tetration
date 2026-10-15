@@ -1671,6 +1671,35 @@ fn plan_query_zscore_sidecar_publishes_tet_beside_source() {
             .map(String::as_str),
         Some("a-zscore")
     );
+    assert_eq!(
+        summary
+            .metadata
+            .file
+            .as_ref()
+            .and_then(|f| f.tool.as_deref()),
+        Some("tet query transform")
+    );
+    // Same payload + naming through TetWriterSession must match catalog shape.
+    let ds = &summary.datasets[0];
+    let mut session = crate::catalog::TetWriterSession::create(dir.path().join("writer.tet"));
+    session.metadata.tool = Some("tet query transform".to_owned());
+    let payload_elems = ds.shape.iter().product::<u64>() as usize;
+    let payload = vec![0u8; payload_elems * 4];
+    let write = crate::catalog::TetDatasetWrite::f32_row_major(
+        "a-zscore",
+        &ds.shape,
+        &ds.chunk_shape,
+        payload,
+    )
+    .unwrap();
+    session.push_dataset(write).unwrap();
+    session.commit().unwrap();
+    let writer_summary =
+        read_tet_summary_v1(&mmap_file_read(&dir.path().join("writer.tet")).unwrap()).unwrap();
+    assert_eq!(writer_summary.datasets[0].name, ds.name);
+    assert_eq!(writer_summary.datasets[0].shape, ds.shape);
+    assert_eq!(writer_summary.datasets[0].chunk_shape, ds.chunk_shape);
+    assert_eq!(writer_summary.datasets[0].dtype, ds.dtype);
 }
 
 #[test]
