@@ -10,6 +10,8 @@ use crate::query::engine::{
     plan_read_for_document,
 };
 use crate::query::fold::fold_policy::FoldIoPolicy;
+use crate::query::materialize::int::{materialize_read_plan_u32_le, materialize_read_plan_u64_le};
+use crate::query::materialize::materialize_read_plan_f16_le;
 use crate::query::transform::{
     TransformDenseBuffer, TransformRunInput, materialize_transform_dense_ram,
 };
@@ -21,10 +23,13 @@ use crate::utils::dtype::ElementDtype;
 pub enum DenseBuffer {
     F32(Vec<f32>),
     F64(Vec<f64>),
+    F16(Vec<half::f16>),
     I32(Vec<i32>),
     I64(Vec<i64>),
     U8(Vec<u8>),
     U16(Vec<u16>),
+    U32(Vec<u32>),
+    U64(Vec<u64>),
     I16(Vec<i16>),
 }
 
@@ -198,8 +203,17 @@ fn materialize_planned(
             let (v, _, _) = materialize_read_plan_i16_le(mmap, plan, None)?;
             Ok(DenseBuffer::I16(v))
         }
-        ElementDtype::U32 | ElementDtype::F16 | ElementDtype::U64 => Err(TetError::Validation(
-            format!("dense numpy export does not support dtype wire tag yet ({dtype:?})"),
-        )),
+        ElementDtype::U32 => {
+            let (v, _, _) = materialize_read_plan_u32_le(mmap, plan, None)?;
+            Ok(DenseBuffer::U32(v))
+        }
+        ElementDtype::U64 => {
+            let (v, _, _) = materialize_read_plan_u64_le(mmap, plan, None)?;
+            Ok(DenseBuffer::U64(v))
+        }
+        ElementDtype::F16 => {
+            let (v, _, _) = materialize_read_plan_f16_le(mmap, plan, None)?;
+            Ok(DenseBuffer::F16(v))
+        }
     }
 }

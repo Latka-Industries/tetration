@@ -1,6 +1,9 @@
 //! Dense embedder materialize API (`materialize_query_selection`, `materialize_query_transform_ram`).
 
-use super::fixture::write_multichunk_2x3_tiles;
+use super::fixture::{
+    write_multichunk_2x3_f16_tiles, write_multichunk_2x3_tiles, write_multichunk_2x3_u32_tiles,
+    write_multichunk_2x3_u64_tiles,
+};
 use crate::layout::mmap_file_read;
 use crate::query::{
     DenseBuffer, estimate_query_selection_bytes, materialize_query_selection,
@@ -113,6 +116,58 @@ fn materialize_query_selection_honors_raised_budget() {
     match out.buffer {
         DenseBuffer::F32(vals) => assert_eq!(vals.len(), 6),
         other => panic!("expected f32 buffer, got {other:?}"),
+    }
+}
+
+#[test]
+fn materialize_query_selection_u32() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("u32.tet");
+    write_multichunk_2x3_u32_tiles(&path, "a");
+    let doc = parse_query_json(r#"{"dataset":"a"}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let out = materialize_query_selection(&doc, &mmap).unwrap();
+    assert_eq!(out.shape, vec![2, 3]);
+    match out.buffer {
+        DenseBuffer::U32(vals) => assert_eq!(vals, vec![1, 2, 3, 4, 5, 6]),
+        other => panic!("expected u32 buffer, got {other:?}"),
+    }
+}
+
+#[test]
+fn materialize_query_selection_u64() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("u64.tet");
+    write_multichunk_2x3_u64_tiles(&path, "a");
+    let doc = parse_query_json(r#"{"dataset":"a"}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let out = materialize_query_selection(&doc, &mmap).unwrap();
+    match out.buffer {
+        DenseBuffer::U64(vals) => assert_eq!(vals, vec![1, 2, 3, 4, 5, 6]),
+        other => panic!("expected u64 buffer, got {other:?}"),
+    }
+}
+
+#[test]
+fn materialize_query_selection_f16() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("f16.tet");
+    write_multichunk_2x3_f16_tiles(&path, "a");
+    let doc = parse_query_json(r#"{"dataset":"a"}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let out = materialize_query_selection(&doc, &mmap).unwrap();
+    match out.buffer {
+        DenseBuffer::F16(vals) => {
+            assert_eq!(vals.len(), 6);
+            for (i, v) in vals.iter().enumerate() {
+                let expected = half::f16::from_f32((i + 1) as f32);
+                assert_eq!(*v, expected, "index {i}");
+            }
+        }
+        other => panic!("expected f16 buffer, got {other:?}"),
     }
 }
 
