@@ -13,6 +13,7 @@ Spec: [`docs/layout_v1.md`](../../docs/layout_v1.md).
 | `TetDatasetStreamSpec`| Streaming geometry: same builders, fill tiles at commit          |
 | `TetFile`             | Open for mmap; `summary()`, path, backing mmap                   |
 | `TetPackage`          | `.tet.d` skeleton: create/open, `CURRENT`, publish lock, seal `packed.tet` ([writer protocol v2](../../docs/writer_protocol_v2.md)) |
+| `TetShardWriter`      | Staging shard: `part-*.tet` + `PART_META.json` (no `CURRENT` flip) — multi-writer ingest |
 | `read_tet_summary_v1` | Parse catalog from bytes (no extra health checks)                |
 | `TetFileSummaryV1`    | Superblock + datasets + chunks + history + metadata              |
 
@@ -34,6 +35,7 @@ Verify APIs are implemented in [`verify`](../verify/README.md) but re-exported h
 | `execution.rs`    | Per-file defaults in chunk index header (memory budget bps)                    |
 | `session.rs`      | `TetWriterSession` / `TetFile` façade; `TetDatasetWrite` / `TetDatasetStreamSpec` |
 | `package.rs`      | `.tet.d` package roles (`PROTOCOL`, `CURRENT`, staging/generations/publishing)   |
+| `shard.rs`        | `TetShardWriter` / `PartMeta` — immutable staging parts for concurrent ingest    |
 
 ## Codecs and dtypes
 
@@ -44,9 +46,10 @@ Verify APIs are implemented in [`verify`](../verify/README.md) but re-exported h
 ## Write paths (choose one)
 
 ```text
-In-memory arrays     → write.rs / session::commit
-Streaming tiles      → stream_write.rs / session::commit_with_fill
+In-memory arrays      → write.rs / session::commit
+Streaming tiles       → stream_write.rs / session::commit_with_fill
 Append to sealed file → append.rs
+Package multi-writer  → package::TetPackage + shard::TetShardWriter (staging only)
 ```
 
 ## Read path

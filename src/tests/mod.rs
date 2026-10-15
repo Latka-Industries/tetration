@@ -28,6 +28,7 @@ mod repair;
 mod resolve_axes;
 mod resolve_selection;
 mod session;
+mod shard;
 mod small_tet_fixtures;
 mod utils;
 mod variance_simd;

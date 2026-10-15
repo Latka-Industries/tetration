@@ -102,7 +102,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [**docs.tetration.sh**](https://docs.tetration.sh) | User docs — format, CLI, Rust/Python guides ([contact](https://docs.tetration.sh/contact): `tensor@tetration.sh`)                                    |
 | [`docs/cli.md`](docs/cli.md)                       | **`tet`** commands: flags and subcommands (`info`, `verify`, `repair`, `query`, `qhist`, `convert`, `export`)                                        |
 | [`docs/layout_v1.md`](docs/layout_v1.md)           | On-disk **layout v1**: superblock, dataset catalog, chunk index, codecs, footer metadata/history, concurrency                                        |
-| [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md) | **Draft RFC (0.2)** — multi-writer via shards, generations, atomic publish (not live TIDX)                                                    |
+| [`docs/writer_protocol_v2.md`](docs/writer_protocol_v2.md) | **Draft RFC (0.2)** — multi-writer via shards, generations, atomic publish; library: `TetPackage` / `TetShardWriter`                          |
 | [`docs/query_engine.md`](docs/query_engine.md)     | **Query** JSON/TOML wire, planning, fold/spill execution, optional GPU, JSON security                                                                |
 | [`docs/ffi.md`](docs/ffi.md)                       | **C ABI** (`tetration-ffi`): [`include/tetration.h`](include/tetration.h), linking, [`examples/ffi_query.c`](examples/ffi_query.c), release archives |
 | [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
