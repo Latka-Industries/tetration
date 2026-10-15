@@ -55,8 +55,9 @@ pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
 };
 pub use shard::{
-    DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, list_sealed_parts,
-    open_sealed_part, publish_parts, read_part_meta, resolve_part_ids, verify_part_meta,
+    DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, ingest_tet_file, list_sealed_parts,
+    open_sealed_part, part_id_from_path, publish_parts, read_part_meta, resolve_part_ids,
+    verify_part_meta,
 };
 pub use stream_write::{
     ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,

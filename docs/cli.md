@@ -4,13 +4,16 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 
 | Command                                            | Alias  | Role                                                        |
 | -------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| [`tet info`](#tet-info) `<path.tet>`               | —      | Summarize a file (default: dataset table)                   |
+| [`tet info`](#tet-info) `<path.tet\|.tet.d>`       | —      | Summarize a file or package CURRENT (default: dataset table) |
 | [`tet verify`](#tet-verify) `<path.tet\|.tet.d>`   | —      | Layout / package health check (exit 1 on failure); `--json` / `-q` |
 | [`tet repair`](#tet-repair) `<path.tet\|.tet.d>`   | —      | Plan or apply safe in-place fixes (footer, stale publish)   |
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 → `.tet`                            |
 | [`tet export`](#tet-export) `<in.tet> <out.zarr/>` | —      | `.tet` → Zarr v3 directory store                            |
+| [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
+| [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
+| [`tet pack`](#tet-ingest--publish--compact--pack)  | —      | Copy sealed `packed.tet` → standalone `.tet`                |
 
 ## `tet info`
 
@@ -58,7 +61,7 @@ Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`
 
 | Flag                | Effect                                                                                                                                                           |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`)                                                                                                                   |
+| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet` or `.tet.d` (uses `CURRENT`)                                                                              |
 | `-x`, `--execute`   | Decode tiles, run `operation`, attach `execution`                                                                                                                |
 | `--format`          | `full` (default), `json`, `stats`, `plan`, `quiet`, `table`                                                                                                      |
 | `-q`, `--quiet`     | Shorthand for `--format quiet` (one-line stdout)                                                                                                                 |
@@ -108,5 +111,44 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 Preserves per-dataset **raw** or **zstd** chunk bytes; slash-separated dataset names become nested groups (`primary/f32`). Library: [`export_tet_to_zarr`](https://docs.rs/tetration/latest/tetration/export/fn.export_tet_to_zarr.html).
 
 Import/export matrix, roadblocks, and future formats: [`conversions.md`](conversions.md).
+
+## `tet ingest` / `publish` / `compact` / `pack`
+
+Local concurrent package workflow ([writer protocol v2](writer_protocol_v2.md)):
+
+```bash
+tet ingest a.tet b.tet --out climate.tet.d --jobs 2
+tet publish climate.tet.d
+tet query '{"dataset":"temp","mean":[]}' -t climate.tet.d -x -q
+tet pack climate.tet.d -o climate.tet
+```
+
+### `tet ingest`
+
+| Flag / arg | Effect |
+| ---------- | ------ |
+| `<INPUT.tet>…` | One or more sealed `.tet` files (each → one staging part) |
+| `--out PKG.tet.d` | Package directory (created if missing) |
+| `--jobs N` | Parallel ingest workers (`0` = host parallelism, capped at 64) |
+| `--create` | Explicit create (default already creates when path is absent) |
+| `-q` | Quiet |
+
+### `tet publish` / `tet compact`
+
+Freeze sealed staging parts → merge into `packed.tet` → flip `CURRENT`. **`tet compact` is an alias**: compact/merge happens during publish (not a separate visibility step).
+
+| Flag | Effect |
+| ---- | ------ |
+| `--generation G` | Generation id (default: `CURRENT+1`, or `1`) |
+| `--parts ID,…` | Explicit part-id list (default: all sealed staging parts) |
+| `-q` | Quiet |
+
+### `tet pack`
+
+| Flag / arg | Effect |
+| ---------- | ------ |
+| `PKG.tet.d` | Package root |
+| `-o OUT.tet` | Destination standalone `.tet` |
+| `--generation G` | Generation to copy (default: `CURRENT`) |
 
 More examples: [`fixtures/queries/`](../fixtures/queries/), [`query_engine.md`](query_engine.md).

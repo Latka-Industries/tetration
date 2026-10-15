@@ -6,6 +6,7 @@ mod catalog;
 mod cli_history;
 mod cli_info;
 mod cli_output;
+mod cli_package;
 mod concurrent_query;
 mod convert;
 mod covariance;

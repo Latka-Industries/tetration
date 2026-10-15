@@ -9,6 +9,7 @@ use tetration::query::{
     format_info_quiet, format_info_text, info_view_sections_from_flags,
 };
 
+use crate::package_ops::resolve_tet_read_path;
 use crate::util::cli_error;
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct InfoRunOpts {
@@ -28,7 +29,8 @@ pub(crate) struct InfoRunOpts {
 }
 
 pub(crate) fn run_info(opts: InfoRunOpts) -> Result<(), String> {
-    let mmap = mmap_file_read(&opts.path).map_err(cli_error)?;
+    let resolved = resolve_tet_read_path(&opts.path)?;
+    let mmap = mmap_file_read(&resolved).map_err(cli_error)?;
     let file_len = u64::try_from(mmap.len())
         .map_err(|_| format!("file size {} exceeds u64::MAX", mmap.len()))?;
     let summary = read_tet_summary_v1(&mmap).map_err(cli_error)?;

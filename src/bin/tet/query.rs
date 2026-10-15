@@ -9,6 +9,7 @@ use tetration::query::{
     plan_query_with_tet_mmap_ex, validate_query,
 };
 
+use crate::package_ops::resolve_tet_read_path;
 use crate::util::cli_error;
 
 /// Default preview cap when `--preview` is omitted.
@@ -74,17 +75,18 @@ pub(crate) fn run_query(opts: QueryRunOpts) -> Result<(), String> {
     merge_cli_device(&mut doc, device).map_err(cli_error)?;
     validate_query(&doc).map_err(cli_error)?;
     let preview = resolve_execute_preview_limit(execute, stdout, preview).map_err(cli_error)?;
+    let resolved_tet = tet.as_ref().map(|p| resolve_tet_read_path(p)).transpose()?;
     let mut spill_owned = None;
     if execute {
-        let path = tet.as_ref().ok_or_else(|| {
+        let path = resolved_tet.as_ref().ok_or_else(|| {
             cli_error("execute requires -t / --tet (or a saved history row with a .tet path)")
         })?;
         spill_owned =
             Some(SpillPathAllowlist::default_for_tet(path, spill_allow).map_err(cli_error)?);
     }
-    let response = if let Some(path) = tet.as_ref() {
-        let path_display = path.display().to_string();
-        let mmap = mmap_file_read(path).map_err(cli_error)?;
+    let response = if let (Some(orig), Some(resolved)) = (tet.as_ref(), resolved_tet.as_ref()) {
+        let path_display = orig.display().to_string();
+        let mmap = mmap_file_read(resolved).map_err(cli_error)?;
         plan_query_with_tet_mmap_ex(
             &doc,
             Some(path_display.as_str()),
