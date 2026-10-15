@@ -39,10 +39,12 @@ fn build_payload_offset_past_eof(path: &Path) {
 
 fn build_duplicate_payload_offset(path: &Path) {
     write_base_raw(path);
-    let mmap = mmap_file_read(path).unwrap();
-    let s = read_tet_summary_v1(&mmap).unwrap();
-    assert!(s.chunks.len() >= 2, "need multi-chunk fixture");
-    let off0 = s.chunks[0].payload_offset;
+    let off0 = {
+        let mmap = mmap_file_read(path).unwrap();
+        let s = read_tet_summary_v1(&mmap).unwrap();
+        assert!(s.chunks.len() >= 2, "need multi-chunk fixture");
+        s.chunks[0].payload_offset
+    }; // drop mmap before rewrite (Windows rejects write on mapped files)
     index_patch::patch_entry_u64(path, 1, ENTRY_PAYLOAD_OFFSET, off0);
 }
 
@@ -60,51 +62,60 @@ fn build_chunk_coord_out_of_grid(path: &Path) {
 
 fn build_truncated_after_index(path: &Path) {
     write_base_raw(path);
-    let mmap = mmap_file_read(path).unwrap();
-    let s = read_tet_summary_v1(&mmap).unwrap();
-    let first = &s.chunks[0];
-    // Keep index intact but chop the first payload mid-span → parse or decode fails.
-    let cut = first.payload_offset + first.stored_byte_len / 2;
-    index_patch::truncate_file(path, cut.max(first.payload_offset + 1));
+    let cut = {
+        let mmap = mmap_file_read(path).unwrap();
+        let s = read_tet_summary_v1(&mmap).unwrap();
+        let first = &s.chunks[0];
+        // Keep index intact but chop the first payload mid-span → parse or decode fails.
+        let start = first.payload_offset;
+        (start + first.stored_byte_len / 2).max(start + 1)
+    };
+    index_patch::truncate_file(path, cut);
 }
 
 fn build_truncated_tidx(path: &Path) {
     write_base_raw(path);
-    let mmap = mmap_file_read(path).unwrap();
-    let s = read_tet_summary_v1(&mmap).unwrap();
-    let idx = s.superblock.chunk_index_offset;
+    let idx = {
+        let mmap = mmap_file_read(path).unwrap();
+        let s = read_tet_summary_v1(&mmap).unwrap();
+        s.superblock.chunk_index_offset
+    };
     // Truncate inside the index region (after header, mid entry).
     index_patch::truncate_file(path, idx + 40);
 }
 
 fn build_zstd_garbage_payload(path: &Path) {
     write_multichunk_2x3_zero_zstd(path, "a");
-    let mmap = mmap_file_read(path).unwrap();
-    let s = read_tet_summary_v1(&mmap).unwrap();
-    assert!(
-        s.chunks
-            .iter()
-            .any(|c| CHUNK_PAYLOAD_CODEC_V1.is_zstd(c.codec)),
-        "expected zstd chunks"
-    );
-    let ch = &s.chunks[0];
-    let off = usize::try_from(ch.payload_offset).unwrap();
-    let n = usize::try_from(ch.stored_byte_len.min(8)).unwrap().max(1);
+    let (off, n) = {
+        let mmap = mmap_file_read(path).unwrap();
+        let s = read_tet_summary_v1(&mmap).unwrap();
+        assert!(
+            s.chunks
+                .iter()
+                .any(|c| CHUNK_PAYLOAD_CODEC_V1.is_zstd(c.codec)),
+            "expected zstd chunks"
+        );
+        let ch = &s.chunks[0];
+        let off = usize::try_from(ch.payload_offset).unwrap();
+        let n = usize::try_from(ch.stored_byte_len.min(8)).unwrap().max(1);
+        (off, n)
+    };
     index_patch::patch_bytes_at(path, off, &vec![0xA5u8; n]);
 }
 
 fn build_inflated_stored_past_eof(path: &Path) {
     write_base_raw(path);
-    let mmap = mmap_file_read(path).unwrap();
-    let s = read_tet_summary_v1(&mmap).unwrap();
-    let file_len = mmap.len() as u64;
-    let ch = &s.chunks[0];
-    // Keep offset valid but inflate stored so span crosses EOF.
-    // Keep raw == stored so codec=0 does not fail earlier on RawStoredMismatch.
-    let bad_stored = file_len
-        .saturating_sub(ch.payload_offset)
-        .saturating_add(64);
-    drop(mmap);
+    let bad_stored = {
+        let mmap = mmap_file_read(path).unwrap();
+        let s = read_tet_summary_v1(&mmap).unwrap();
+        let file_len = mmap.len() as u64;
+        let ch = &s.chunks[0];
+        // Keep offset valid but inflate stored so span crosses EOF.
+        // Keep raw == stored so codec=0 does not fail earlier on RawStoredMismatch.
+        file_len
+            .saturating_sub(ch.payload_offset)
+            .saturating_add(64)
+    };
     index_patch::patch_first_index_entry_raw_and_stored(path, bad_stored, bad_stored);
 }
 
@@ -151,7 +162,6 @@ const CASES: &[RejectCase] = &[
     },
 ];
 
-/// Legacy THI-376 crash seeds (already checked in; assert they still reject).
 /// Legacy THI-376 crash seeds — only assert `!ok` (finding codes vary by seed).
 const LEGACY_REJECT: &[&str] = &[
     "overflow_tile_extent.tet",
