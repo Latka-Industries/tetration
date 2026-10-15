@@ -211,7 +211,7 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 
 - [x] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19) / THI-16) — `estimate_query_selection_bytes` + budget check on `materialize_query_selection`
 - [x] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20) / THI-15) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
-- [ ] **Sidecar / writer unification** — route transform `write: sidecar` through `TetWriterSession` ([`transform/sidecar.rs`](src/query/transform/sidecar.rs))
+- [x] **Sidecar / writer unification** (THI-61) — transform `write: sidecar` drafts via `TetWriterSession`, then publishes
 - [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))
 
 ### Docs & sites

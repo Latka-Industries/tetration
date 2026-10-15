@@ -462,6 +462,11 @@ impl TetWriterSession {
         self.history.push(HistoryEvent::new(op, source));
     }
 
+    /// Append a full history row (parents / params) flushed on commit.
+    pub fn push_history(&mut self, event: HistoryEvent) {
+        self.history.push(event);
+    }
+
     fn has_streaming(&self) -> bool {
         self.datasets.iter().any(SessionDataset::is_streaming)
     }
