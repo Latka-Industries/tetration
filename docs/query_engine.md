@@ -234,10 +234,13 @@ For [**tet-py**](https://github.com/Latka-Industries/tet-py) and other hosts tha
 | API                                                                    | Query shape                         | Returns                                                                                    |
 | ---------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
 | [`plan_read_for_document`](../src/query/engine/run.rs)                 | Any valid document                  | `PlannedRead` (`read_plan` + wire `dtype`) — planning only, no decode                      |
+| [`estimate_query_selection_bytes`](../src/query/embed_materialize.rs)  | Selection-only (no `operation` key) | `u64` logical dense size (`elem_size × count`) — planning only                             |
 | [`materialize_query_selection`](../src/query/embed_materialize.rs)     | Selection-only (no `operation` key) | [`DenseMaterializeOutcome`](../src/query/embed_materialize.rs) — all supported wire dtypes |
 | [`materialize_query_transform_ram`](../src/query/embed_materialize.rs) | `transform` + **`write: ram`**      | Transformed dense buffer (`f32` / `f64` only)                                              |
 
 `DenseMaterializeOutcome` carries `dtype`, `logical_selection_shape`, and a [`DenseBuffer`](../src/query/embed_materialize.rs) enum (`F32`, `F64`, `I32`, …). These paths bypass the JSON preview cap; they still require a buffer sized to the logical selection (same RAM contract as `transform_ram`).
+
+**Budget preflight:** [`materialize_query_selection`](../src/query/embed_materialize.rs) resolves [`ExecutionBudget`](../src/query/engine/budget.rs) the same way as transform `write: ram` / CLI (query `execution.memory_budget_*` → TIDX header → percent of host RAM). If the logical selection exceeds the budget it returns [`TetError::Validation`](../src/query/types/error.rs) **before** decode (tet-py `read_numpy` inherits this). Use [`estimate_query_selection_bytes`](../src/query/embed_materialize.rs) when you only need the size.
 
 **Transform sidecar** (`write.target: sidecar`) is **not** exposed through `materialize_query_transform_ram` — use `execute_query_json` / `tet query -x` so the engine can draft a `.tet` in platform cache and [`publish_file`](../src/utils/fs_device.rs) beside the source. Requires a source `.tet` path (`-t` / `tet_path`) and an allowlisted destination (default: beside the source file). Sidecar pass-2 currently materializes the full transformed selection in RAM before writing the one-chunk `.tet` (no streaming sidecar yet).
 

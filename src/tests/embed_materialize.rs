@@ -3,8 +3,9 @@
 use super::fixture::write_multichunk_2x3_tiles;
 use crate::layout::mmap_file_read;
 use crate::query::{
-    DenseBuffer, materialize_query_selection, materialize_query_transform_ram, parse_query_json,
-    plan_query_with_tet_mmap, plan_read_for_document, validate_query,
+    DenseBuffer, estimate_query_selection_bytes, materialize_query_selection,
+    materialize_query_transform_ram, parse_query_json, plan_query_with_tet_mmap,
+    plan_read_for_document, validate_query,
 };
 
 fn pop_std_1_to_6() -> f64 {
@@ -70,6 +71,49 @@ fn materialize_query_selection_rejects_operation() {
     let mmap = mmap_file_read(&path).unwrap();
     let err = materialize_query_selection(&doc, &mmap).unwrap_err();
     assert!(err.to_string().contains("selection-only"), "{err}");
+}
+
+#[test]
+fn estimate_query_selection_bytes_full_f32() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("est.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let doc = parse_query_json(r#"{"dataset":"a"}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    assert_eq!(estimate_query_selection_bytes(&doc, &mmap).unwrap(), 24);
+}
+
+#[test]
+fn materialize_query_selection_rejects_over_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("budget.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    // 6 f32 = 24 bytes; budget of 8 must fail before decode.
+    let doc = parse_query_json(r#"{"dataset":"a","execution":{"memory_budget_bytes":8}}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let err = materialize_query_selection(&doc, &mmap).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("exceeds memory_budget_bytes"), "{msg}");
+    assert!(msg.contains("24"), "{msg}");
+    assert!(msg.contains('8'), "{msg}");
+}
+
+#[test]
+fn materialize_query_selection_honors_raised_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("okbudget.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let doc =
+        parse_query_json(r#"{"dataset":"a","execution":{"memory_budget_bytes":24}}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let out = materialize_query_selection(&doc, &mmap).unwrap();
+    match out.buffer {
+        DenseBuffer::F32(vals) => assert_eq!(vals.len(), 6),
+        other => panic!("expected f32 buffer, got {other:?}"),
+    }
 }
 
 #[test]

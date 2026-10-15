@@ -43,8 +43,8 @@ pub use document::{
 };
 pub use document_toml::parse_query_toml;
 pub use embed_materialize::{
-    DenseBuffer, DenseMaterializeOutcome, materialize_query_selection,
-    materialize_query_transform_ram,
+    DenseBuffer, DenseMaterializeOutcome, estimate_query_selection_bytes,
+    materialize_query_selection, materialize_query_transform_ram,
 };
 #[doc(hidden)]
 pub use engine::TempSpillFile;
