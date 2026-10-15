@@ -304,6 +304,82 @@ where
     Ok((entries, payloads))
 }
 
+/// Merge one or more sealed layout-v1 `.tet` files into `dest` (byte-copy chunks, remapped ids).
+///
+/// Dataset names must be unique across `sources`. Footers are not preserved (0.2 publish packs a
+/// fresh catalog). A single source is copied with [`std::fs::copy`].
+///
+/// # Errors
+///
+/// Empty `sources`, duplicate dataset names, invalid inputs, or I/O failures.
+pub fn merge_tet_files(dest: &Path, sources: &[&Path]) -> Result<(), CatalogError> {
+    if sources.is_empty() {
+        return Err(CatalogError::InvalidWriteSpec(
+            "merge_tet_files requires at least one source",
+        ));
+    }
+    if sources.len() == 1 {
+        std::fs::copy(sources[0], dest)?;
+        return Ok(());
+    }
+
+    let mut all_datasets: Vec<DatasetRecordV1> = Vec::new();
+    let mut entries: Vec<ChunkIndexEntryV1> = Vec::new();
+    let mut payloads: Vec<Vec<u8>> = Vec::new();
+    let mut seen_names: HashSet<String> = HashSet::new();
+    let mut file_execution = FileExecutionSettingsV1::default_engine();
+    let mut cursor = 0u64;
+
+    for (source_i, source) in sources.iter().enumerate() {
+        let data = std::fs::read(source)?;
+        let summary = read_tet_summary_v1(&data)?;
+        if source_i == 0 {
+            file_execution = summary.file_execution;
+        }
+        let base_id =
+            u64::try_from(all_datasets.len()).map_err(|_| CatalogError::TooLargeForPlatform {
+                field: "dataset_count",
+                value: u64::MAX,
+            })?;
+        for ds in &summary.datasets {
+            if !seen_names.insert(ds.name.clone()) {
+                return Err(CatalogError::InvalidWriteSpec(
+                    "duplicate dataset name across merge sources",
+                ));
+            }
+            all_datasets.push(ds.clone());
+        }
+        for entry in &summary.chunks {
+            let stored = copy_stored_payload(&data, entry)?;
+            let dataset_id =
+                entry
+                    .dataset_id
+                    .checked_add(base_id)
+                    .ok_or(CatalogError::InvalidWriteSpec(
+                        "dataset_id overflow while merging",
+                    ))?;
+            cursor = super::file_layout::EncodedChunkPush {
+                dataset_id,
+                chunk_index: entry.chunk_index,
+                raw_byte_len: entry.raw_byte_len,
+                chunk_codec: entry.codec,
+                stored,
+            }
+            .push(&mut entries, &mut payloads, cursor)?;
+        }
+    }
+
+    rewrite_file(
+        dest,
+        &all_datasets,
+        &[],
+        &[],
+        entries,
+        &payloads,
+        file_execution,
+    )
+}
+
 fn rewrite_file(
     path: &Path,
     existing_datasets: &[DatasetRecordV1],

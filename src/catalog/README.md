@@ -14,6 +14,7 @@ Spec: [`docs/layout_v1.md`](../../docs/layout_v1.md).
 | `TetFile`             | Open for mmap; `summary()`, path, backing mmap                   |
 | `TetPackage`          | `.tet.d` skeleton: create/open, `CURRENT`, publish lock, seal `packed.tet` ([writer protocol v2](../../docs/writer_protocol_v2.md)) |
 | `TetShardWriter`      | Staging shard: `part-*.tet` + `PART_META.json` (no `CURRENT` flip) — multi-writer ingest |
+| `publish_parts`       | Committer: frozen part ids → merge `packed.tet` → seal generation / flip `CURRENT` |
 | `read_tet_summary_v1` | Parse catalog from bytes (no extra health checks)                |
 | `TetFileSummaryV1`    | Superblock + datasets + chunks + history + metadata              |
 
