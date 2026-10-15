@@ -83,6 +83,7 @@ cudarc = { version = "0.19.7", optional = true, default-features = false, featur
   "fallback-dynamic-loading",
   "cuda-12080",
 ] }
+sha2 = "0.10"
 
 [dev-dependencies]
 anyhow = "1.0.102"

@@ -15,6 +15,7 @@ mod index;
 pub mod metadata;
 pub mod package;
 pub mod session;
+pub mod shard;
 mod stream_write;
 pub mod tile;
 mod write;
@@ -51,6 +52,10 @@ pub use package::{
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
+};
+pub use shard::{
+    DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, list_sealed_parts,
+    open_sealed_part, read_part_meta, verify_part_meta,
 };
 pub use stream_write::{
     ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,

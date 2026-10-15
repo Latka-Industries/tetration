@@ -208,9 +208,9 @@ Fuzz / torn generations: [THI-466](https://linear.app/thicclatka/issue/THI-466).
 
 ## Implementation order
 
-1. This RFC (THI-462) — **locked A–L**
-2. Package skeleton + `PROTOCOL` / `CURRENT` roles — THI-468 (with or just before shard API)
-3. Shard writer API — THI-463
+1. This RFC (THI-462) — **locked A–L** ✅
+2. Package skeleton + `PROTOCOL` / `CURRENT` roles — THI-468 (partial: `TetPackage`) ✅
+3. Shard writer API — THI-463 (`TetShardWriter` / `PartMeta` in `src/catalog/shard.rs`)
 4. Compact-inside-publish + atomic publish — THI-464
 5. Verify / repair / fuzz — THI-466
 6. CLI ingest / publish / pack — THI-467

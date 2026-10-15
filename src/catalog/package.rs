@@ -399,11 +399,12 @@ pub fn format_generation_id(generation: u64) -> String {
     format!("{generation:08}")
 }
 
+pub(crate) fn is_safe_path_segment(id: &str) -> bool {
+    !id.is_empty() && !id.contains('/') && !id.contains('\\') && !id.contains("..")
+}
+
 fn is_safe_session_id(session_id: &str) -> bool {
-    !session_id.is_empty()
-        && !session_id.contains('/')
-        && !session_id.contains('\\')
-        && !session_id.contains("..")
+    is_safe_path_segment(session_id)
 }
 
 fn parse_current(text: &str) -> Result<u64, CatalogError> {
@@ -426,12 +427,12 @@ fn parse_current(text: &str) -> Result<u64, CatalogError> {
         .map_err(|_| CatalogError::InvalidCurrent)
 }
 
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CatalogError> {
+pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CatalogError> {
     let raw = fs::read_to_string(path)?;
     serde_json::from_str(&raw).map_err(|e| CatalogError::InvalidPackageProtocol(e.to_string()))
 }
 
-fn write_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), CatalogError> {
+pub(crate) fn write_json_atomic(path: &Path, value: &impl Serialize) -> Result<(), CatalogError> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let tmp = parent.join(format!(
         ".{}.tmp",
