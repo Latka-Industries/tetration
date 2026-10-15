@@ -3,7 +3,7 @@
 //! Primary public surface for query/embedder use; see also [`crate::prelude`].
 
 mod cli;
-mod decode;
+pub(crate) mod decode;
 mod device;
 mod dispatch;
 mod document;
