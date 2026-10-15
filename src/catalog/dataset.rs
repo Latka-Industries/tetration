@@ -2,6 +2,8 @@
 
 use serde::Serialize;
 
+use argus::{LeReader, LeWriter};
+
 use crate::utils::wire;
 
 use super::execution::FileExecutionSettingsV1;
@@ -156,19 +158,24 @@ pub(super) fn encode_dataset_blob(
         field: "tensor_rank",
         value: u64::try_from(ndim).unwrap_or(u64::MAX),
     })?;
-    let mut out = Vec::new();
-    out.extend_from_slice(&name_len.to_le_bytes());
-    out.extend_from_slice(&dtype.to_le_bytes());
-    out.extend_from_slice(&ndim_u32.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes());
-    out.extend_from_slice(name_bytes);
-    let pad = wire::padding_to_align8(out.len());
-    out.extend(std::iter::repeat_n(0u8, pad));
-    for &s in shape {
-        out.extend_from_slice(&s.to_le_bytes());
-    }
-    for &s in chunk_shape {
-        out.extend_from_slice(&s.to_le_bytes());
+    let pad = wire::padding_to_align8(16 + name_bytes.len());
+    let total = 16 + name_bytes.len() + pad + ndim * 16;
+    let mut out = vec![0u8; total];
+    {
+        let mut w = LeWriter::new(&mut out);
+        w.put_u32(name_len);
+        w.put_u32(dtype);
+        w.put_u32(ndim_u32);
+        w.put_u32(0);
+        w.put_bytes(name_bytes);
+        w.put_zeros(pad);
+        for &s in shape {
+            w.put_u64(s);
+        }
+        for &s in chunk_shape {
+            w.put_u64(s);
+        }
+        debug_assert_eq!(w.position(), total);
     }
     Ok(out)
 }
@@ -184,51 +191,55 @@ pub(super) fn parse_one_dataset_record(
             got: blob_end,
         });
     }
-    let mut o = start;
-    let name_len = wire::take_u32_le(data, &mut o) as usize;
-    let dtype = wire::take_u32_le(data, &mut o);
-    let ndim = wire::take_u32_le(data, &mut o) as usize;
-    let _res = wire::take_u32_le(data, &mut o);
+    let region = &data[start..blob_end];
+    let mut r = LeReader::new(region);
+    let name_len = r.take_u32() as usize;
+    let dtype = r.take_u32();
+    let ndim = r.take_u32() as usize;
+    r.skip(4);
     if ndim == 0 || ndim > MAX_NDIM {
         return Err(CatalogError::BadNdim { ndim });
     }
-    let name_start = o;
+    let name_start = r.position();
     let name_end = name_start
         .checked_add(name_len)
         .ok_or(CatalogError::TooShort {
             need: usize::MAX,
             got: blob_end,
         })?;
-    if name_end > blob_end {
+    if name_end > region.len() {
         return Err(CatalogError::TooShort {
-            need: name_end,
+            need: start + name_end,
             got: blob_end,
         });
     }
-    let name_bytes = &data[name_start..name_end];
+    let name_bytes = &region[name_start..name_end];
     let name = std::str::from_utf8(name_bytes)
         .map_err(|_| CatalogError::BadDatasetName)?
         .to_owned();
-    o = name_end;
-    let pad = wire::padding_to_align8(name_end - start);
-    o += pad;
-    let shapes_need = o.checked_add(ndim * 16).ok_or(CatalogError::TooShort {
-        need: usize::MAX,
-        got: blob_end,
-    })?;
-    if shapes_need > blob_end {
+    r.skip(name_len);
+    let pad = wire::padding_to_align8(name_end);
+    r.skip(pad);
+    let shapes_need = r
+        .position()
+        .checked_add(ndim * 16)
+        .ok_or(CatalogError::TooShort {
+            need: usize::MAX,
+            got: blob_end,
+        })?;
+    if shapes_need > region.len() {
         return Err(CatalogError::TooShort {
-            need: shapes_need,
+            need: start + shapes_need,
             got: blob_end,
         });
     }
     let mut shape = Vec::with_capacity(ndim);
     for _ in 0..ndim {
-        shape.push(wire::take_u64_le(data, &mut o));
+        shape.push(r.take_u64());
     }
     let mut chunk_shape = Vec::with_capacity(ndim);
     for _ in 0..ndim {
-        chunk_shape.push(wire::take_u64_le(data, &mut o));
+        chunk_shape.push(r.take_u64());
     }
     Ok((
         DatasetRecordV1 {
@@ -237,6 +248,6 @@ pub(super) fn parse_one_dataset_record(
             shape,
             chunk_shape,
         },
-        o,
+        start + r.position(),
     ))
 }

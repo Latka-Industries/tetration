@@ -6,11 +6,10 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 
+use argus::{LeReader, LeWriter};
 use memmap2::{Mmap, MmapOptions};
 use serde::Serialize;
 use thiserror::Error;
-
-use crate::utils::wire;
 
 /// File magic: ASCII `TETR`.
 pub const MAGIC: &[u8; 4] = b"TETR";
@@ -52,35 +51,34 @@ impl SuperblockV1 {
     #[must_use]
     pub fn to_bytes(&self) -> [u8; SUPERBLOCK_V1_LEN] {
         let mut buf = [0u8; SUPERBLOCK_V1_LEN];
-        let mut o = 0usize;
-        buf[o..o + 4].copy_from_slice(MAGIC);
-        o += 4;
-        wire::put_u32_le(&mut buf, &mut o, self.layout_version);
-        wire::put_u32_le(&mut buf, &mut o, self.dataset_count);
-        wire::put_u32_le(&mut buf, &mut o, self.flags);
-        wire::put_u64_le(&mut buf, &mut o, self.chunk_index_offset);
-        wire::put_u64_le(&mut buf, &mut o, self.chunk_index_length);
-        debug_assert_eq!(o, SUPERBLOCK_V1_LEN);
+        let mut w = LeWriter::new(&mut buf);
+        w.put_bytes(MAGIC);
+        w.put_u32(self.layout_version);
+        w.put_u32(self.dataset_count);
+        w.put_u32(self.flags);
+        w.put_u64(self.chunk_index_offset);
+        w.put_u64(self.chunk_index_length);
+        debug_assert_eq!(w.position(), SUPERBLOCK_V1_LEN);
         buf
     }
 
     /// Parse a validated 32-byte superblock (caller must check magic/version separately if needed).
     pub(crate) fn from_bytes(data: &[u8; SUPERBLOCK_V1_LEN]) -> Result<Self, LayoutError> {
-        let mut m = [0u8; 4];
-        m.copy_from_slice(&data[0..4]);
+        let mut r = LeReader::new(data.as_slice());
+        let m = r.take_4();
         if &m != MAGIC {
             return Err(LayoutError::BadMagic(m));
         }
-        let layout_version = wire::u32_le_at(data, 4);
+        let layout_version = r.take_u32();
         if layout_version != LAYOUT_VERSION_V1 {
             return Err(LayoutError::UnsupportedVersion(layout_version));
         }
         Ok(Self {
             layout_version,
-            dataset_count: wire::u32_le_at(data, 8),
-            flags: wire::u32_le_at(data, 12),
-            chunk_index_offset: wire::u64_le_at(data, 16),
-            chunk_index_length: wire::u64_le_at(data, 24),
+            dataset_count: r.take_u32(),
+            flags: r.take_u32(),
+            chunk_index_offset: r.take_u64(),
+            chunk_index_length: r.take_u64(),
         })
     }
 }
@@ -111,31 +109,26 @@ pub enum LayoutError {
 /// Returns [`LayoutError`] when the buffer is too short, magic or version is wrong, or the
 /// chunk index region described by the superblock does not fit within `data`.
 pub fn read_superblock_v1(data: &[u8]) -> Result<SuperblockV1, LayoutError> {
-    if data.len() < SUPERBLOCK_V1_LEN {
-        return Err(LayoutError::TooShort {
-            need: SUPERBLOCK_V1_LEN,
-            got: data.len(),
-        });
-    }
-    let mut m = [0u8; 4];
-    m.copy_from_slice(&data[0..4]);
+    let mut r = LeReader::require(data, "superblock", SUPERBLOCK_V1_LEN).map_err(|e| {
+        LayoutError::TooShort {
+            need: e.need,
+            got: e.got,
+        }
+    })?;
+    let m = r.take_4();
     if &m != MAGIC {
         return Err(LayoutError::BadMagic(m));
     }
-    let layout_version = wire::u32_le_at(data, 4);
+    let layout_version = r.take_u32();
     if layout_version != LAYOUT_VERSION_V1 {
         return Err(LayoutError::UnsupportedVersion(layout_version));
     }
-    let dataset_count = wire::u32_le_at(data, 8);
-    let flags = wire::u32_le_at(data, 12);
-    let chunk_index_offset = wire::u64_le_at(data, 16);
-    let chunk_index_length = wire::u64_le_at(data, 24);
     let sb = SuperblockV1 {
         layout_version,
-        dataset_count,
-        flags,
-        chunk_index_offset,
-        chunk_index_length,
+        dataset_count: r.take_u32(),
+        flags: r.take_u32(),
+        chunk_index_offset: r.take_u64(),
+        chunk_index_length: r.take_u64(),
     };
     let file_len = data.len() as u64;
     validate_index_bounds(file_len, sb.chunk_index_offset, sb.chunk_index_length)?;

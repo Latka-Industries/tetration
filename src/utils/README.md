@@ -7,7 +7,7 @@ Internal utilities used across `layout`, `catalog`, `query`, and `convert`. Only
 | Module           | Visibility    | Role                                                                             |
 | ---------------- | ------------- | -------------------------------------------------------------------------------- |
 | `dtype.rs`       | **pub**       | `ElementDtype` — wire tag ↔ Rust type, elem sizes, tensor byte math              |
-| `wire.rs`        | crate-private | Little-endian `u32`/`u64` read/write, align8                                     |
+| `wire.rs`        | crate-private | Re-exports [`argus`](https://docs.rs/argus-chunk) align8 / span checks; LE I/O via `LeReader`/`LeWriter` at call sites |
 | `le_pod.rs`      | mixed         | `f32_le`, `f64_le`, … — decode POD slices from chunk bytes                       |
 | `fs_device.rs`   | **pub**       | Volume identity + `publish_file` (rename vs cross-volume copy for spill/sidecar) |
 | `host_memory.rs` | **pub**       | Host RAM capacity probes for materialize budget                                  |

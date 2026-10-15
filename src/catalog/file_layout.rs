@@ -7,6 +7,8 @@
 use std::fs::File;
 use std::io::Write;
 
+use argus::LeWriter;
+
 use crate::layout::{LAYOUT_VERSION_V1, SuperblockV1};
 use crate::utils::wire;
 
@@ -145,7 +147,9 @@ pub(crate) fn write_file_preamble(
     index_bytes: &[u8],
 ) -> Result<(), CatalogError> {
     f.write_all(&sb.to_bytes())?;
-    f.write_all(&(blob.len() as u64).to_le_bytes())?;
+    let mut blob_len = [0u8; 8];
+    LeWriter::new(&mut blob_len).put_u64(blob.len() as u64);
+    f.write_all(&blob_len)?;
     f.write_all(blob)?;
     let after_blob = 40usize + blob.len();
     let pad = usize_from_u64("chunk_index_base", index_base)?.saturating_sub(after_blob);

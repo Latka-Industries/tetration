@@ -1,8 +1,7 @@
 //! Per-file execution settings stored in the chunk index header (layout v1).
 
+use argus::{LeReader, LeWriter};
 use serde::Serialize;
-
-use crate::utils::wire;
 
 /// Default share of host RAM used when no fixed byte budget is set (25.00% = 2500 bps).
 pub const DEFAULT_MEMORY_BUDGET_PERCENT_BPS: u16 = 2500;
@@ -33,21 +32,25 @@ impl FileExecutionSettingsV1 {
     #[must_use]
     pub fn from_index_header_tail(tail: &[u8]) -> Self {
         debug_assert!(tail.len() >= Self::WIRE_LEN);
+        let mut r = LeReader::new(&tail[..Self::WIRE_LEN]);
+        let memory_budget_percent_bps = r.take_u16();
+        r.skip(2);
+        let memory_budget_bytes = r.take_u32();
         Self {
-            memory_budget_percent_bps: wire::u16_le_at(tail, 0),
-            memory_budget_bytes: wire::u32_le_at(tail, 4),
+            memory_budget_percent_bps,
+            memory_budget_bytes,
         }
     }
 
     /// Write into the 16-byte reserved tail (bytes 16–31 of the chunk index header).
     pub fn write_index_header_tail(&self, tail: &mut [u8]) {
         debug_assert!(tail.len() >= Self::WIRE_LEN);
-        let mut o = 0usize;
-        wire::put_u16_le(tail, &mut o, self.memory_budget_percent_bps);
-        wire::put_u16_le(tail, &mut o, 0);
-        wire::put_u32_le(tail, &mut o, self.memory_budget_bytes);
-        wire::put_u64_le(tail, &mut o, 0);
-        debug_assert_eq!(o, Self::WIRE_LEN);
+        let mut w = LeWriter::new(&mut tail[..Self::WIRE_LEN]);
+        w.put_u16(self.memory_budget_percent_bps);
+        w.put_u16(0);
+        w.put_u32(self.memory_budget_bytes);
+        w.put_u64(0);
+        debug_assert_eq!(w.position(), Self::WIRE_LEN);
     }
 
     /// Effective percent basis points: file override, else engine default.
