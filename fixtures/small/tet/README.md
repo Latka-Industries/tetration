@@ -13,6 +13,21 @@ Tracked binaries for **manual** CLI checks and `src/tests/small_tet_fixtures.rs`
 | `reject/overflow_tile_extent.tet` | Malformed chunk coords (libFuzzer); `tet verify` must fail without panic |
 | `reject/oom_dataset_count.tet` | Inflated superblock `dataset_count` (libFuzzer); must reject without OOM |
 | `reject/zero_chunk_shape.tet` | Zero `chunk_shape` entry (libFuzzer); must fail without `div_ceil` panic |
+| `reject/payload_offset_past_eof.tet` | TIDX `payload_offset` past EOF (THI-378) |
+| `reject/duplicate_payload_offset.tet` | Two index rows share `payload_offset` |
+| `reject/raw_stored_len_mismatch.tet` | Raw codec with `raw_byte_len != stored_byte_len` |
+| `reject/chunk_coord_out_of_grid.tet` | Chunk grid coord outside `ceil(shape/chunk)` |
+| `reject/truncated_payload.tet` | File truncated mid-payload |
+| `reject/truncated_tidx.tet` | File truncated mid-TIDX |
+| `reject/zstd_garbage_payload.tet` | Zstd frame bytes corrupted |
+| `reject/inflated_stored_past_eof.tet` | `stored_byte_len` span past EOF |
+
+Reject corpus tests: `src/tests/reject_corpus.rs`. Regenerate THI-378 cases:
+
+```bash
+UPDATE_REJECT_CORPUS=1 cargo test --lib regenerate_reject_corpus -- --ignored --nocapture
+mise fuzz-reseed
+```
 
 **Dataset names:** `sample.tet` → **`temperature`**; `multichunk_*.tet` → **`a`**.
 

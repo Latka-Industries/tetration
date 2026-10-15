@@ -19,16 +19,36 @@ pub mod index_patch {
     pub const ENTRY_STORED_BYTE_LEN_OFFSET: usize = ChunkIndexEntryV1::WIRE_STORED_BYTE_LEN_OFFSET;
     pub const ENTRY_PAYLOAD_OFFSET: usize = ChunkIndexEntryV1::WIRE_PAYLOAD_OFFSET;
     pub const ENTRY_CODEC_OFFSET: usize = ChunkIndexEntryV1::WIRE_CODEC_OFFSET;
+    /// Byte offset of `chunk_index[0]` within a wire entry (`dataset_id` is 8 bytes).
+    pub const ENTRY_CHUNK_INDEX0_OFFSET: usize = 8;
 
     pub fn first_index_field_offset(path: &Path, field_offset_in_entry: usize) -> usize {
+        entry_field_offset(path, 0, field_offset_in_entry)
+    }
+
+    /// Absolute file offset of a field inside chunk-index entry `entry_idx` (0-based).
+    pub fn entry_field_offset(
+        path: &Path,
+        entry_idx: usize,
+        field_offset_in_entry: usize,
+    ) -> usize {
         let mmap0 = mmap_file_read(path).unwrap();
         let s = read_tet_summary_v1(&mmap0).unwrap();
         let idx = usize::try_from(s.superblock.chunk_index_offset).unwrap();
-        idx + CHUNK_INDEX_HDR_LEN + field_offset_in_entry
+        idx + CHUNK_INDEX_HDR_LEN + entry_idx * ChunkIndexEntryV1::WIRE_LEN + field_offset_in_entry
     }
 
     pub fn patch_first_index_entry_u64(path: &Path, field_offset_in_entry: usize, value: u64) {
-        let patch_at = first_index_field_offset(path, field_offset_in_entry);
+        patch_entry_u64(path, 0, field_offset_in_entry, value);
+    }
+
+    pub fn patch_entry_u64(
+        path: &Path,
+        entry_idx: usize,
+        field_offset_in_entry: usize,
+        value: u64,
+    ) {
+        let patch_at = entry_field_offset(path, entry_idx, field_offset_in_entry);
         let mut bytes = std::fs::read(path).unwrap();
         assert!(
             patch_at + 8 <= bytes.len(),
@@ -49,6 +69,17 @@ pub mod index_patch {
         assert!(stored_at + 8 <= bytes.len(), "patch offset out of range");
         bytes[raw_at..raw_at + 8].copy_from_slice(&raw_byte_len.to_le_bytes());
         bytes[stored_at..stored_at + 8].copy_from_slice(&stored_byte_len.to_le_bytes());
+        std::fs::write(path, &bytes).unwrap();
+    }
+
+    /// Overwrite `len` bytes at absolute `file_off` (for corrupting stored payloads).
+    pub fn patch_bytes_at(path: &Path, file_off: usize, junk: &[u8]) {
+        let mut bytes = std::fs::read(path).unwrap();
+        assert!(
+            file_off + junk.len() <= bytes.len(),
+            "payload patch out of range"
+        );
+        bytes[file_off..file_off + junk.len()].copy_from_slice(junk);
         std::fs::write(path, &bytes).unwrap();
     }
 

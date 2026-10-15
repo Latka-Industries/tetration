@@ -42,3 +42,7 @@ mise fuzz
 ```
 
 See [`fuzz/README.md`](../../fuzz/README.md) (THI-376).
+
+## Reject corpus (THI-378)
+
+Checked-in malformed `.tet` files under [`fixtures/small/tet/reject/`](../../fixtures/small/tet/reject/) pin TIDX / payload failure classes. CI asserts each fails `verify_tet_bytes` with a stable finding `check` (`src/tests/reject_corpus.rs`). `mise fuzz-reseed` copies them into the fuzz corpora.
