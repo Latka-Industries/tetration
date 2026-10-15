@@ -44,6 +44,17 @@ use verify::{VerifyRunOpts, run_verify};
 
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
+        cmd @ (Commands::Info { .. }
+        | Commands::Query { .. }
+        | Commands::Qhist(_)
+        | Commands::Verify { .. }
+        | Commands::Repair { .. }) => run_read(cmd),
+        cmd => run_write(cmd),
+    }
+}
+
+fn run_read(cmd: Commands) -> Result<(), String> {
+    match cmd {
         Commands::Info {
             path,
             json,
@@ -82,23 +93,16 @@ fn run(cli: Cli) -> Result<(), String> {
             preview,
             spill_allow,
             device,
-        } => {
-            let stdout = resolve_stdout(quiet, format);
-            let (raw, path_hint) = read_query_payload(query.as_deref()).map_err(cli_error)?;
-            let trimmed = raw.trim();
-            let format = query_input_format(path_hint.as_deref(), trimmed);
-            let doc = parse_query_text(trimmed, format).map_err(cli_error)?;
-            run_query(QueryRunOpts {
-                doc,
-                tet,
-                execute,
-                stdout,
-                preview,
-                spill_allow,
-                device,
-                record_history: true,
-            })
-        }
+        } => run_query_cmd(QueryCli {
+            query,
+            tet,
+            execute,
+            format,
+            quiet,
+            preview,
+            spill_allow,
+            device,
+        }),
         Commands::Qhist(args) => run_qhist(args.cmd, args.clear),
         Commands::Verify {
             path,
@@ -106,16 +110,13 @@ fn run(cli: Cli) -> Result<(), String> {
             quiet,
             repair,
             deep,
-        } => {
-            let opts = VerifyRunOpts {
-                path,
-                json,
-                quiet,
-                repair,
-                deep,
-            };
-            run_verify(&opts)
-        }
+        } => run_verify(&VerifyRunOpts {
+            path,
+            json,
+            quiet,
+            repair,
+            deep,
+        }),
         Commands::Repair {
             path,
             json,
@@ -127,6 +128,46 @@ fn run(cli: Cli) -> Result<(), String> {
             dry_run,
             apply,
         }),
+        Commands::Export { .. }
+        | Commands::Convert { .. }
+        | Commands::Ingest { .. }
+        | Commands::Publish { .. }
+        | Commands::Compact { .. }
+        | Commands::Pack { .. } => unreachable!("read commands only"),
+    }
+}
+
+struct QueryCli {
+    query: Option<String>,
+    tet: Option<std::path::PathBuf>,
+    execute: bool,
+    format: args::QueryStdoutFormat,
+    quiet: bool,
+    preview: Option<usize>,
+    spill_allow: Vec<std::path::PathBuf>,
+    device: Option<String>,
+}
+
+fn run_query_cmd(q: QueryCli) -> Result<(), String> {
+    let stdout = resolve_stdout(q.quiet, q.format);
+    let (raw, path_hint) = read_query_payload(q.query.as_deref()).map_err(cli_error)?;
+    let trimmed = raw.trim();
+    let format = query_input_format(path_hint.as_deref(), trimmed);
+    let doc = parse_query_text(trimmed, format).map_err(cli_error)?;
+    run_query(QueryRunOpts {
+        doc,
+        tet: q.tet,
+        execute: q.execute,
+        stdout,
+        preview: q.preview,
+        spill_allow: q.spill_allow,
+        device: q.device,
+        record_history: true,
+    })
+}
+
+fn run_write(cmd: Commands) -> Result<(), String> {
+    match cmd {
         Commands::Export { input, output } => run_export(&input, &output),
         Commands::Convert {
             input,
@@ -179,6 +220,11 @@ fn run(cli: Cli) -> Result<(), String> {
             generation,
             quiet,
         }),
+        Commands::Info { .. }
+        | Commands::Query { .. }
+        | Commands::Qhist(_)
+        | Commands::Verify { .. }
+        | Commands::Repair { .. } => unreachable!("write commands only"),
     }
 }
 

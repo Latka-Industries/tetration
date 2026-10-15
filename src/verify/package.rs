@@ -1,12 +1,12 @@
 //! `.tet.d` package health checks (writer protocol v2 / THI-466).
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::catalog::package::sha256_file_hex;
 use crate::catalog::{
-    CatalogError, DEFAULT_PUBLISH_LOCK_STALE, PACKAGE_PROTOCOL_VERSION, TetPackage,
-    format_generation_id,
+    CatalogError, DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
+    TetPackage, format_generation_id,
 };
 
 use super::options::VerifyOptions;
@@ -172,59 +172,89 @@ fn finish_package(
     .finalize()
 }
 
+fn generation_label(is_current: bool, generation: u64) -> String {
+    if is_current {
+        "current_generation".to_owned()
+    } else {
+        format!("generation_{}", format_generation_id(generation))
+    }
+}
+
+fn packed_check(is_current: bool) -> &'static str {
+    if is_current {
+        "current_packed"
+    } else {
+        "generation_packed"
+    }
+}
+
+fn manifest_check(is_current: bool) -> &'static str {
+    if is_current {
+        "current_manifest"
+    } else {
+        "generation_manifest"
+    }
+}
+
 fn verify_sealed_generation(
     package: &TetPackage,
     generation: u64,
     opts: VerifyOptions,
     is_current: bool,
 ) -> Result<(Vec<VerifyFinding>, Option<VerifySummary>), Vec<VerifyFinding>> {
-    let mut findings = Vec::new();
-    let prefix = if is_current {
-        "current_generation".to_owned()
-    } else {
-        format!("generation_{}", format_generation_id(generation))
-    };
+    let prefix = generation_label(is_current, generation);
+    let (packed, findings) = require_packed(package, generation, is_current, Vec::new())?;
+    let (manifest, findings) = require_manifest(package, generation, is_current, findings)?;
+    let findings = check_manifest_ids(&manifest, generation, findings)?;
+    let findings = check_packed_len(&packed, &manifest, is_current, &prefix, findings)?;
+    let findings = check_packed_sha(&packed, &manifest, is_current, findings)?;
+    check_packed_layout(&packed, opts, &prefix, findings)
+}
 
+fn require_packed(
+    package: &TetPackage,
+    generation: u64,
+    is_current: bool,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<(PathBuf, Vec<VerifyFinding>), Vec<VerifyFinding>> {
     let packed = package.packed_tet_path(generation);
     if !packed.is_file() {
-        let msg = format!(
-            "generations/{}/packed.tet missing",
-            format_generation_id(generation)
-        );
         findings.push(err_finding(
-            if is_current {
-                "current_packed"
-            } else {
-                "generation_packed"
-            },
-            msg,
+            packed_check(is_current),
+            format!(
+                "generations/{}/packed.tet missing",
+                format_generation_id(generation)
+            ),
         ));
         return Err(findings);
     }
     findings.push(ok_finding(
-        if is_current {
-            "current_packed"
-        } else {
-            "generation_packed"
-        },
+        packed_check(is_current),
         Some(packed.display().to_string()),
     ));
+    Ok((packed, findings))
+}
 
-    let manifest = match package.read_manifest(generation) {
-        Ok(m) => m,
+fn require_manifest(
+    package: &TetPackage,
+    generation: u64,
+    is_current: bool,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<(GenerationManifest, Vec<VerifyFinding>), Vec<VerifyFinding>> {
+    match package.read_manifest(generation) {
+        Ok(m) => Ok((m, findings)),
         Err(e) => {
-            findings.push(err_finding(
-                if is_current {
-                    "current_manifest"
-                } else {
-                    "generation_manifest"
-                },
-                e.to_string(),
-            ));
-            return Err(findings);
+            findings.push(err_finding(manifest_check(is_current), e.to_string()));
+            Err(findings)
         }
-    };
+    }
+}
 
+fn check_manifest_ids(
+    manifest: &GenerationManifest,
+    generation: u64,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
     if manifest.generation != generation {
         findings.push(err_finding(
             "manifest_generation",
@@ -245,8 +275,17 @@ fn verify_sealed_generation(
         ));
         return Err(findings);
     }
+    Ok(findings)
+}
 
-    let packed_len = fs::metadata(&packed).map(|m| m.len()).unwrap_or(0);
+fn check_packed_len(
+    packed: &Path,
+    manifest: &GenerationManifest,
+    is_current: bool,
+    prefix: &str,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
+    let packed_len = fs::metadata(packed).map_or(0, |m| m.len());
     if packed_len != manifest.packed_byte_len {
         findings.push(err_finding(
             "manifest_byte_len",
@@ -258,14 +297,18 @@ fn verify_sealed_generation(
         return Err(findings);
     }
     findings.push(ok_finding(
-        if is_current {
-            "current_manifest"
-        } else {
-            "generation_manifest"
-        },
+        manifest_check(is_current),
         Some(format!("{prefix} byte_len ok")),
     ));
+    Ok(findings)
+}
 
+fn check_packed_sha(
+    packed: &Path,
+    manifest: &GenerationManifest,
+    is_current: bool,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
     match &manifest.packed_sha256 {
         None => {
             if is_current {
@@ -274,26 +317,35 @@ fn verify_sealed_generation(
                     "MANIFEST packed_sha256 absent (legacy seal)".to_owned(),
                 ));
             }
+            Ok(findings)
         }
-        Some(expected) => match sha256_file_hex(&packed) {
+        Some(expected) => match sha256_file_hex(packed) {
             Ok(actual) if actual == *expected => {
                 findings.push(ok_finding("manifest_sha256", Some("match".to_owned())));
+                Ok(findings)
             }
             Ok(actual) => {
                 findings.push(err_finding(
                     "manifest_sha256",
                     format!("packed.tet sha256 {actual} != MANIFEST {expected}"),
                 ));
-                return Err(findings);
+                Err(findings)
             }
             Err(e) => {
                 findings.push(err_finding("manifest_sha256", e.to_string()));
-                return Err(findings);
+                Err(findings)
             }
         },
     }
+}
 
-    match verify_tet_file_with_options(&packed, opts) {
+fn check_packed_layout(
+    packed: &Path,
+    opts: VerifyOptions,
+    prefix: &str,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<(Vec<VerifyFinding>, Option<VerifySummary>), Vec<VerifyFinding>> {
+    match verify_tet_file_with_options(packed, opts) {
         Ok(report) if report.ok => {
             findings.push(ok_finding(
                 "packed_layout",

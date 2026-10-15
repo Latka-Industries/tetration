@@ -24,132 +24,128 @@ pub fn recommendations_for_findings(findings: &[VerifyFinding]) -> Vec<VerifyRec
     out
 }
 
+fn rec(
+    code: &str,
+    message: impl Into<String>,
+    summary: impl Into<String>,
+    command: Option<&str>,
+) -> VerifyRecommendation {
+    VerifyRecommendation {
+        code: code.to_owned(),
+        message: message.into(),
+        fix: Some(VerifyFixHint {
+            summary: summary.into(),
+            command: command.map(str::to_owned),
+        }),
+    }
+}
+
 fn recommendation_for_finding(f: &VerifyFinding) -> Option<VerifyRecommendation> {
+    recommendation_for_file(f).or_else(|| recommendation_for_package(f))
+}
+
+fn footer_invalid() -> VerifyRecommendation {
+    rec(
+        "footer_invalid",
+        "History/metadata footer is present but malformed.",
+        "Strip the invalid footer (truncate after chunk payloads).",
+        None,
+    )
+}
+
+fn recommendation_for_file(f: &VerifyFinding) -> Option<VerifyRecommendation> {
     let detail = f.detail.as_deref().unwrap_or("");
+    let warn = f.severity == VerifySeverity::Warning;
     match f.check.as_str() {
-        "parse" if detail.contains("footer") => Some(VerifyRecommendation {
-            code: "footer_invalid".to_owned(),
-            message: "History/metadata footer is present but malformed.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Strip the invalid footer (truncate after chunk payloads).".to_owned(),
-                command: None,
-            }),
-        }),
-        "parse" | "superblock" | "dataset_directory" | "chunk_index" => Some(VerifyRecommendation {
-            code: "invalid_layout".to_owned(),
-            message: "File layout is invalid or truncated; it cannot be read reliably.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Re-create the `.tet` from the source array (convert or writer session)."
-                    .to_owned(),
-                command: Some("tet convert <source> <output.tet>".to_owned()),
-            }),
-        }),
-        "chunk_payloads" | "payload_bounds" => Some(VerifyRecommendation {
-            code: "payload_out_of_bounds".to_owned(),
-            message: "A chunk index entry points outside the file payload region.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Restore from backup or re-export; do not append to a truncated file."
-                    .to_owned(),
-                command: None,
-            }),
-        }),
-        "chunk_dataset_ids" => Some(VerifyRecommendation {
-            code: "bad_dataset_id".to_owned(),
-            message: "Chunk index references a non-existent dataset id.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Re-write the file; the catalog index is internally inconsistent.".to_owned(),
-                command: None,
-            }),
-        }),
-        "chunk_decode" => Some(VerifyRecommendation {
-            code: "chunk_decode_failed".to_owned(),
-            message: format!("Chunk payload could not be decoded: {detail}"),
-            fix: Some(VerifyFixHint {
-                summary: "Re-convert from the original HDF5/NetCDF/Zarr source.".to_owned(),
-                command: Some("tet convert <source> <output.tet>".to_owned()),
-            }),
-        }),
-        "footer" => Some(VerifyRecommendation {
-            code: "footer_invalid".to_owned(),
-            message: "History/metadata footer is present but malformed.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Strip the invalid footer (truncate after chunk payloads).".to_owned(),
-                command: None,
-            }),
-        }),
-        "dataset_count" => Some(VerifyRecommendation {
-            code: "dataset_count_mismatch".to_owned(),
-            message: "Superblock dataset count does not match the catalog blob.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Re-create the file; superblock and catalog disagree.".to_owned(),
-                command: None,
-            }),
-        }),
-        "payload_order" if f.severity == VerifySeverity::Warning => Some(VerifyRecommendation {
-            code: "non_contiguous_payloads".to_owned(),
-            message: "Chunk payloads are not stored in contiguous read-plan order.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Optional: re-convert for sequential layout; full-file linear scan may be slower."
-                    .to_owned(),
-                command: None,
-            }),
-        }),
-        "chunk_decode_skipped" if f.severity == VerifySeverity::Warning => Some(VerifyRecommendation {
-            code: "run_deep_verify".to_owned(),
-            message: "Not all chunks were decode-checked (large file).".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Re-run with `tet verify --deep` or VerifyOptions { deep_decode: true }."
-                    .to_owned(),
-                command: None,
-            }),
-        }),
-        "current_packed" | "current_manifest" | "manifest_generation" | "manifest_protocol"
-        | "manifest_byte_len" | "manifest_sha256" | "packed_layout" | "protocol" | "current" => {
-            Some(VerifyRecommendation {
-                code: "package_corrupt".to_owned(),
-                message: "Package PROTOCOL / CURRENT / generation manifest is inconsistent."
-                    .to_owned(),
-                fix: Some(VerifyFixHint {
-                    summary: "Republish from sealed staging parts, or restore generations/ from backup."
-                        .to_owned(),
-                    command: None,
-                }),
-            })
-        }
-        "publishing_stale" => Some(VerifyRecommendation {
-            code: "quarantine_publish".to_owned(),
-            message: "A stale publish lock is blocking retry for that generation.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Quarantine the stale publishing/<G>/ directory, then republish."
-                    .to_owned(),
-                command: None,
-            }),
-        }),
-        "publishing_incomplete" => Some(VerifyRecommendation {
-            code: "abort_or_finish_publish".to_owned(),
-            message: "An incomplete publish lock is present; CURRENT is unchanged.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Wait for the committer, abort_publish, or quarantine if stale."
-                    .to_owned(),
-                command: None,
-            }),
-        }),
-        "staging" if f.severity == VerifySeverity::Warning => Some(VerifyRecommendation {
-            code: "staging_gc_optional".to_owned(),
-            message: "Staging sessions remain after publish (allowed by protocol).".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Optional GC of sealed staging once CURRENT is healthy.".to_owned(),
-                command: None,
-            }),
-        }),
-        "chunk_coords" => Some(VerifyRecommendation {
-            code: "duplicate_chunk_coords".to_owned(),
-            message: "Packed image has duplicate dataset chunk coordinates.".to_owned(),
-            fix: Some(VerifyFixHint {
-                summary: "Republish without overlapping shard claims.".to_owned(),
-                command: None,
-            }),
-        }),
+        "parse" if detail.contains("footer") => Some(footer_invalid()),
+        "footer" => Some(footer_invalid()),
+        "parse" | "superblock" | "dataset_directory" | "chunk_index" => Some(rec(
+            "invalid_layout",
+            "File layout is invalid or truncated; it cannot be read reliably.",
+            "Re-create the `.tet` from the source array (convert or writer session).",
+            Some("tet convert <source> <output.tet>"),
+        )),
+        "chunk_payloads" | "payload_bounds" => Some(rec(
+            "payload_out_of_bounds",
+            "A chunk index entry points outside the file payload region.",
+            "Restore from backup or re-export; do not append to a truncated file.",
+            None,
+        )),
+        "chunk_dataset_ids" => Some(rec(
+            "bad_dataset_id",
+            "Chunk index references a non-existent dataset id.",
+            "Re-write the file; the catalog index is internally inconsistent.",
+            None,
+        )),
+        "chunk_decode" => Some(rec(
+            "chunk_decode_failed",
+            format!("Chunk payload could not be decoded: {detail}"),
+            "Re-convert from the original HDF5/NetCDF/Zarr source.",
+            Some("tet convert <source> <output.tet>"),
+        )),
+        "dataset_count" => Some(rec(
+            "dataset_count_mismatch",
+            "Superblock dataset count does not match the catalog blob.",
+            "Re-create the file; superblock and catalog disagree.",
+            None,
+        )),
+        "payload_order" if warn => Some(rec(
+            "non_contiguous_payloads",
+            "Chunk payloads are not stored in contiguous read-plan order.",
+            "Optional: re-convert for sequential layout; full-file linear scan may be slower.",
+            None,
+        )),
+        "chunk_decode_skipped" if warn => Some(rec(
+            "run_deep_verify",
+            "Not all chunks were decode-checked (large file).",
+            "Re-run with `tet verify --deep` or VerifyOptions { deep_decode: true }.",
+            None,
+        )),
+        "chunk_coords" => Some(rec(
+            "duplicate_chunk_coords",
+            "Packed image has duplicate dataset chunk coordinates.",
+            "Republish without overlapping shard claims.",
+            None,
+        )),
+        _ => None,
+    }
+}
+
+fn recommendation_for_package(f: &VerifyFinding) -> Option<VerifyRecommendation> {
+    let warn = f.severity == VerifySeverity::Warning;
+    match f.check.as_str() {
+        "current_packed"
+        | "current_manifest"
+        | "manifest_generation"
+        | "manifest_protocol"
+        | "manifest_byte_len"
+        | "manifest_sha256"
+        | "packed_layout"
+        | "protocol"
+        | "current" => Some(rec(
+            "package_corrupt",
+            "Package PROTOCOL / CURRENT / generation manifest is inconsistent.",
+            "Republish from sealed staging parts, or restore generations/ from backup.",
+            None,
+        )),
+        "publishing_stale" => Some(rec(
+            "quarantine_publish",
+            "A stale publish lock is blocking retry for that generation.",
+            "Quarantine the stale publishing/<G>/ directory, then republish.",
+            None,
+        )),
+        "publishing_incomplete" => Some(rec(
+            "abort_or_finish_publish",
+            "An incomplete publish lock is present; CURRENT is unchanged.",
+            "Wait for the committer, abort_publish, or quarantine if stale.",
+            None,
+        )),
+        "staging" if warn => Some(rec(
+            "staging_gc_optional",
+            "Staging sessions remain after publish (allowed by protocol).",
+            "Optional GC of sealed staging once CURRENT is healthy.",
+            None,
+        )),
         _ => None,
     }
 }

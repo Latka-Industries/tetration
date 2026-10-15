@@ -201,8 +201,7 @@ pub(crate) fn run_pack(opts: &PackOpts) -> Result<(), String> {
 fn resolve_jobs(jobs: usize) -> usize {
     if jobs == 0 {
         std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1)
+            .map_or(1, |n| n.get())
             .min(64)
     } else {
         jobs.clamp(1, 64)
