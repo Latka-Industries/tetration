@@ -36,15 +36,17 @@ Read-only by default. [`repair`](../repair/README.md) applies fixes for codes li
 
 ## Fuzzing
 
-LibFuzzer harness over `verify_tet_bytes` (untrusted bytes must not panic):
+LibFuzzer harness over `verify_tet_bytes` and `verify_tet_package` (untrusted inputs must not panic):
 
 ```bash
-mise fuzz
+mise fuzz            # file layout
+mise fuzz-package    # .tet.d package tree (THI-481)
 # or: cargo +nightly fuzz run verify_tet_bytes
+#     cargo +nightly fuzz run verify_tet_package
 ```
 
-See [`fuzz/README.md`](../../fuzz/README.md) (THI-376). Optional manual CI smoke (60s):
-[`.github/workflows/fuzz-smoke.yml`](../../.github/workflows/fuzz-smoke.yml) (THI-379).
+See [`fuzz/README.md`](../../fuzz/README.md) (THI-376 / THI-481). Optional manual CI smoke (60s):
+[`.github/workflows/fuzz-smoke.yml`](../../.github/workflows/fuzz-smoke.yml) (THI-379 / THI-481).
 
 ## Reject corpus (THI-378)
 

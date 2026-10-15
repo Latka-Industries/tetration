@@ -9,6 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+tempfile = "3"
 # No HDF5/NetCDF for the fuzz binary (native deps + slower builds).
 tetration = { path = "..", default-features = false }
 
@@ -22,6 +23,13 @@ bench = false
 [[bin]]
 name = "verify_tet_bytes_deep"
 path = "fuzz_targets/verify_tet_bytes_deep.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verify_tet_package"
+path = "fuzz_targets/verify_tet_package.rs"
 test = false
 doc = false
 bench = false

@@ -1,4 +1,4 @@
-# THI-379: short cargo-fuzz smoke so the harness does not rot.
+# THI-379 / THI-481: short cargo-fuzz smoke so the harness does not rot.
 # Manual only — not worth burning Actions minutes every night for this repo.
 # Not on the PR Test Suite / MSRV matrix.
 name: Fuzz smoke
@@ -37,6 +37,39 @@ jobs:
         # Builds the harness on first run; fails the job on ASan/panic in the window.
         run: |
           cargo +nightly fuzz run verify_tet_bytes -- \
+            -max_total_time=60 \
+            -timeout=10 \
+            -rss_limit_mb=2048
+
+  verify-tet-package:
+    name: verify_tet_package (60s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install nightly + rust-src
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            fuzz/target/
+          key: ${{ runner.os }}-fuzz-pkg-${{ hashFiles('**/Cargo.lock', 'fuzz/Cargo.lock') }}
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Short package fuzz smoke
+        run: |
+          cargo +nightly fuzz run verify_tet_package -- \
             -max_total_time=60 \
             -timeout=10 \
             -rss_limit_mb=2048
