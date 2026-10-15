@@ -355,6 +355,41 @@ impl TetPackage {
         self.open_generation(g)
     }
 
+    /// Next generation id after `CURRENT` (`1` when no generation is sealed yet).
+    ///
+    /// # Errors
+    ///
+    /// Invalid `CURRENT` pointer or I/O.
+    pub fn next_generation(&self) -> Result<u64, CatalogError> {
+        Ok(self.current()?.map_or(1, |g| g.saturating_add(1)))
+    }
+
+    /// Copy a sealed generation's `packed.tet` to a standalone `.tet` path (decision I — `tet pack`).
+    ///
+    /// Does not flip `CURRENT`. Destination must not already exist.
+    ///
+    /// # Errors
+    ///
+    /// Missing generation, destination exists, or I/O.
+    pub fn pack_generation(&self, generation: u64, dest: &Path) -> Result<(), CatalogError> {
+        let packed = self.packed_tet_path(generation);
+        if !packed.is_file() {
+            return Err(CatalogError::GenerationNotSealed(generation));
+        }
+        if dest.exists() {
+            return Err(CatalogError::PackagePathExists(dest.to_path_buf()));
+        }
+        if let Some(parent) = dest.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
+        }
+        let tmp = dest.with_extension("tet.pack.tmp");
+        fs::copy(&packed, &tmp)?;
+        fs_device::publish_file(&tmp, dest)?;
+        Ok(())
+    }
+
     /// Read `MANIFEST.json` for a sealed generation.
     ///
     /// # Errors

@@ -11,6 +11,8 @@ mod convert;
 mod export;
 #[path = "tet/info.rs"]
 mod info;
+#[path = "tet/package_ops.rs"]
+mod package_ops;
 #[path = "tet/qhist.rs"]
 mod qhist;
 #[path = "tet/query.rs"]
@@ -31,6 +33,9 @@ use args::{Cli, Commands};
 use convert::run_convert;
 use export::run_export;
 use info::{InfoRunOpts, run_info};
+use package_ops::{
+    IngestOpts, PackOpts, PublishOpts, run_compact, run_ingest, run_pack, run_publish,
+};
 use qhist::run_qhist;
 use query::{QueryRunOpts, run_query};
 use repair::{RepairRunOpts, run_repair};
@@ -128,6 +133,52 @@ fn run(cli: Cli) -> Result<(), String> {
             output,
             jobs,
         } => run_convert(&input, &output, jobs),
+        Commands::Ingest {
+            inputs,
+            out,
+            jobs,
+            create,
+            quiet,
+        } => run_ingest(&IngestOpts {
+            inputs,
+            out,
+            jobs,
+            create,
+            quiet,
+        }),
+        Commands::Publish {
+            package,
+            generation,
+            parts,
+            quiet,
+        } => run_publish(&PublishOpts {
+            package,
+            generation,
+            parts,
+            quiet,
+        }),
+        Commands::Compact {
+            package,
+            generation,
+            parts,
+            quiet,
+        } => run_compact(&PublishOpts {
+            package,
+            generation,
+            parts,
+            quiet,
+        }),
+        Commands::Pack {
+            package,
+            output,
+            generation,
+            quiet,
+        } => run_pack(&PackOpts {
+            package,
+            output,
+            generation,
+            quiet,
+        }),
     }
 }
 

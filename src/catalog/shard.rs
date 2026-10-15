@@ -371,9 +371,91 @@ pub fn resolve_part_ids(
     Ok(out)
 }
 
+/// Stage an existing layout-v1 `.tet` as a sealed package part (copy + `PART_META` last).
+///
+/// Builds full-grid [`DatasetClaim`]s from the source catalog. Does not update `CURRENT`.
+///
+/// # Errors
+///
+/// Invalid ids, empty catalog, staging collision, or I/O / hash failures.
+pub fn ingest_tet_file(
+    package: &TetPackage,
+    source: &Path,
+    session_id: impl Into<String>,
+    part_id: impl Into<String>,
+) -> Result<PartMeta, CatalogError> {
+    let session_id = session_id.into();
+    let part_id = part_id.into();
+    if !is_safe_path_segment(&session_id) {
+        return Err(CatalogError::Package("invalid staging session id"));
+    }
+    if !is_safe_path_segment(&part_id) {
+        return Err(CatalogError::Package("invalid part id"));
+    }
+    if !source.is_file() {
+        return Err(CatalogError::Package("ingest source .tet missing"));
+    }
+
+    let summary = {
+        let file = TetFile::open(source)?;
+        file.summary()?
+    };
+    if summary.datasets.is_empty() {
+        return Err(CatalogError::Package("ingest source has no datasets"));
+    }
+    let claims: Vec<DatasetClaim> = summary
+        .datasets
+        .iter()
+        .map(|d| DatasetClaim::full_grid(d.name.clone(), d.dtype, &d.shape, &d.chunk_shape))
+        .collect();
+
+    let session_dir = package.create_staging_session(&session_id)?;
+    let final_part_path = session_dir.join(format!("part-{part_id}.tet"));
+    // Copy into a temp name first, then rename (meta-last still applies after hash).
+    let temp_part_path = session_dir.join(format!(".{part_id}.tet.tmp"));
+    fs::copy(source, &temp_part_path)?;
+    fs_device::publish_file(&temp_part_path, &final_part_path)?;
+
+    let part_byte_len = fs::metadata(&final_part_path)?.len();
+    let part_sha256 = sha256_file_hex(&final_part_path)?;
+    let meta = PartMeta {
+        part_id,
+        writer_session_id: session_id,
+        protocol_version: PACKAGE_PROTOCOL_VERSION,
+        sealed: true,
+        part_byte_len,
+        part_sha256,
+        claims,
+    };
+    write_json_atomic(&session_dir.join(PART_META_FILE), &meta)?;
+    Ok(meta)
+}
+
+/// Suggest a filesystem-safe part id from a source path stem (falls back to `part`).
+#[must_use]
+pub fn part_id_from_path(path: &Path) -> String {
+    let raw = path.file_stem().and_then(|s| s.to_str()).unwrap_or("part");
+    let cleaned: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if cleaned.is_empty() || !is_safe_path_segment(&cleaned) {
+        "part".to_owned()
+    } else {
+        cleaned
+    }
+}
+
 /// Single committer: freeze `part_ids` → merge into `packed.tet` → seal generation `G`.
 ///
 /// Rejects overlapping claims. Does not GC staging. Crash before seal leaves `CURRENT` unchanged.
+/// Compact of parts happens inside this step (decision I).
 ///
 /// # Errors
 ///

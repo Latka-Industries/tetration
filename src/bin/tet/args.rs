@@ -18,10 +18,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Summarize a `.tet` file (default: dataset table; footer attrs under rows when present).
+    /// Summarize a `.tet` file or `.tet.d` package (default: dataset table).
     /// Use `--json` for full dump; `--metadata` for coordinate label previews.
     Info {
-        /// Path to `.tet` file.
+        /// Path to `.tet` file or `.tet.d` package (package uses CURRENT `packed.tet`).
         path: PathBuf,
         /// Full pretty JSON (superblock, catalog, chunks, history).
         #[arg(long)]
@@ -76,7 +76,7 @@ pub enum Commands {
         /// Query document: `.json` / `.toml` path, inline JSON/TOML, or `-` for stdin.
         #[arg(value_name = "QUERY")]
         query: Option<String>,
-        /// `.tet` file (catalog + optional execute).
+        /// `.tet` file or `.tet.d` package (catalog + optional execute; package uses CURRENT).
         #[arg(short = 't', long, value_name = "PATH")]
         tet: Option<PathBuf>,
         /// Decode planned chunks and attach `execution` (requires `-t`).
@@ -145,6 +145,63 @@ pub enum Commands {
         /// Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64).
         #[arg(long = "jobs", default_value_t = 0)]
         jobs: usize,
+    },
+    /// Ingest one or more `.tet` files into a `.tet.d` package as sealed staging parts.
+    Ingest {
+        /// Source `.tet` files (each becomes one staging part).
+        #[arg(required = true, num_args = 1..)]
+        inputs: Vec<PathBuf>,
+        /// Destination package directory (created if missing).
+        #[arg(long = "out", short = 'o', value_name = "PKG.tet.d")]
+        out: PathBuf,
+        /// Parallel ingest workers (`0` = host `available_parallelism`, capped at 64).
+        #[arg(long = "jobs", default_value_t = 0)]
+        jobs: usize,
+        /// Create the package even if the path already exists as a non-package (still fails).
+        #[arg(long)]
+        create: bool,
+        /// Suppress progress lines.
+        #[arg(short = 'q', long)]
+        quiet: bool,
+    },
+    /// Publish sealed staging parts into a new generation (`CURRENT` flip).
+    ///
+    /// Compact/merge of parts happens during this step (see also `tet compact`).
+    Publish {
+        /// Package directory (`.tet.d`).
+        package: PathBuf,
+        /// Generation id (default: CURRENT+1, or 1 when empty).
+        #[arg(long, value_name = "G")]
+        generation: Option<u64>,
+        /// Explicit part ids (comma-separated). Default: all sealed staging parts.
+        #[arg(long, value_delimiter = ',', value_name = "ID")]
+        parts: Option<Vec<String>>,
+        #[arg(short = 'q', long)]
+        quiet: bool,
+    },
+    /// Alias for `tet publish` — compact merges parts during publish (decision I).
+    Compact {
+        /// Package directory (`.tet.d`).
+        package: PathBuf,
+        #[arg(long, value_name = "G")]
+        generation: Option<u64>,
+        #[arg(long, value_delimiter = ',', value_name = "ID")]
+        parts: Option<Vec<String>>,
+        #[arg(short = 'q', long)]
+        quiet: bool,
+    },
+    /// Copy a sealed generation's `packed.tet` to a standalone `.tet`.
+    Pack {
+        /// Package directory (`.tet.d`).
+        package: PathBuf,
+        /// Destination `.tet` path.
+        #[arg(long = "out", short = 'o', value_name = "OUT.tet")]
+        output: PathBuf,
+        /// Generation to pack (default: CURRENT).
+        #[arg(long, value_name = "G")]
+        generation: Option<u64>,
+        #[arg(short = 'q', long)]
+        quiet: bool,
     },
     /// Recent `tet query` log (platform cache; not in `.tet` footer). Default: `list`.
     Qhist(QhistArgs),
