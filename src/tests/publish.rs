@@ -15,10 +15,8 @@ fn f32_le(vals: &[f32]) -> Vec<u8> {
 
 fn seal_named(pkg: &TetPackage, session: &str, part: &str, name: &str, vals: &[f32]) {
     let mut w = TetShardWriter::create(pkg, session, part).unwrap();
-    w.push_dataset(
-        TetDatasetWrite::f32_row_major(name, &[2], &[2], f32_le(vals)).unwrap(),
-    )
-    .unwrap();
+    w.push_dataset(TetDatasetWrite::f32_row_major(name, &[2], &[2], f32_le(vals)).unwrap())
+        .unwrap();
     w.seal().unwrap();
 }
 

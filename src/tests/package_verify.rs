@@ -22,7 +22,14 @@ fn f32_le(vals: &[f32]) -> Vec<u8> {
     vals.iter().flat_map(|v| v.to_le_bytes()).collect()
 }
 
-fn seal_dataset(pkg: &TetPackage, session: &str, part: &str, shape: &[u64], chunk: &[u64], data: Vec<u8>) {
+fn seal_dataset(
+    pkg: &TetPackage,
+    session: &str,
+    part: &str,
+    shape: &[u64],
+    chunk: &[u64],
+    data: Vec<u8>,
+) {
     let mut w = TetShardWriter::create(pkg, session, part).unwrap();
     w.push_dataset(TetDatasetWrite::f32_row_major("a", shape, chunk, data).unwrap())
         .unwrap();
@@ -34,7 +41,14 @@ fn seal_one(pkg: &TetPackage, session: &str, part: &str) {
 }
 
 fn seal_multichunk(pkg: &TetPackage, session: &str, part: &str) {
-    seal_dataset(pkg, session, part, &[4], &[2], f32_le(&[1.0, 2.0, 3.0, 4.0]));
+    seal_dataset(
+        pkg,
+        session,
+        part,
+        &[4],
+        &[2],
+        f32_le(&[1.0, 2.0, 3.0, 4.0]),
+    );
 }
 
 /// Create `{stem}.tet.d`, seal one part, publish generation 1.
@@ -56,12 +70,13 @@ fn write_manifest(pkg: &TetPackage, generation: u64, manifest: &GenerationManife
 }
 
 fn assert_check_fails(report: &TetVerifyReport, check: &str) {
-    assert!(!report.ok, "expected failure for {check}: {:?}", report.findings);
     assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.check == check && !f.ok),
+        !report.ok,
+        "expected failure for {check}: {:?}",
+        report.findings
+    );
+    assert!(
+        report.findings.iter().any(|f| f.check == check && !f.ok),
         "missing failing check `{check}`: {:?}",
         report.findings
     );
@@ -69,9 +84,10 @@ fn assert_check_fails(report: &TetVerifyReport, check: &str) {
 
 fn assert_warn(report: &TetVerifyReport, check: &str) {
     assert!(
-        report.findings.iter().any(|f| {
-            f.check == check && f.severity == crate::verify::VerifySeverity::Warning
-        }),
+        report
+            .findings
+            .iter()
+            .any(|f| { f.check == check && f.severity == crate::verify::VerifySeverity::Warning }),
         "missing warn `{check}`: {:?}",
         report.findings
     );
