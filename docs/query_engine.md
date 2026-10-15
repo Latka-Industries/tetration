@@ -238,7 +238,7 @@ For [**tet-py**](https://github.com/Latka-Industries/tet-py) and other hosts tha
 | [`materialize_query_selection`](../src/query/embed_materialize.rs)     | Selection-only (no `operation` key) | [`DenseMaterializeOutcome`](../src/query/embed_materialize.rs) — all supported wire dtypes |
 | [`materialize_query_transform_ram`](../src/query/embed_materialize.rs) | `transform` + **`write: ram`**      | Transformed dense buffer (`f32` / `f64` only)                                              |
 
-`DenseMaterializeOutcome` carries `dtype`, `logical_selection_shape`, and a [`DenseBuffer`](../src/query/embed_materialize.rs) enum (`F32`, `F64`, `I32`, …). These paths bypass the JSON preview cap; they still require a buffer sized to the logical selection (same RAM contract as `transform_ram`).
+`DenseMaterializeOutcome` carries `dtype`, `logical_selection_shape`, and a [`DenseBuffer`](../src/query/embed_materialize.rs) enum (`F32`, `F64`, `F16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `I16`). These paths bypass the JSON preview cap; they still require a buffer sized to the logical selection (same RAM contract as `transform_ram`). Transform `write: ram` remains **`f32` / `f64` only**.
 
 **Budget preflight:** [`materialize_query_selection`](../src/query/embed_materialize.rs) resolves [`ExecutionBudget`](../src/query/engine/budget.rs) the same way as transform `write: ram` / CLI (query `execution.memory_budget_*` → TIDX header → percent of host RAM). If the logical selection exceeds the budget it returns [`TetError::Validation`](../src/query/types/error.rs) **before** decode (tet-py `read_numpy` inherits this). Use [`estimate_query_selection_bytes`](../src/query/embed_materialize.rs) when you only need the size.
 
