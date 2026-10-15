@@ -19,6 +19,7 @@ mod fold;
 mod fs_device;
 mod layout_roundtrip;
 mod metadata;
+mod package;
 mod query;
 mod query_fixtures;
 mod reduction;

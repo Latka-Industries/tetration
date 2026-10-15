@@ -226,7 +226,7 @@ The `write_one_chunk_raw_file` helper in `tetration::catalog` writes exactly **o
 
 ## Concurrency (informative)
 
-v1 has **no** on-disk locking, lease, or live-append protocol. Scale comes from **immutable files + mmap readers**, not from concurrent writers.
+**Single-file layout v1** has **no** on-disk locking, lease, or live-append protocol on one `.tet`. Scale for a sealed file comes from **immutable bytes + mmap readers**.
 
 | Pattern                               | Supported?     | Notes                                                                                                                                |
 | ------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -235,6 +235,8 @@ v1 has **no** on-disk locking, lease, or live-append protocol. Scale comes from 
 | **Parallel writers on one file**      | No (undefined) | Exclusive create or a single coordinated writer; parallel payload append without a spec can corrupt the index.                       |
 | **Read while another process writes** | No (undefined) | Readers may see torn index rows or short payloads.                                                                                   |
 | **Many queries, one file**            | Yes            | Independent plans; per-query temp spills are unique; user export `spill` paths must not collide.                                     |
+
+**Multi-writer (0.2+):** concurrent ingest is specified as **immutable shards → single publish → sealed generation**, not as parallel updates to one live TIDX. See the draft RFC [`writer_protocol_v2.md`](writer_protocol_v2.md). A published generation may expose a packed layout-v1 `.tet` for the same mmap reader contract as above.
 
 **Inside one query**, the engine already parallelizes chunk I/O on CPU when in-core (Rayon) or uses a sequential linear scan when out-of-core ([query engine — adaptive fold I/O](query_engine.md#adaptive-fold-io)).
 

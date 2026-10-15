@@ -107,7 +107,7 @@ Not always “more features.” Three cross-cutting qualities:
 
 ### Transaction safety and mutability
 
-v1 is **write-once, read-many** — no locking, no live append ([`layout_v1.md` — Concurrency](layout_v1.md#concurrency-informative)). A mature storage story might add crash-safe incremental writes, snapshots, version history, and atomic dataset replacement — closer to modern storage engines than a static export format.
+v1 is **write-once, read-many** on a single `.tet` — no locking, no live append ([`layout_v1.md` — Concurrency](layout_v1.md#concurrency-informative)). Post-v1 concurrent ingest is specified as **shards → publish → sealed generation** (not multi-writer on one live TIDX): draft RFC [`writer_protocol_v2.md`](writer_protocol_v2.md) (Phase **17** / Linear 0.2.x).
 
 ### Formal specification
 
@@ -149,7 +149,7 @@ A plausible north star: **scientific knowledge infrastructure** — not only a f
 | **14** | Distributed query execution | Tier-A/B merge semantics | Product boundary vs “just a format” |
 | **15** | Group-by, pipelines, controlled joins | Axes + metadata | Avoid full SQL complexity |
 | **16** | Units, CRS, provenance, uncertainty | Footer history + attrs | Standards alignment (CF, PROV, etc.) |
-| **17** | Snapshots, atomic update, recovery | Writer protocol spec | Conflicts with pure WORM simplicity |
+| **17** | Shards, generations, atomic publish | Writer protocol v2 RFC | Draft: [`writer_protocol_v2.md`](writer_protocol_v2.md); still WORM per sealed `G` |
 | **18** | Normative spec + conformance suite | Layout + query wire frozen | Enables third-party implementations |
 
 Phases are **not ordered commitments** — e.g. formal spec (18) might parallelize early work on cloud reads (12).

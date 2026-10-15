@@ -12,6 +12,7 @@ Spec: [`docs/layout_v1.md`](../../docs/layout_v1.md).
 | `TetDatasetWrite`     | In-memory row-major tiles: `f32_row_major`, `f64_row_major`, `row_major(dtype, …)` |
 | `TetDatasetStreamSpec`| Streaming geometry: same builders, fill tiles at commit          |
 | `TetFile`             | Open for mmap; `summary()`, path, backing mmap                   |
+| `TetPackage`          | `.tet.d` skeleton: create/open, `CURRENT`, publish lock, seal `packed.tet` ([writer protocol v2](../../docs/writer_protocol_v2.md)) |
 | `read_tet_summary_v1` | Parse catalog from bytes (no extra health checks)                |
 | `TetFileSummaryV1`    | Superblock + datasets + chunks + history + metadata              |
 
@@ -32,6 +33,7 @@ Verify APIs are implemented in [`verify`](../verify/README.md) but re-exported h
 | `metadata.rs`     | Typed `metadata` JSON (axes, coord labels, file/dataset attrs)                 |
 | `execution.rs`    | Per-file defaults in chunk index header (memory budget bps)                    |
 | `session.rs`      | `TetWriterSession` / `TetFile` façade; `TetDatasetWrite` / `TetDatasetStreamSpec` |
+| `package.rs`      | `.tet.d` package roles (`PROTOCOL`, `CURRENT`, staging/generations/publishing)   |
 
 ## Codecs and dtypes
 
