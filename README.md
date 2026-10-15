@@ -107,7 +107,7 @@ Query documents are **flat** JSON or TOML (e.g. `"mean": []` / `mean = []`, `"sp
 | [`docs/roadmap.md`](docs/roadmap.md)               | **Prospective phases** — cloud-native I/O, indexing, distributed execution, semantics, spec (informal; not a release schedule)                       |
 | [`docs/conversions.md`](docs/conversions.md)       | **Format interchange** — import/export status, roadblocks, potential converters (HDF5, NetCDF, Zarr, prospects)                                      |
 | [docs.rs / `tetration`](https://docs.rs/tetration) | Rust crate API (`prelude`, `TetFile`, `execute_query_json`, convert, verify, …)                                                                      |
-| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; pins **tetration 0.1.9** |
+| [**tet-py**](https://github.com/Latka-Industries/tet-py) | **Python** bindings (`pip install tet-py`, `import tet`) — NumPy read/write, query reductions, transform ram/spill/sidecar; PyPI **0.1.1** still links **tetration 0.1.9** (bump to **0.1.11** pending) |
 | [`CHANGELOG.md`](CHANGELOG.md)                   | Release notes by version                                                                                                                             |
 | [`fuzz/README.md`](fuzz/README.md)               | **cargo-fuzz** over `verify_tet_bytes` (`mise fuzz`; nightly + `cargo-fuzz`)                                                                         |
 
@@ -139,7 +139,7 @@ Wire details: [`docs/layout_v1.md` — Concurrency](docs/layout_v1.md#concurrenc
 
 ```toml
 [dependencies]
-tetration = "0.1.10"
+tetration = "0.1.11"
 ```
 
 ```rust
@@ -177,7 +177,7 @@ See **Documentation map** above for [docs.tetration.sh](https://docs.tetration.s
 
 ### Python (`tet-py`)
 
-Official bindings live in [**tet-py**](https://github.com/Latka-Industries/tet-py) (PyPI **`tet-py`**, **`import tet`** — not the unrelated PyPI package `tetration`). Current release **0.1.1** links **tetration 0.1.9** from [crates.io](https://crates.io/crates/tetration).
+Official bindings live in [**tet-py**](https://github.com/Latka-Industries/tet-py) (PyPI **`tet-py`**, **`import tet`** — not the unrelated PyPI package `tetration`). Current release **0.1.1** still links **tetration 0.1.9**; crate/CLI head is **0.1.11**.
 
 ```bash
 pip install tet-py
@@ -199,16 +199,17 @@ API reference and ops: [tet-py `docs/operations.md`](https://github.com/Latka-In
 
 ## To do
 
-### Shipped (v0.1.10)
+### Shipped (v0.1.11)
 
 - [x] Layout v1, query engine, `tet convert` / `tet export`, verify/repair, optional GPU, C ABI
-- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) **0.1.10**
+- [x] [`tetration` on crates.io](https://crates.io/crates/tetration) through **0.1.10**; **0.1.11** = fuzz + reject corpus + write-invariant proptest (tag/publish when ready)
 - [x] Official Python bindings — [**tet-py**](https://github.com/Latka-Industries/tet-py) on PyPI (`import tet`)
 - [x] Catalog write API — `TetDatasetWrite` / `TetDatasetStreamSpec` `f32_row_major`, `f64_row_major`, and generic `row_major(dtype, …)`
+- [x] Verify fuzz harness + reject corpus + write-offset proptest ([`fuzz/README.md`](fuzz/README.md))
 
 ### Near-term
 
-- [ ] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19)) — estimate logical selection bytes before `materialize_query_selection`
+- [ ] **Selection-size preflight** ([#19](https://github.com/Latka-Industries/tetration/issues/19) / THI-16) — estimate logical selection bytes before `materialize_query_selection`
 - [ ] **`DenseBuffer` export gaps** ([#20](https://github.com/Latka-Industries/tetration/issues/20)) — `f16`, `u32`, `u64` in `embed_materialize` (transform ram stays f32/f64)
 - [ ] **Sidecar / writer unification** — route transform `write: sidecar` through `TetWriterSession` ([`transform/sidecar.rs`](src/query/transform/sidecar.rs))
 - [ ] **Coordinate filter-by-value / group-by** — label *slicing* is shipped; value filters and lookup indexes remain deferred ([`query_engine.md` — intentional gaps](docs/query_engine.md#intentional-gaps-v1))

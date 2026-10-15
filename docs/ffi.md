@@ -4,7 +4,7 @@ Stable **`extern "C"`** entry points for non-Rust runtimes. The Rust crate (`tet
 
 ## Python
 
-Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (e.g. **0.1.9** for tet-py **0.1.1**). Do not `pip install tetration` — that PyPI name is unrelated math code.
+Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (tet-py **0.1.1** still links **0.1.9**; crate head is **0.1.11**). Do not `pip install tetration` — that PyPI name is unrelated math code.
 
 **Shipped in tet-py:** `tet.open`, JSON/TOML query + reductions, NumPy read (ram / spill / sidecar), `TetWriter` / `write_dataset` (f32/f64), `preview=N` on reductions. **Planned there:** optional convert extras (`h5py`, `netCDF4`, `zarr`), `read_numpy` preflight, integer write dtypes, zero-copy mmap reads.
 

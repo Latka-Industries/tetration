@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.11] - 2026-10-15
+
+### Added
+
+- **cargo-fuzz** harness over `verify_tet_bytes` (`fuzz/`, `mise fuzz` / `mise fuzz-smoke`)
+- Structured **write → plan/decode** offset invariants (`proptest` in `src/tests/write_invariants.rs`)
+- Conformance **reject** corpus for TIDX / payload faults (`fixtures/small/tet/reject/`, `src/tests/reject_corpus.rs`)
+- Manual CI fuzz smoke workflow (`.github/workflows/fuzz-smoke.yml`, `workflow_dispatch` only)
+
+### Changed
+
+- Dropped redundant release **Build** job from the PR CI matrix (Test Suite + MSRV only)
+- CI `paths-ignore` for markdown / LICENSE / `.gitignore` so doc-only pushes skip the matrix
+- Docs: fuzz README, verify module README, changelog / README version pins
+
 ## [0.1.10] - 2026-10-13
 
 ### Added
