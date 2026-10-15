@@ -29,7 +29,8 @@ QueryDocument (JSON/TOML)
 | `plan_query_with_tet_mmap_ex`                                | Attach catalog + `ReadPlan`                        |
 | `plan_read_for_document`                                     | Resolve `ReadPlan` only (no execution)             |
 | `execute_query_document` / `execute_query_json`              | Plan + run operation                               |
-| `materialize_query_selection`                                | Full dense decode (selection-only, no preview cap) |
+| `materialize_query_selection`                                | Full dense decode (selection-only; budget preflight) |
+| `estimate_query_selection_bytes`                             | Logical dense size without decode                    |
 | `materialize_query_transform_ram`                            | Full dense transform (`write: ram`, `f32`/`f64`)   |
 | `format_query_response`                                      | CLI-oriented stdout (also used by embedders)       |
 
