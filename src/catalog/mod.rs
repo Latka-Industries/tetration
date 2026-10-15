@@ -417,6 +417,10 @@ pub struct OneChunkRawWrite<'a> {
 
 /// Read superblock, dataset directory, and chunk index from a mapped file.
 ///
+/// Minimum v1 dataset record size (header + ≥1 axis of shapes). Used to bound
+/// `dataset_count` before allocating (THI-376).
+const MIN_DATASET_RECORD_V1: u64 = 32;
+
 /// # Errors
 ///
 /// Returns [`CatalogError`] when layout rules are violated or regions are inconsistent.
@@ -434,65 +438,7 @@ pub fn read_tet_summary_v1(data: &[u8]) -> Result<TetFileSummaryV1, CatalogError
         });
     }
 
-    if data.len() < 40 {
-        return Err(CatalogError::MissingDatasetDirectory {
-            count: sb.dataset_count,
-            len: data.len(),
-        });
-    }
-
-    let dataset_blob_len_u64 = {
-        let mut r = LeReader::require(&data[32..], "dataset_blob_len", 8).map_err(|e| {
-            CatalogError::TooShort {
-                need: 32 + e.need,
-                got: data.len(),
-            }
-        })?;
-        r.take_u64()
-    };
-    let dataset_blob_len =
-        usize::try_from(dataset_blob_len_u64).map_err(|_| CatalogError::TooLargeForPlatform {
-            field: "dataset_blob_len",
-            value: dataset_blob_len_u64,
-        })?;
-    let blob_start = 40usize;
-    let blob_end = blob_start
-        .checked_add(dataset_blob_len)
-        .ok_or(CatalogError::TooShort {
-            need: usize::MAX,
-            got: data.len(),
-        })?;
-    if data.len() < blob_end {
-        return Err(CatalogError::TooShort {
-            need: blob_end,
-            got: data.len(),
-        });
-    }
-
-    // Minimum v1 record: 16 B header + ≥1 axis × 16 B shapes (name may be empty).
-    // Bound before `Vec::with_capacity` so untrusted superblock counts cannot OOM (THI-376).
-    const MIN_DATASET_RECORD_V1: u64 = 32;
-    let max_fit = (dataset_blob_len as u64) / MIN_DATASET_RECORD_V1;
-    if u64::from(sb.dataset_count) > max_fit {
-        return Err(CatalogError::DatasetCountExceedsBlob {
-            count: sb.dataset_count,
-            blob_len: dataset_blob_len as u64,
-            min_record: MIN_DATASET_RECORD_V1,
-        });
-    }
-    let mut datasets = Vec::with_capacity(sb.dataset_count as usize);
-    let mut cursor = blob_start;
-    for _ in 0..sb.dataset_count {
-        let (rec, next) = dataset::parse_one_dataset_record(data, cursor, blob_end)?;
-        datasets.push(rec);
-        cursor = next;
-    }
-    if cursor != blob_end {
-        return Err(CatalogError::DatasetBlobMismatch {
-            declared: dataset_blob_len as u64,
-            parsed: (cursor - blob_start) as u64,
-        });
-    }
+    let (datasets, blob_end) = parse_dataset_directory(data, &sb)?;
 
     let blob_end_u64 = u64::try_from(blob_end).map_err(|_| CatalogError::TooLargeForPlatform {
         field: "dataset_blob_end",
@@ -531,6 +477,69 @@ pub fn read_tet_summary_v1(data: &[u8]) -> Result<TetFileSummaryV1, CatalogError
         history,
         metadata,
     })
+}
+
+fn parse_dataset_directory(
+    data: &[u8],
+    sb: &SuperblockV1,
+) -> Result<(Vec<DatasetRecordV1>, usize), CatalogError> {
+    if data.len() < 40 {
+        return Err(CatalogError::MissingDatasetDirectory {
+            count: sb.dataset_count,
+            len: data.len(),
+        });
+    }
+
+    let dataset_blob_len_u64 = {
+        let mut r = LeReader::require(&data[32..], "dataset_blob_len", 8).map_err(|e| {
+            CatalogError::TooShort {
+                need: 32 + e.need,
+                got: data.len(),
+            }
+        })?;
+        r.take_u64()
+    };
+    let dataset_blob_len =
+        usize::try_from(dataset_blob_len_u64).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "dataset_blob_len",
+            value: dataset_blob_len_u64,
+        })?;
+    let blob_start = 40usize;
+    let blob_end = blob_start
+        .checked_add(dataset_blob_len)
+        .ok_or(CatalogError::TooShort {
+            need: usize::MAX,
+            got: data.len(),
+        })?;
+    if data.len() < blob_end {
+        return Err(CatalogError::TooShort {
+            need: blob_end,
+            got: data.len(),
+        });
+    }
+
+    let max_fit = (dataset_blob_len as u64) / MIN_DATASET_RECORD_V1;
+    if u64::from(sb.dataset_count) > max_fit {
+        return Err(CatalogError::DatasetCountExceedsBlob {
+            count: sb.dataset_count,
+            blob_len: dataset_blob_len as u64,
+            min_record: MIN_DATASET_RECORD_V1,
+        });
+    }
+    let mut datasets = Vec::with_capacity(sb.dataset_count as usize);
+    let mut cursor = blob_start;
+    for _ in 0..sb.dataset_count {
+        let (rec, next) = dataset::parse_one_dataset_record(data, cursor, blob_end)?;
+        datasets.push(rec);
+        cursor = next;
+    }
+    if cursor != blob_end {
+        return Err(CatalogError::DatasetBlobMismatch {
+            declared: dataset_blob_len as u64,
+            parsed: (cursor - blob_start) as u64,
+        });
+    }
+    Ok((datasets, blob_end))
 }
 
 /// Validate chunk index payload spans against a file length (same rules as [`read_tet_summary_v1`]).

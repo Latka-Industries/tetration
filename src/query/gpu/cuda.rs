@@ -1,4 +1,4 @@
-//! CUDA / ROCm scalar reductions via NVRTC + block tree reduce (`tetration-gpu` or `tetration-rocm`).
+//! CUDA / `ROCm` scalar reductions via NVRTC + block tree reduce (`tetration-gpu` or `tetration-rocm`).
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -106,7 +106,7 @@ fn with_gpu_state<R>(
     let map = GPU_STATES.get_or_init(|| Mutex::new(HashMap::new()));
     let mut guard = map.lock().map_err(|_| "gpu_runtime_error".to_string())?;
     if let Entry::Vacant(slot) = guard.entry(device_index) {
-        slot.insert(init_gpu(device_index).map_err(|e| e.to_string())?);
+        slot.insert(init_gpu(device_index)?);
     }
     let state = guard
         .get(&device_index)
@@ -137,7 +137,7 @@ pub(crate) fn vram_check(device_index: usize, logical_bytes: usize) -> Result<()
     with_gpu_state(device_index, |state| {
         let (_total, free) = state.ctx.mem_get_info().map_err(|e| format!("{e}"))?;
         let limit = ((free as f64) * GPU_VRAM_BUFFER_FRACTION) as u64;
-        if u64::try_from(logical_bytes).ok().is_some_and(|b| b > limit) {
+        if u64::try_from(logical_bytes).is_ok_and(|b| b > limit) {
             return Err("gpu_vram_exceeded".into());
         }
         Ok(())

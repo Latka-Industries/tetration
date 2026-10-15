@@ -181,7 +181,7 @@ pub(crate) fn streaming_fold_chunk_subset(
 
     if matches!(kind, ReductionKind::Var | ReductionKind::Std) {
         return streaming_cpu_value_fold(
-            StreamingFoldRequest {
+            &StreamingFoldRequest {
                 backend,
                 used,
                 cuda_device,
@@ -374,7 +374,7 @@ fn fold_chunks_sequential(pass: &mut ChunkFoldPass<'_, '_>) -> Result<(), &'stat
             .checked_add(chunk_bytes)
             .ok_or("gpu_host_decode_failed")?;
         reduce_chunk_payload(
-            vals,
+            &vals,
             chunk_bytes,
             io.kind,
             io.backend,
@@ -435,7 +435,7 @@ fn fold_chunks_pipelined(pass: &mut ChunkFoldPass<'_, '_>) -> Result<(), &'stati
             .checked_add(bytes)
             .ok_or("gpu_host_decode_failed")?;
         reduce_chunk_payload(
-            vals,
+            &vals,
             bytes,
             io.kind,
             io.backend,
@@ -475,7 +475,7 @@ fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> Rea
     feature = "tetration-rocm"
 ))]
 fn reduce_chunk_payload(
-    vals: Vec<f32>,
+    vals: &[f32],
     _chunk_bytes: u64,
     kind: ReductionKind,
     backend: &StreamingGpuBackend,
@@ -491,10 +491,10 @@ fn reduce_chunk_payload(
         .checked_mul(4)
         .ok_or("gpu_logical_bytes_overflow")?;
     if backend.vram_check_chunk(chunk_bytes_usize).is_ok() {
-        let part = backend.reduce_chunk(&vals, kind)?;
+        let part = backend.reduce_chunk(vals, kind)?;
         gpu_acc.merge_partial(&part, kind);
     } else {
-        fold_values_into_cpu_accum(&vals, kind, cpu_value, cpu_arg);
+        fold_values_into_cpu_accum(vals, kind, cpu_value, cpu_arg);
     }
     Ok(())
 }
@@ -505,20 +505,17 @@ fn reduce_chunk_payload(
     feature = "tetration-rocm"
 ))]
 fn streaming_cpu_value_fold(
-    fold: StreamingFoldRequest<'_>,
+    fold: &StreamingFoldRequest<'_>,
     chunk_indices: Option<&[usize]>,
 ) -> Result<(FoldPlanOutcome, DeviceRoute), &'static str> {
-    let StreamingFoldRequest {
-        used,
-        cuda_device,
-        mmap,
-        plan,
-        max_preview,
-        kind,
-        route,
-        f16_input,
-        backend: _,
-    } = fold;
+    let used = fold.used;
+    let cuda_device = fold.cuda_device;
+    let mmap = fold.mmap;
+    let plan = fold.plan;
+    let max_preview = fold.max_preview;
+    let kind = fold.kind;
+    let route = &fold.route;
+    let f16_input = fold.f16_input;
 
     let indices: Vec<usize> = match chunk_indices {
         Some(ix) => ix.to_vec(),
@@ -639,7 +636,7 @@ fn fold_values_into_cpu_accum(
 /// Partial fold over a chunk index subset (no preview), for multi-GPU merge.
 #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
 pub(crate) fn streaming_fold_partial_driver(
-    backend: StreamingGpuBackend,
+    backend: &StreamingGpuBackend,
     mmap: &[u8],
     plan: &ReadPlan,
     kind: ReductionKind,
@@ -676,7 +673,7 @@ pub(crate) fn streaming_fold_partial_driver(
             preview_cap: 0,
             preview,
             kind,
-            backend: &backend,
+            backend,
             f16_input,
         },
         accum: ChunkFoldAccum {

@@ -85,7 +85,7 @@ pub(crate) fn try_multi_driver_fold(
                 return Ok((ScalarReductionResult::default_fields(0), 0));
             }
             let backend = driver_backend(device_index)?;
-            streaming_fold_partial_driver(backend, mmap, plan, kind, f16_input, &indices)
+            streaming_fold_partial_driver(&backend, mmap, plan, kind, f16_input, &indices)
         })
         .collect();
 
