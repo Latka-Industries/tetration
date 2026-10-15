@@ -3,6 +3,9 @@
 In-memory layout checks via [`verify_tet_bytes`](../src/verify/run.rs) (no mmap).
 Tracks [THI-376](https://linear.app/thicclatka/issue/THI-376) / parent [THI-375](https://linear.app/thicclatka/issue/THI-375).
 
+Structured **valid-write** offset/round-trip invariants (CI `proptest`, not libFuzzer) live in
+[`src/tests/write_invariants.rs`](../src/tests/write_invariants.rs) — [THI-377](https://linear.app/thicclatka/issue/THI-377).
+
 ## Setup
 
 ```bash
