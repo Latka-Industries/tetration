@@ -137,6 +137,10 @@ run = "cargo +nightly fuzz build verify_tet_bytes"
 description = "Run cargo-fuzz verify_tet_bytes quick scan (THI-376; needs nightly)"
 run = "cargo +nightly fuzz run verify_tet_bytes"
 
+[tasks.fuzz-smoke]
+description = "CI-equivalent 60s fuzz smoke (THI-379; needs nightly)"
+run = "cargo +nightly fuzz run verify_tet_bytes -- -max_total_time=60 -timeout=10 -rss_limit_mb=2048"
+
 [tasks.fuzz-deep]
 description = "Run cargo-fuzz verify_tet_bytes_deep (THI-376; needs nightly)"
 run = "cargo +nightly fuzz run verify_tet_bytes_deep"

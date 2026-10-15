@@ -41,7 +41,8 @@ mise fuzz
 # or: cargo +nightly fuzz run verify_tet_bytes
 ```
 
-See [`fuzz/README.md`](../../fuzz/README.md) (THI-376).
+See [`fuzz/README.md`](../../fuzz/README.md) (THI-376). Optional manual CI smoke (60s):
+[`.github/workflows/fuzz-smoke.yml`](../../.github/workflows/fuzz-smoke.yml) (THI-379).
 
 ## Reject corpus (THI-378)
 
