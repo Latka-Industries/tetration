@@ -176,20 +176,29 @@ example.tet.d/
 
 ## Verify / repair expectations
 
-| Condition | Severity |
-| --------- | -------- |
-| Missing / invalid `PROTOCOL` or `protocol_version ≠ 2` | **Error** (package mode) |
-| `CURRENT` → missing `generations/<G>/packed.tet` or bad `MANIFEST` | **Error** |
-| `packed.tet` fails layout-v1 verify / checksum mismatch vs `MANIFEST` | **Error** |
-| Overlapping claims recorded for sealed `G` | **Error** |
-| `MANIFEST` part ids missing from staging | **OK** if `packed.tet` verifies (decision **D**) |
-| Orphan `staging/` or quarantinable `publishing/` | **Warn** (repair may GC / quarantine) |
-| Generation reuse of id | **Error** |
-| Standalone `.tet` | Existing v1 verify unchanged |
+| Condition | Severity | Finding `check` |
+| --------- | -------- | --------------- |
+| Missing / invalid `PROTOCOL` or `protocol_version ≠ 2` | **Error** | `protocol` |
+| `CURRENT` absent while sealed `generations/` exist | **Error** | `current` |
+| `CURRENT` unparseable | **Error** | `current` |
+| `CURRENT` → missing `generations/<G>/packed.tet` | **Error** | `current_packed` |
+| Bad / missing `MANIFEST` for CURRENT | **Error** | `current_manifest` / `manifest_*` |
+| `packed.tet` fails layout-v1 verify | **Error** | `packed_layout` (+ nested e.g. `chunk_coords`) |
+| Checksum / length mismatch vs `MANIFEST` | **Error** | `manifest_sha256` / `manifest_byte_len` |
+| Overlapping claims at publish time | **Error** (publish reject) | — (never seals) |
+| Duplicate chunk coords inside sealed `packed.tet` | **Error** | `chunk_coords` |
+| `MANIFEST` part ids missing from staging | **OK** if `packed.tet` verifies (decision **D**) | — |
+| Incomplete `publishing/<G>/` (live lock) | **Warn** | `publishing_incomplete` |
+| Stale / quarantinable `publishing/` | **Warn** | `publishing_stale` / `publishing` |
+| Orphan `staging/` | **Warn** | `staging` |
+| Generation reuse of id | **Error** | (publish / seal path) |
+| Standalone `.tet` | Existing v1 verify unchanged | — |
+
+Crash mid-publish must leave prior `CURRENT` readable; incomplete `G` is never reader-visible until `set_current`.
 
 **GC (decision J):** default retain `current` and `current-1`. Deleting older `generations/<G>/` is opt-in; never unlink a `packed.tet` that may still be mmap’d.
 
-Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path.tet.d`. Repair: `tet repair path.tet.d --apply quarantine_publish` for stale locks. Reject / proptest coverage: `src/tests/package_verify.rs` ([THI-466](https://linear.app/thicclatka/issue/THI-466)).
+Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path.tet.d`. Repair: `tet repair path.tet.d --apply quarantine_publish` for stale locks. Finding-code table: [`docs/cli.md`](cli.md#package-finding-check-names). Reject / mid-publish coverage: `src/tests/package_verify.rs`, `src/tests/publish.rs` ([THI-466](https://linear.app/thicclatka/issue/THI-466), [THI-480](https://linear.app/thicclatka/issue/THI-480)).
 
 ---
 

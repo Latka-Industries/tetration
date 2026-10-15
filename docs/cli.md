@@ -44,6 +44,28 @@ Accepts a standalone `.tet` **or** a `.tet.d` package directory (`PROTOCOL` pres
 
 **Package `.tet.d`:** `PROTOCOL` / `CURRENT` → sealed generation, `MANIFEST` length + SHA-256, layout-v1 on `packed.tet`, warn on incomplete/stale `publishing/` and orphan `staging/`. See [writer protocol v2](writer_protocol_v2.md#verify--repair-expectations).
 
+#### Package finding `check` names
+
+| `check` | Severity | Typical cause |
+| ------- | -------- | ------------- |
+| `protocol` | Error | Missing / unreadable `PROTOCOL`, or `protocol_version ≠ 2` |
+| `current` | Error | Unparseable `CURRENT`, or `CURRENT` absent while `generations/` has sealed dirs |
+| `current_packed` / `generation_packed` | Error | `generations/<G>/packed.tet` missing |
+| `current_manifest` / `generation_manifest` | Error | `MANIFEST.json` missing / unreadable |
+| `manifest_generation` | Error | MANIFEST `generation` ≠ directory id |
+| `manifest_protocol` | Error | MANIFEST `protocol_version ≠ 2` |
+| `manifest_byte_len` | Error | `packed.tet` length ≠ MANIFEST `packed_byte_len` |
+| `manifest_sha256` | Error / Warn | SHA mismatch (error) or SHA absent / legacy (warn on CURRENT) |
+| `packed_layout` | Error | Sealed `packed.tet` failed layout-v1 verify |
+| `chunk_coords` | Error | Duplicate `(dataset_id, chunk_index)` inside `packed.tet` |
+| `publishing_incomplete` | Warn | Live `publishing/<G>/` lock (CURRENT unchanged) |
+| `publishing_stale` | Warn | Stale publish lock (repair: `quarantine_publish`) |
+| `publishing` | Warn / Ok | Quarantine leftovers or clean (no active locks) |
+| `staging` | Warn / Ok | Orphan staging sessions (optional GC) |
+| `generations` | Warn | Unexpected entry under `generations/` |
+
+Reject / mid-publish coverage: `src/tests/package_verify.rs`, `src/tests/publish.rs` ([THI-480](https://linear.app/thicclatka/issue/THI-480)).
+
 Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`fixtures/small/tet/README.md`](../fixtures/small/tet/README.md).
 
 ## `tet repair`

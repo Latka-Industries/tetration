@@ -1,41 +1,102 @@
-//! Package verify / torn-generation reject cases (THI-466).
+//! Package verify / torn-generation reject cases (THI-466, THI-480).
 
 use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use proptest::prelude::*;
 
 use crate::catalog::{
-    PACKAGE_PROTOCOL_VERSION, TetDatasetWrite, TetPackage, TetShardWriter, format_generation_id,
-    publish_parts,
+    GenerationManifest, PACKAGE_PROTOCOL_VERSION, TetDatasetWrite, TetPackage, TetShardWriter,
+    format_generation_id, publish_parts, read_tet_summary_v1,
 };
+use crate::layout::mmap_file_read;
 use crate::verify::{
-    VerifyOptions, looks_like_tet_package, verify_tet_package, verify_tet_package_with_options,
+    TetVerifyReport, VerifyOptions, looks_like_tet_package, verify_tet_package,
+    verify_tet_package_with_options,
 };
 
-fn f32_pair(a: f32, b: f32) -> Vec<u8> {
-    let mut buf = vec![0u8; 8];
-    buf[..4].copy_from_slice(&a.to_le_bytes());
-    buf[4..].copy_from_slice(&b.to_le_bytes());
-    buf
+use super::fixture::index_patch::{self, ENTRY_CHUNK_INDEX0_OFFSET};
+
+fn f32_le(vals: &[f32]) -> Vec<u8> {
+    vals.iter().flat_map(|v| v.to_le_bytes()).collect()
 }
 
-fn seal_one(pkg: &TetPackage, session: &str, part: &str) {
+fn seal_dataset(
+    pkg: &TetPackage,
+    session: &str,
+    part: &str,
+    shape: &[u64],
+    chunk: &[u64],
+    data: Vec<u8>,
+) {
     let mut w = TetShardWriter::create(pkg, session, part).unwrap();
-    w.push_dataset(TetDatasetWrite::f32_row_major("a", &[2], &[2], f32_pair(1.0, 2.0)).unwrap())
+    w.push_dataset(TetDatasetWrite::f32_row_major("a", shape, chunk, data).unwrap())
         .unwrap();
     w.seal().unwrap();
 }
 
-#[test]
-fn healthy_package_verify_ok() {
+fn seal_one(pkg: &TetPackage, session: &str, part: &str) {
+    seal_dataset(pkg, session, part, &[2], &[2], f32_le(&[1.0, 2.0]));
+}
+
+fn seal_multichunk(pkg: &TetPackage, session: &str, part: &str) {
+    seal_dataset(
+        pkg,
+        session,
+        part,
+        &[4],
+        &[2],
+        f32_le(&[1.0, 2.0, 3.0, 4.0]),
+    );
+}
+
+/// Create `{stem}.tet.d`, seal one part, publish generation 1.
+fn published_pkg(stem: &str) -> (tempfile::TempDir, PathBuf, TetPackage) {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("ok.tet.d");
+    let root = dir.path().join(format!("{stem}.tet.d"));
     let pkg = TetPackage::create(&root).unwrap();
     seal_one(&pkg, "s", "p0");
-    let manifest = publish_parts(&pkg, 1, &["p0".into()]).unwrap();
-    assert!(manifest.packed_sha256.is_some());
+    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
+    (dir, root, pkg)
+}
 
+fn write_manifest(pkg: &TetPackage, generation: u64, manifest: &GenerationManifest) {
+    fs::write(
+        pkg.manifest_path(generation),
+        serde_json::to_string_pretty(manifest).unwrap() + "\n",
+    )
+    .unwrap();
+}
+
+fn assert_check_fails(report: &TetVerifyReport, check: &str) {
+    assert!(
+        !report.ok,
+        "expected failure for {check}: {:?}",
+        report.findings
+    );
+    assert!(
+        report.findings.iter().any(|f| f.check == check && !f.ok),
+        "missing failing check `{check}`: {:?}",
+        report.findings
+    );
+}
+
+fn assert_warn(report: &TetVerifyReport, check: &str) {
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| { f.check == check && f.severity == crate::verify::VerifySeverity::Warning }),
+        "missing warn `{check}`: {:?}",
+        report.findings
+    );
+}
+
+#[test]
+fn healthy_package_verify_ok() {
+    let (_dir, root, pkg) = published_pkg("ok");
+    assert!(pkg.read_manifest(1).unwrap().packed_sha256.is_some());
     assert!(looks_like_tet_package(&root));
     let report = verify_tet_package(&root).unwrap();
     assert!(report.ok, "{:?}", report.findings);
@@ -49,111 +110,43 @@ fn healthy_package_verify_ok() {
 
 #[test]
 fn current_points_at_missing_generation() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("missing.tet.d");
-    let pkg = TetPackage::create(&root).unwrap();
-    seal_one(&pkg, "s", "p0");
-    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
-
-    // Tear CURRENT → G=9 with no generations/00000009.
+    let (_dir, root, _pkg) = published_pkg("missing");
     fs::write(root.join("CURRENT"), "9\n").unwrap();
-
-    let report = verify_tet_package(&root).unwrap();
-    assert!(!report.ok);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.check == "current_packed" && !f.ok),
-        "{:?}",
-        report.findings
-    );
+    assert_check_fails(&verify_tet_package(&root).unwrap(), "current_packed");
 }
 
 #[test]
 fn manifest_byte_len_mismatch() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("len.tet.d");
-    let pkg = TetPackage::create(&root).unwrap();
-    seal_one(&pkg, "s", "p0");
-    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
-
+    let (_dir, root, pkg) = published_pkg("len");
     let mut manifest = pkg.read_manifest(1).unwrap();
     manifest.packed_byte_len = 1;
-    let path = pkg.manifest_path(1);
-    fs::write(
-        &path,
-        serde_json::to_string_pretty(&manifest).unwrap() + "\n",
-    )
-    .unwrap();
-
-    let report = verify_tet_package(&root).unwrap();
-    assert!(!report.ok);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.check == "manifest_byte_len" && !f.ok),
-        "{:?}",
-        report.findings
-    );
+    write_manifest(&pkg, 1, &manifest);
+    assert_check_fails(&verify_tet_package(&root).unwrap(), "manifest_byte_len");
 }
 
 #[test]
 fn manifest_sha256_mismatch() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("hash.tet.d");
-    let pkg = TetPackage::create(&root).unwrap();
-    seal_one(&pkg, "s", "p0");
-    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
-
+    let (_dir, root, pkg) = published_pkg("hash");
     let mut manifest = pkg.read_manifest(1).unwrap();
     manifest.packed_sha256 = Some("0".repeat(64));
-    fs::write(
-        pkg.manifest_path(1),
-        serde_json::to_string_pretty(&manifest).unwrap() + "\n",
-    )
-    .unwrap();
-
-    let report = verify_tet_package(&root).unwrap();
-    assert!(!report.ok);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.check == "manifest_sha256" && !f.ok),
-        "{:?}",
-        report.findings
-    );
+    write_manifest(&pkg, 1, &manifest);
+    assert_check_fails(&verify_tet_package(&root).unwrap(), "manifest_sha256");
 }
 
 #[test]
 fn incomplete_publish_warns() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("inc.tet.d");
-    let pkg = TetPackage::create(&root).unwrap();
-    seal_one(&pkg, "s", "p0");
-    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
+    let (_dir, root, pkg) = published_pkg("inc");
     pkg.begin_publish(2).unwrap();
-
     let report = verify_tet_package(&root).unwrap();
     assert!(report.ok, "incomplete publish must not fail CURRENT");
-    assert!(
-        report.findings.iter().any(|f| {
-            f.check == "publishing_incomplete"
-                && f.severity == crate::verify::VerifySeverity::Warning
-        }),
-        "{:?}",
-        report.findings
-    );
+    assert_warn(&report, "publishing_incomplete");
 }
 
 #[test]
 fn bad_protocol_version_fails() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("proto.tet.d");
-    let pkg = TetPackage::create(&root).unwrap();
-    let _ = pkg;
+    let _pkg = TetPackage::create(&root).unwrap();
     fs::write(
         root.join("PROTOCOL"),
         format!(
@@ -162,27 +155,12 @@ fn bad_protocol_version_fails() {
         ),
     )
     .unwrap();
-
-    let report = verify_tet_package(&root).unwrap();
-    assert!(!report.ok);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.check == "protocol" && !f.ok),
-        "{:?}",
-        report.findings
-    );
+    assert_check_fails(&verify_tet_package(&root).unwrap(), "protocol");
 }
 
 #[test]
 fn truncate_packed_fails_layout() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("torn.tet.d");
-    let pkg = TetPackage::create(&root).unwrap();
-    seal_one(&pkg, "s", "p0");
-    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
-
+    let (_dir, root, pkg) = published_pkg("torn");
     let packed = pkg.packed_tet_path(1);
     let meta = fs::metadata(&packed).unwrap();
     fs::OpenOptions::new()
@@ -195,21 +173,11 @@ fn truncate_packed_fails_layout() {
     let mut manifest = pkg.read_manifest(1).unwrap();
     manifest.packed_byte_len = meta.len() / 2;
     manifest.packed_sha256 = None;
-    fs::write(
-        pkg.manifest_path(1),
-        serde_json::to_string_pretty(&manifest).unwrap() + "\n",
-    )
-    .unwrap();
+    write_manifest(&pkg, 1, &manifest);
 
-    let report = verify_tet_package_with_options(&root, VerifyOptions::default()).unwrap();
-    assert!(!report.ok);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|f| f.check == "packed_layout" && !f.ok),
-        "{:?}",
-        report.findings
+    assert_check_fails(
+        &verify_tet_package_with_options(&root, VerifyOptions::default()).unwrap(),
+        "packed_layout",
     );
 }
 
@@ -219,11 +187,7 @@ proptest! {
     /// Corrupt CURRENT text must not panic; verify fails or reports invalid current.
     #[test]
     fn fuzz_current_pointer_text(s in ".*") {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("fuzz.tet.d");
-        let pkg = TetPackage::create(&root).unwrap();
-        seal_one(&pkg, "s", "p0");
-        publish_parts(&pkg, 1, &["p0".into()]).unwrap();
+        let (_dir, root, _pkg) = published_pkg("fuzz");
         fs::write(root.join("CURRENT"), s.as_bytes()).unwrap();
         let report = verify_tet_package(&root).unwrap();
         // Empty/whitespace-only CURRENT is treated as invalid by parse; any non-"1" breaks pin.
@@ -243,12 +207,40 @@ proptest! {
 }
 
 #[test]
-fn quarantine_stale_lock_clears_publishing_warn() {
+fn missing_current_with_sealed_generation_fails() {
+    let (_dir, root, _pkg) = published_pkg("nocur");
+    fs::remove_file(root.join("CURRENT")).unwrap();
+    assert_check_fails(&verify_tet_package(&root).unwrap(), "current");
+}
+
+#[test]
+fn duplicate_chunk_coords_in_packed_fails() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("q.tet.d");
+    let root = dir.path().join("dup.tet.d");
     let pkg = TetPackage::create(&root).unwrap();
-    seal_one(&pkg, "s", "p0");
+    seal_multichunk(&pkg, "s", "p0");
     publish_parts(&pkg, 1, &["p0".into()]).unwrap();
+
+    let packed = pkg.packed_tet_path(1);
+    let coord0 = {
+        let mmap = mmap_file_read(&packed).unwrap();
+        let s = read_tet_summary_v1(&mmap).unwrap();
+        assert!(s.chunks.len() >= 2, "need multi-chunk packed.tet");
+        s.chunks[0].chunk_index[0]
+    };
+    // Make entry 1 share entry 0's chunk coords (simulates torn/overlapping merge).
+    index_patch::patch_entry_u64(&packed, 1, ENTRY_CHUNK_INDEX0_OFFSET, coord0);
+    // Drop SHA so we hit layout chunk_coords, not manifest_sha256.
+    let mut manifest = pkg.read_manifest(1).unwrap();
+    manifest.packed_sha256 = None;
+    write_manifest(&pkg, 1, &manifest);
+
+    assert_check_fails(&verify_tet_package(&root).unwrap(), "chunk_coords");
+}
+
+#[test]
+fn quarantine_stale_lock_clears_publishing_warn() {
+    let (_dir, root, pkg) = published_pkg("q");
     pkg.begin_publish(2).unwrap();
 
     // max_age=0 → any existing lock is stale.
