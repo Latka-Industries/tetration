@@ -409,8 +409,7 @@ fn check_publishing_locks(package: &TetPackage) -> Vec<VerifyFinding> {
             Ok(true) => findings.push(warn_finding(
                 "publishing_stale",
                 format!(
-                    "publishing/{name_s} is stale (>{:?}); quarantine with tet repair --apply quarantine_publish",
-                    DEFAULT_PUBLISH_LOCK_STALE
+                    "publishing/{name_s} is stale (>{DEFAULT_PUBLISH_LOCK_STALE:?}); quarantine with tet repair --apply quarantine_publish"
                 ),
             )),
             Ok(false) => findings.push(warn_finding(
