@@ -85,6 +85,7 @@ cudarc = { version = "0.19.7", optional = true, default-features = false, featur
 ] }
 sha2 = "0.10"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+csv = { version = "1.4.0", default-features = false }
 
 [dev-dependencies]
 anyhow = "1.0.102"

@@ -417,7 +417,15 @@ fn detect_convert_format_from_extension() {
         );
     }
 
-    assert!(detect_convert_format(Path::new("data.csv")).is_err());
+    assert_eq!(
+        detect_convert_format(Path::new("data.csv")).unwrap(),
+        ConvertInputFormat::Csv
+    );
+    assert_eq!(
+        detect_convert_format(Path::new("data.TSV")).unwrap(),
+        ConvertInputFormat::Csv
+    );
+    assert!(detect_convert_format(Path::new("data.txt")).is_err());
     assert_eq!(
         detect_convert_format(Path::new("sample.npy")).unwrap(),
         ConvertInputFormat::Npy
@@ -945,4 +953,214 @@ fn convert_npy_rejects_fortran_and_object_and_skips_scalar() {
         other => panic!("expected StrictSkips, got {other}"),
     }
     assert!(!dir.path().join("scalar.tet").exists());
+}
+
+#[test]
+fn convert_csv_numeric_columns_roundtrip_and_skip_text() {
+    use crate::catalog::read_tet_summary_v1;
+    use crate::convert::convert_csv_with_chunk_bytes;
+    use crate::layout::mmap_file_read;
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("table.csv");
+    std::fs::write(&src, "temp,note,n\n1.5,\"a,b\",2\n2.5,9,3\n").unwrap();
+    let output = dir.path().join("table.tet");
+    let report = convert_csv_with_chunk_bytes(&src, &output, 1, false, 16, None::<fn(_)>).unwrap();
+    assert_eq!(
+        report.dataset_names,
+        vec!["temp".to_owned(), "n".to_owned()]
+    );
+    assert_eq!(report.skipped.len(), 1);
+    assert_eq!(report.skipped[0].path, "note");
+    assert!(report.skipped[0].reason.contains("non-numeric"));
+    assert_eq!(report.history[0].source, "csv");
+
+    let mmap = mmap_file_read(&output).unwrap();
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    assert_eq!(summary.datasets[0].chunk_shape, vec![2]);
+    assert_eq!(
+        materialize_dataset_le_bytes(&mmap, "temp"),
+        [1.5f64, 2.5]
+            .into_iter()
+            .flat_map(f64::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        materialize_dataset_le_bytes(&mmap, "n"),
+        [2i64, 3]
+            .into_iter()
+            .flat_map(i64::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    assert_tet_verify_ok(&output);
+
+    let strict_out = dir.path().join("strict.tet");
+    let err = convert_to_tet_with_options(
+        &src,
+        &strict_out,
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: true,
+        },
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConvertError::StrictSkips { count: 1, .. }));
+    assert!(!strict_out.exists());
+}
+
+#[test]
+fn convert_csv_headerless_tsv_blank_ragged_and_duplicate() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let bare = dir.path().join("bare.csv");
+    std::fs::write(&bare, "1,2\n3,4\n").unwrap();
+    let bare_out = dir.path().join("bare.tet");
+    let report =
+        convert_to_tet_with_options(&bare, &bare_out, ConvertOptions::default(), None::<fn(_)>)
+            .unwrap();
+    assert_eq!(
+        report.dataset_names,
+        vec!["col0".to_owned(), "col1".to_owned()]
+    );
+
+    let tsv = dir.path().join("table.tsv");
+    std::fs::write(&tsv, "a\tb\n1\tx\n2\ty\n").unwrap();
+    let tsv_out = dir.path().join("table.tet");
+    let report =
+        convert_to_tet_with_options(&tsv, &tsv_out, ConvertOptions::default(), None::<fn(_)>)
+            .unwrap();
+    assert_eq!(report.dataset_names, vec!["a".to_owned(), "b".to_owned()]);
+    let mmap = crate::layout::mmap_file_read(&tsv_out).unwrap();
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "b"),
+        [0i64, 1]
+            .into_iter()
+            .flat_map(i64::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+
+    let blanks = dir.path().join("blanks.csv");
+    std::fs::write(&blanks, "n\n1\n \n3\n").unwrap();
+    let blanks_out = dir.path().join("blanks.tet");
+    convert_to_tet_with_options(
+        &blanks,
+        &blanks_out,
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap();
+    let mmap = crate::layout::mmap_file_read(&blanks_out).unwrap();
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    assert_eq!(summary.datasets[0].dtype, DATASET_DTYPE_TAG_V1.f64);
+    let got = read_dataset_payload_le_bytes(&mmap, "n");
+    let mut expected = Vec::new();
+    expected.extend_from_slice(&1.0f64.to_le_bytes());
+    expected.extend_from_slice(&f64::NAN.to_le_bytes());
+    expected.extend_from_slice(&3.0f64.to_le_bytes());
+    assert_eq!(got, expected);
+
+    let ragged = dir.path().join("ragged.csv");
+    std::fs::write(&ragged, "a,b\n1,2\n3\n").unwrap();
+    let err = convert_to_tet_with_options(
+        &ragged,
+        &dir.path().join("ragged.tet"),
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    let ConvertError::Csv(detail) = err else {
+        panic!("expected Csv error");
+    };
+    assert!(detail.contains("expected 2"), "{detail}");
+
+    let quoted = dir.path().join("quoted.csv");
+    std::fs::write(&quoted, "temp,note\n1.25,\"line one\nline two\"\n").unwrap();
+    let quoted_out = dir.path().join("quoted.tet");
+    let report = convert_to_tet_with_options(
+        &quoted,
+        &quoted_out,
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap();
+    assert_eq!(
+        report.dataset_names,
+        vec!["temp".to_owned(), "note".to_owned()]
+    );
+    let mmap = crate::layout::mmap_file_read(&quoted_out).unwrap();
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "temp"),
+        1.25f64.to_le_bytes()
+    );
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "note"),
+        0i64.to_le_bytes()
+    );
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    let note = &summary.metadata.datasets["note"].attrs["tetration_categories"];
+    let parsed: serde_json::Value = serde_json::from_str(note).unwrap();
+    assert_eq!(parsed["codes"]["line one\nline two"], 0);
+
+    let dup = dir.path().join("dup.csv");
+    std::fs::write(&dup, "a,a\n1,2\n").unwrap();
+    let err = convert_to_tet_with_options(
+        &dup,
+        &dir.path().join("dup.tet"),
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    let ConvertError::Csv(detail) = err else {
+        panic!("expected Csv error");
+    };
+    assert!(
+        detail.contains("more than one column named `a`"),
+        "{detail}"
+    );
+    assert!(!dir.path().join("dup.tet").exists());
+}
+
+#[test]
+fn convert_csv_encodes_categories_and_skips_oversize_maps() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("groups.csv");
+    std::fs::write(&src, "group,score\n ,1\ncontrol,2\ntreated,3\ncontrol,4\n").unwrap();
+    let output = dir.path().join("groups.tet");
+    let report =
+        convert_to_tet_with_options(&src, &output, ConvertOptions::default(), None::<fn(_)>)
+            .unwrap();
+    assert_eq!(
+        report.dataset_names,
+        vec!["group".to_owned(), "score".to_owned()]
+    );
+    let mmap = mmap_file_read(&output).unwrap();
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "group"),
+        [-1i64, 0, 1, 0]
+            .into_iter()
+            .flat_map(i64::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    let note = &summary.metadata.datasets["group"].attrs["tetration_categories"];
+    let parsed: serde_json::Value = serde_json::from_str(note).unwrap();
+    assert_eq!(parsed["missing"], -1);
+    assert_eq!(parsed["codes"]["control"], 0);
+    assert_eq!(parsed["codes"]["treated"], 1);
+    assert_tet_verify_ok(&output);
+
+    let wide = dir.path().join("wide.csv");
+    let label = "x".repeat(1100);
+    std::fs::write(&wide, format!("id,v\n{label},7\n")).unwrap();
+    let wide_out = dir.path().join("wide.tet");
+    let report =
+        convert_to_tet_with_options(&wide, &wide_out, ConvertOptions::default(), None::<fn(_)>)
+            .unwrap();
+    assert_eq!(report.dataset_names, vec!["v".to_owned()]);
+    assert!(
+        report.skipped[0].reason.contains("1024-byte"),
+        "{}",
+        report.skipped[0].reason
+    );
 }
