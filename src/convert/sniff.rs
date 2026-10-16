@@ -55,7 +55,7 @@ impl ParquetConvertInput {
     pub const SUPPORTED_EXTENSIONS: &str = ".parquet, .pq";
 }
 
-/// Zarr v3 directory store recognition (`.zarr` extension or root `zarr.json`).
+/// Zarr directory store recognition (v3 `zarr.json`, or v2 `.zgroup` / `.zarray`).
 pub struct ZarrConvertInput;
 
 impl ZarrConvertInput {
@@ -78,9 +78,10 @@ impl ConvertCompressionSuffixes {
 /// missing or unrecognized, classic `NetCDF` (`CDF\\x01` / `CDF\\x02`), HDF5
 /// (`\\x89HDF\\r\\n\\x1a\\n`), and `NumPy` (`\\x93NUMPY`) signatures are checked. NetCDF-4
 /// (HDF5 container) should use a `NetCDF` extension so the `NetCDF` importer is selected.
-/// `.npz` is extension-only (a bare zip signature is not treated as `NumPy`). Zarr v3
-/// directory stores are detected when the path is a directory containing root `zarr.json`
-/// (`zarr_format: 3`).
+/// `.npz` is extension-only (a bare zip signature is not treated as `NumPy`). Parquet
+/// matches `.parquet` / `.pq` or the `PAR1` magic. CSV and TSV are extension-only.
+/// A directory is Zarr when it has v3 `zarr.json` (`zarr_format: 3`) or v2 `.zgroup` /
+/// `.zarray`. v3 wins when both are present.
 ///
 /// # Errors
 ///

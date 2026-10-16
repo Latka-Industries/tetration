@@ -10,7 +10,7 @@ Implementation: [`src/convert/`](../src/convert/), [`src/export/`](../src/export
 
 | Direction | Formats | CLI / API |
 | --------- | ------- | --------- |
-| **Import → `.tet`** | HDF5, NetCDF, Zarr v2 / v3, NumPy `.npy` / `.npz`, CSV / TSV | `tet convert <in> <out.tet>` · `convert_to_tet` |
+| **Import → `.tet`** | HDF5, NetCDF, Zarr v2 / v3, NumPy `.npy` / `.npz`, CSV / TSV, Parquet (`tetration-parquet`) | `tet convert <in> <out.tet>` · `convert_to_tet` |
 | **Export `.tet` →** | Zarr v3 directory only | `tet export <in.tet> <out.zarr/>` · `export_tet_to_zarr` |
 | **Not implemented** | HDF5 / NetCDF / Parquet / Arrow / `.npy` export; cloud URIs as convert input | — |
 

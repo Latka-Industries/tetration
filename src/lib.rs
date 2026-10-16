@@ -1,7 +1,8 @@
 //! **tetration** — Rust library for the Tetration mmap-oriented chunked tensor format.
 //!
 //! Public API: [`catalog`], [`convert`], [`export`], [`layout`], [`query`], [`verify`], [`repair`], and [`prelude`]
-//! for common embedder imports. The companion CLI is **`tet`** (`src/bin/tet.rs`, `src/bin/tet/`).
+//! for common embedder imports. [`convert`] imports HDF5, `NetCDF`, Zarr v2/v3, `NumPy`, CSV, and
+//! Parquet into one `.tet`. The companion CLI is **`tet`** (`src/bin/tet.rs`, `src/bin/tet/`).
 //!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
