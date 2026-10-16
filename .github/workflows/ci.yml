@@ -76,7 +76,7 @@ jobs:
         run: |
           # `tetration-metal` is macOS-only (see Cargo.toml). Do not use `--all-features` on Linux/Windows.
           # `tetration-gpu` and `tetration-rocm` are mutually exclusive — enable at most one driver backend.
-          FEAT="tetration-netcdf,tetration-hdf5,tetration-gpu"
+          FEAT="tetration-netcdf,tetration-hdf5,tetration-gpu,tetration-parquet"
           if [ "${{ runner.os }}" = "macOS" ]; then
             FEAT="${FEAT},tetration-metal"
           fi

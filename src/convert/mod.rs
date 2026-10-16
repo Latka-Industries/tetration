@@ -14,7 +14,9 @@ use serde::Serialize;
 
 use crate::catalog::CatalogError;
 
+mod category;
 mod cf;
+mod column_buf;
 mod csv;
 #[cfg(feature = "tetration-hdf5")]
 mod hdf5;
@@ -25,6 +27,8 @@ mod import_metadata;
 mod netcdf;
 mod numpy;
 mod parallel;
+#[cfg(feature = "tetration-parquet")]
+mod parquet;
 mod shared;
 mod sniff;
 mod tile_io;
@@ -45,7 +49,12 @@ pub use numpy::{
     convert_npy_to_tet, convert_npy_to_tet_with_progress, convert_npz_to_tet,
     convert_npz_to_tet_with_progress,
 };
-pub use zarr::{convert_zarr_to_tet, convert_zarr_to_tet_with_progress, is_zarr_v3_directory};
+#[cfg(feature = "tetration-parquet")]
+pub use parquet::{convert_parquet_to_tet, convert_parquet_to_tet_with_progress};
+pub use zarr::{
+    convert_zarr_to_tet, convert_zarr_to_tet_with_progress, is_zarr_v2_directory,
+    is_zarr_v3_directory,
+};
 
 /// Supported foreign input formats for [`convert_to_tet`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,10 +65,11 @@ pub enum ConvertInputFormat {
     Npy,
     Npz,
     Csv,
+    Parquet,
 }
 
 impl ConvertInputFormat {
-    /// History footer source tag (`"h5"`, `"nc"`, `"zarr"`, `"npy"`, `"npz"`, or `"csv"`).
+    /// History footer source tag (`"h5"`, `"nc"`, `"zarr"`, `"npy"`, `"npz"`, `"csv"`, or `"parquet"`).
     #[must_use]
     pub const fn history_source(self) -> &'static str {
         match self {
@@ -69,6 +79,7 @@ impl ConvertInputFormat {
             Self::Npy => "npy",
             Self::Npz => "npz",
             Self::Csv => "csv",
+            Self::Parquet => "parquet",
         }
     }
 }
@@ -78,7 +89,7 @@ impl ConvertInputFormat {
 /// See [`detect_convert_format`] and [`Hdf5ConvertInput`] / [`NetcdfConvertInput`].
 pub use sniff::{
     ConvertCompressionSuffixes, CsvConvertInput, Hdf5ConvertInput, NetcdfConvertInput,
-    NumpyConvertInput, ZarrConvertInput, detect_convert_format,
+    NumpyConvertInput, ParquetConvertInput, ZarrConvertInput, detect_convert_format,
 };
 
 /// Convert a foreign array file to `.tet`, picking the importer from the input extension.
@@ -173,7 +184,39 @@ pub fn convert_to_tet_with_options(
             options.strict,
             progress,
         ),
+        ConvertInputFormat::Parquet => convert_parquet_dispatch(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
+            progress,
+        ),
     }
+}
+
+#[cfg(feature = "tetration-parquet")]
+fn convert_parquet_dispatch(
+    input: &Path,
+    output: &Path,
+    parallel_jobs: usize,
+    strict: bool,
+    progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
+    parquet::convert_parquet_inner(input, output, parallel_jobs, strict, progress)
+}
+
+#[cfg(not(feature = "tetration-parquet"))]
+fn convert_parquet_dispatch(
+    _input: &Path,
+    _output: &Path,
+    _parallel_jobs: usize,
+    _strict: bool,
+    _progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
+    Err(ConvertError::ConvertFeatureDisabled {
+        format: ConvertInputFormat::Parquet,
+        feature: "tetration-parquet",
+    })
 }
 
 #[cfg(feature = "tetration-hdf5")]
@@ -300,6 +343,8 @@ pub enum ConvertError {
     Numpy(String),
     #[error("CSV open/read failed: {0}")]
     Csv(String),
+    #[error("Parquet open/read failed: {0}")]
+    Parquet(String),
     #[error("unsupported element type in variable `{name}`: {detail}")]
     UnsupportedDtype { name: String, detail: String },
     #[error("skipped {count} unsupported dataset(s) in {path} (--strict): {detail}")]
@@ -309,7 +354,7 @@ pub enum ConvertError {
         detail: String,
     },
     #[error(
-        "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; {npy_ext}; .csv (comma), .tsv (tab); or recognizable HDF5 / NetCDF-3 / NumPy file signature / Zarr v3 directory store)"
+        "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; {npy_ext}; .csv (comma), .tsv (tab); .parquet, .pq; or recognizable HDF5 / NetCDF-3 / NumPy / Parquet file signature / Zarr v2 or v3 directory store)"
     )]
     UnsupportedInputExtension {
         path: String,

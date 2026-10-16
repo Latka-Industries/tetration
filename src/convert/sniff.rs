@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use super::zarr::is_zarr_v3_directory;
+use super::zarr::{is_zarr_v2_directory, is_zarr_v3_directory};
 use super::{ConvertError, ConvertInputFormat};
 
 /// HDF5 convert input recognition (extensions + file signature).
@@ -46,12 +46,22 @@ impl NumpyConvertInput {
     pub const SUPPORTED_EXTENSIONS: &str = ".npy, .npz";
 }
 
+/// Parquet convert input recognition.
+pub struct ParquetConvertInput;
+
+impl ParquetConvertInput {
+    pub const MAGIC: [u8; 4] = *b"PAR1";
+    pub const EXTENSIONS: &[&str] = &["parquet", "pq"];
+    pub const SUPPORTED_EXTENSIONS: &str = ".parquet, .pq";
+}
+
 /// Zarr v3 directory store recognition (`.zarr` extension or root `zarr.json`).
 pub struct ZarrConvertInput;
 
 impl ZarrConvertInput {
     pub const EXTENSIONS: &[&str] = &["zarr"];
-    pub const SUPPORTED_EXTENSIONS: &str = ".zarr directory store (v3 zarr.json at root)";
+    pub const SUPPORTED_EXTENSIONS: &str =
+        ".zarr directory store (v3 zarr.json, or v2 .zgroup / .zarray)";
 }
 
 /// Compression suffixes stripped before extension matching during convert sniff.
@@ -77,7 +87,7 @@ impl ConvertCompressionSuffixes {
 /// Returns [`ConvertError::UnsupportedInputExtension`] when neither extension nor signature
 /// match, or [`ConvertError::Catalog`] on I/O failure while sniffing.
 pub fn detect_convert_format(path: &Path) -> Result<ConvertInputFormat, ConvertError> {
-    if path.is_dir() && is_zarr_v3_directory(path) {
+    if path.is_dir() && (is_zarr_v3_directory(path) || is_zarr_v2_directory(path)) {
         return Ok(ConvertInputFormat::Zarr);
     }
 
@@ -92,7 +102,7 @@ pub fn detect_convert_format(path: &Path) -> Result<ConvertInputFormat, ConvertE
         return Ok(fmt);
     }
 
-    if path.is_dir() && is_zarr_v3_directory(path) {
+    if path.is_dir() && (is_zarr_v3_directory(path) || is_zarr_v2_directory(path)) {
         return Ok(ConvertInputFormat::Zarr);
     }
 
@@ -118,6 +128,8 @@ fn format_from_extension(ext: &str) -> Option<ConvertInputFormat> {
         || CsvConvertInput::TSV_EXTENSIONS.contains(&ext)
     {
         Some(ConvertInputFormat::Csv)
+    } else if ParquetConvertInput::EXTENSIONS.contains(&ext) {
+        Some(ConvertInputFormat::Parquet)
     } else {
         None
     }
@@ -153,6 +165,9 @@ fn sniff_format_from_file(path: &Path) -> io::Result<ConvertInputFormat> {
     }
     if n >= NumpyConvertInput::MAGIC.len() && header[..6] == NumpyConvertInput::MAGIC {
         return Ok(ConvertInputFormat::Npy);
+    }
+    if n >= ParquetConvertInput::MAGIC.len() && header[..4] == ParquetConvertInput::MAGIC {
+        return Ok(ConvertInputFormat::Parquet);
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidData,

@@ -8,14 +8,14 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Instant;
 
-use crate::catalog::MetadataLimitsV1;
 use crate::utils::dtype::ElementDtype;
 
-use super::numpy::{NUMPY_DEFAULT_CHUNK_BYTES, numpy_chunk_shape};
-use super::shared::{ImportPlan, ensure_non_empty, ensure_strict, write_plans_streaming};
+use super::category::CategoryColumn;
+use super::column_buf::{BufferedColumnSpec, accept_buffered_column, stream_buffered_columns};
+use super::numpy::NUMPY_DEFAULT_CHUNK_BYTES;
+use super::shared::{ensure_non_empty, ensure_strict};
 use super::{ConvertError, ConvertProgress, ConvertReport, report};
 
 /// Import a `.csv` (comma) or `.tsv` (tab) table into one `.tet`.
@@ -65,7 +65,7 @@ pub(crate) fn convert_csv_with_chunk_bytes(
     parallel_jobs: usize,
     strict: bool,
     chunk_bytes: u64,
-    mut progress: Option<impl FnMut(ConvertProgress)>,
+    progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
     let table = read_table(input)?;
@@ -73,24 +73,18 @@ pub(crate) fn convert_csv_with_chunk_bytes(
     let mut payloads = Vec::new();
     let mut skipped = table.skipped;
     for column in table.columns {
-        let elem_size = column.dtype.elem_size();
-        let nrows = u64::try_from(column.bytes.len() / elem_size).unwrap_or(0);
-        if nrows == 0 {
-            super::shared::record_skip(&mut skipped, column.name, "empty");
-            continue;
-        }
-        let chunk_shape = numpy_chunk_shape(&[nrows], elem_size, chunk_bytes);
-        payloads.push(ColumnPayload {
-            name: column.name.clone(),
-            elem_size,
-            chunk_elems: chunk_shape.first().copied().unwrap_or(1),
-            bytes: column.bytes,
-        });
-        let mut plan = ImportPlan::new(column.name, column.dtype, vec![nrows], chunk_shape, None);
-        if !column.attrs.is_empty() {
-            plan = plan.with_import(column.attrs, None, None);
-        }
-        plans.push(plan);
+        accept_buffered_column(
+            &mut plans,
+            &mut payloads,
+            &mut skipped,
+            BufferedColumnSpec {
+                name: column.name,
+                dtype: column.dtype,
+                bytes: column.bytes,
+                attrs: column.attrs,
+            },
+            chunk_bytes,
+        );
     }
 
     ensure_strict(input, &skipped, strict)?;
@@ -101,42 +95,15 @@ pub(crate) fn convert_csv_with_chunk_bytes(
             .map(|plan| plan.name.clone())
             .collect::<Vec<_>>(),
     )?;
-
-    let mut progress_bridge = |done: u64, total: u64, dataset: &str| {
-        if let Some(ref mut cb) = progress {
-            cb(ConvertProgress {
-                chunks_done: done,
-                chunks_total: total,
-                dataset: dataset.to_owned(),
-            });
-        }
-    };
-    let parallel_jobs = super::parallel::resolve_parallel_jobs(parallel_jobs);
-    let source = CsvSource {
-        payloads: payloads.into(),
-    };
-    write_plans_streaming(
+    let history = stream_buffered_columns(
         output,
         &plans,
+        payloads,
         parallel_jobs,
-        |job, buf| {
-            let column = &source.payloads[job.dataset_id];
-            let start = usize::try_from(job.chunk_coord[0] * column.chunk_elems)
-                .map_err(|_| ConvertError::Csv("chunk offset overflow".to_owned()))?
-                .saturating_mul(column.elem_size);
-            let end = start + buf.len();
-            if end > column.bytes.len() {
-                return Err(ConvertError::Csv(format!(
-                    "column `{}` tile exceeds parsed rows",
-                    column.name
-                )));
-            }
-            buf.copy_from_slice(&column.bytes[start..end]);
-            Ok(())
-        },
-        Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
+        "csv",
+        progress,
+        ConvertError::Csv,
     )?;
-    let history = super::import_metadata::finish_convert_footer(output, "csv", &plans)?;
 
     Ok(report(
         input,
@@ -155,20 +122,9 @@ struct ParsedColumn {
     attrs: BTreeMap<String, String>,
 }
 
-struct ColumnPayload {
-    name: String,
-    elem_size: usize,
-    chunk_elems: u64,
-    bytes: Vec<u8>,
-}
-
 struct ParsedTable {
     columns: Vec<ParsedColumn>,
     skipped: Vec<super::ConvertSkip>,
-}
-
-struct CsvSource {
-    payloads: Arc<[ColumnPayload]>,
 }
 
 fn read_table(input: &Path) -> Result<ParsedTable, ConvertError> {
@@ -342,30 +298,15 @@ fn is_non_finite_token(token: &str) -> bool {
     )
 }
 
-const CATEGORY_ATTR: &str = "tetration_categories";
-const CATEGORY_MISSING: i64 = -1;
 const SKIP_NON_NUMERIC: &str = "non-numeric";
 const SKIP_EMPTY: &str = "empty";
-fn skip_category_too_big() -> String {
-    format!(
-        "category map exceeds the {}-byte footer attr limit",
-        MetadataLimitsV1::DEFAULT.attr_string_bytes
-    )
-}
-
-struct CategoryBuild {
-    codes: BTreeMap<String, i64>,
-    next: i64,
-    values: Vec<i64>,
-    overflow: bool,
-}
 
 enum Building {
     Empty,
     Blanks(u64),
     Int(Vec<i64>),
     Float(Vec<f64>),
-    Category(CategoryBuild),
+    Category(CategoryColumn),
     Skip(String),
 }
 
@@ -397,22 +338,22 @@ impl Building {
     fn push_text(&mut self, label: &str) {
         match self {
             Self::Empty => {
-                let mut column = CategoryBuild::new();
+                let mut column = CategoryColumn::new();
                 column.push_label(label);
                 *self = Self::Category(column);
             }
             Self::Blanks(count) => {
                 let count = *count;
-                let mut column = CategoryBuild::new();
+                let mut column = CategoryColumn::new();
                 for _ in 0..count {
-                    column.values.push(CATEGORY_MISSING);
+                    column.push_missing();
                 }
                 column.push_label(label);
                 *self = Self::Category(column);
             }
             Self::Int(_) | Self::Float(_) => *self = Self::Skip(SKIP_NON_NUMERIC.to_owned()),
             Self::Category(column) => {
-                if column.overflow {
+                if column.is_overflow() {
                     return;
                 }
                 column.push_label(label);
@@ -431,11 +372,7 @@ impl Building {
                 *self = Self::Float(floats);
             }
             Self::Float(values) => values.push(f64::NAN),
-            Self::Category(column) => {
-                if !column.overflow {
-                    column.values.push(CATEGORY_MISSING);
-                }
-            }
+            Self::Category(column) => column.push_missing(),
             Self::Skip(_) => {}
         }
     }
@@ -490,15 +427,6 @@ impl Building {
                     reason: SKIP_EMPTY.to_owned(),
                 }
             }
-            Self::Category(column) if column.overflow || column.codes.is_empty() => {
-                Finished::Skip {
-                    reason: if column.overflow {
-                        skip_category_too_big()
-                    } else {
-                        SKIP_EMPTY.to_owned()
-                    },
-                }
-            }
             Self::Int(values) => Finished::Import {
                 dtype: ElementDtype::I64,
                 bytes: i64s_to_le_bytes(&values),
@@ -515,61 +443,16 @@ impl Building {
                     attrs: BTreeMap::new(),
                 }
             }
-            Self::Category(column) => {
-                let mut attrs = BTreeMap::new();
-                if let Some(json) = category_note_json(&column.codes) {
-                    attrs.insert(CATEGORY_ATTR.to_owned(), json);
-                }
-                Finished::Import {
+            Self::Category(column) => match column.finish() {
+                Ok(imported) => Finished::Import {
                     dtype: ElementDtype::I64,
-                    bytes: i64s_to_le_bytes(&column.values),
-                    attrs,
-                }
-            }
+                    bytes: imported.bytes,
+                    attrs: imported.attrs,
+                },
+                Err(reason) => Finished::Skip { reason },
+            },
         }
     }
-}
-
-impl CategoryBuild {
-    fn new() -> Self {
-        Self {
-            codes: BTreeMap::new(),
-            next: 0,
-            values: Vec::new(),
-            overflow: false,
-        }
-    }
-
-    fn push_label(&mut self, label: &str) {
-        if self.overflow {
-            return;
-        }
-        let code = if let Some(code) = self.codes.get(label) {
-            *code
-        } else {
-            let code = self.next;
-            self.codes.insert(label.to_owned(), code);
-            self.next += 1;
-            if category_note_json(&self.codes)
-                .is_none_or(|json| json.len() > MetadataLimitsV1::DEFAULT.attr_string_bytes)
-            {
-                self.overflow = true;
-                self.codes.clear();
-                self.values.clear();
-                return;
-            }
-            code
-        };
-        self.values.push(code);
-    }
-}
-
-fn category_note_json(codes: &BTreeMap<String, i64>) -> Option<String> {
-    serde_json::to_string(&serde_json::json!({
-        "codes": codes,
-        "missing": CATEGORY_MISSING,
-    }))
-    .ok()
 }
 
 fn i64s_to_le_bytes(values: &[i64]) -> Vec<u8> {
