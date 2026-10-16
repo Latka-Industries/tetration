@@ -418,6 +418,14 @@ fn detect_convert_format_from_extension() {
     }
 
     assert!(detect_convert_format(Path::new("data.csv")).is_err());
+    assert_eq!(
+        detect_convert_format(Path::new("sample.npy")).unwrap(),
+        ConvertInputFormat::Npy
+    );
+    assert_eq!(
+        detect_convert_format(Path::new("sample.NPZ")).unwrap(),
+        ConvertInputFormat::Npz
+    );
 }
 
 #[test]
@@ -655,4 +663,286 @@ fn convert_reports_skipped_dtype_and_strict_refuses_write() {
         other => panic!("expected StrictSkips, got {other}"),
     }
     assert!(!strict_out.exists());
+}
+
+fn npy_bytes(descr: &str, shape: &[u64], fortran: bool, data: &[u8]) -> Vec<u8> {
+    let shape_text = if shape.is_empty() {
+        "()".to_owned()
+    } else if shape.len() == 1 {
+        format!("({},)", shape[0])
+    } else {
+        format!(
+            "({})",
+            shape
+                .iter()
+                .map(|dim| dim.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let order = if fortran { "True" } else { "False" };
+    let dict = format!("{{'descr': '{descr}', 'fortran_order': {order}, 'shape': {shape_text}, }}");
+    let mut header = dict.into_bytes();
+    header.push(b'\n');
+    let prefix = 10usize;
+    let pad = (64 - ((prefix + header.len()) % 64)) % 64;
+    if pad > 0 {
+        header.pop();
+        header.extend(std::iter::repeat_n(b' ', pad));
+        header.push(b'\n');
+    }
+    let mut out = Vec::new();
+    out.extend_from_slice(b"\x93NUMPY");
+    out.extend_from_slice(&[1, 0]);
+    out.extend_from_slice(&u16::try_from(header.len()).unwrap().to_le_bytes());
+    out.extend_from_slice(&header);
+    out.extend_from_slice(data);
+    out
+}
+
+fn write_npz(path: &Path, members: &[(&str, &[u8])], stored: bool) {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipWriter};
+
+    let file = std::fs::File::create(path).unwrap();
+    let mut zip = ZipWriter::new(file);
+    let method = if stored {
+        CompressionMethod::Stored
+    } else {
+        CompressionMethod::Deflated
+    };
+    let options = SimpleFileOptions::default().compression_method(method);
+    for (name, bytes) in members {
+        zip.start_file(*name, options).unwrap();
+        zip.write_all(bytes).unwrap();
+    }
+    zip.finish().unwrap();
+}
+
+#[test]
+fn convert_npy_roundtrips_bytes_across_tiles() {
+    use crate::catalog::read_tet_summary_v1;
+    use crate::convert::convert_numpy_with_chunk_bytes;
+    use crate::layout::mmap_file_read;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut data = Vec::new();
+    for value in 0..32u8 {
+        data.extend_from_slice(&(f32::from(value) * 0.5).to_le_bytes());
+    }
+    let src = dir.path().join("sample.npy");
+    std::fs::write(&src, npy_bytes("<f4", &[8, 4], false, &data)).unwrap();
+    let output = dir.path().join("sample.tet");
+
+    let report = convert_numpy_with_chunk_bytes(
+        &src,
+        &output,
+        2,
+        false,
+        crate::convert::ConvertInputFormat::Npy,
+        32,
+        None::<fn(_)>,
+    )
+    .unwrap();
+    assert_eq!(report.dataset_names, vec!["data".to_owned()]);
+    assert!(report.skipped.is_empty());
+    assert_eq!(report.history[0].source, "npy");
+
+    let mmap = mmap_file_read(&output).unwrap();
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    assert_eq!(summary.datasets[0].chunk_shape, vec![2, 4]);
+    assert_eq!(summary.datasets[0].shape, vec![8, 4]);
+    let got = materialize_dataset_le_bytes(&mmap, "data");
+    assert_eq!(got, data);
+    assert_tet_verify_ok(&output);
+}
+
+#[test]
+fn convert_npz_single_array_roundtrips_stored_and_deflated() {
+    use crate::layout::mmap_file_read;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut data = Vec::new();
+    for value in [1i32, 2, 3, 4, 5, 6] {
+        data.extend_from_slice(&value.to_le_bytes());
+    }
+    let npy = npy_bytes("<i4", &[2, 3], false, &data);
+    for (name, stored) in [("stored.npz", true), ("deflated.npz", false)] {
+        let src = dir.path().join(name);
+        write_npz(&src, &[("values.npy", npy.as_slice())], stored);
+        let output = dir.path().join(format!("{name}.tet"));
+        let report = convert_to_tet_with_options(
+            &src,
+            &output,
+            ConvertOptions {
+                parallel_jobs: 1,
+                strict: false,
+            },
+            None::<fn(_)>,
+        )
+        .unwrap();
+        assert_eq!(report.dataset_names, vec!["values".to_owned()]);
+        assert_eq!(report.history[0].source, "npz");
+        let mmap = mmap_file_read(&output).unwrap();
+        assert_eq!(materialize_dataset_le_bytes(&mmap, "values"), data);
+        assert_tet_verify_ok(&output);
+    }
+}
+
+#[test]
+fn convert_npz_multi_array_roundtrips_each_member() {
+    use crate::layout::mmap_file_read;
+
+    let dir = tempfile::tempdir().unwrap();
+    let a = {
+        let mut bytes = Vec::new();
+        for value in [1.0f32, 2.0] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        npy_bytes("<f4", &[2], false, &bytes)
+    };
+    let b = {
+        let mut bytes = Vec::new();
+        for value in [3i32, 4, 5] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        npy_bytes("<i4", &[3], false, &bytes)
+    };
+    let src = dir.path().join("multi.npz");
+    write_npz(
+        &src,
+        &[("b.npy", b.as_slice()), ("a.npy", a.as_slice())],
+        true,
+    );
+    let output = dir.path().join("out.tet");
+    let report = convert_to_tet_with_options(
+        &src,
+        &output,
+        ConvertOptions {
+            parallel_jobs: 2,
+            strict: false,
+        },
+        None::<fn(_)>,
+    )
+    .unwrap();
+    assert_eq!(report.dataset_names, vec!["a".to_owned(), "b".to_owned()]);
+    let mmap = mmap_file_read(&output).unwrap();
+    assert_eq!(
+        materialize_dataset_le_bytes(&mmap, "a"),
+        1.0f32
+            .to_le_bytes()
+            .into_iter()
+            .chain(2.0f32.to_le_bytes())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        materialize_dataset_le_bytes(&mmap, "b"),
+        [3i32, 4, 5]
+            .into_iter()
+            .flat_map(i32::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    assert_tet_verify_ok(&output);
+}
+
+#[test]
+fn convert_npz_duplicate_names_and_fortran_member_write_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = 1.0f32.to_le_bytes().repeat(2);
+    let ok = npy_bytes("<f4", &[2], false, &data);
+    let fortran = npy_bytes("<f4", &[2], true, &data);
+
+    let clash = dir.path().join("clash.npz");
+    write_npz(
+        &clash,
+        &[("grp/a.npy", ok.as_slice()), ("grp\\a.npy", ok.as_slice())],
+        true,
+    );
+    let err = convert_to_tet_with_options(
+        &clash,
+        &dir.path().join("clash.tet"),
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    let ConvertError::Numpy(detail) = err else {
+        panic!("expected Numpy error");
+    };
+    assert!(
+        detail.contains("more than one array named `grp/a`"),
+        "{detail}"
+    );
+    assert!(!dir.path().join("clash.tet").exists());
+
+    let bad = dir.path().join("fortran.npz");
+    write_npz(
+        &bad,
+        &[("ok.npy", ok.as_slice()), ("bad.npy", fortran.as_slice())],
+        true,
+    );
+    let err = convert_to_tet_with_options(
+        &bad,
+        &dir.path().join("fortran.tet"),
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    let ConvertError::Numpy(detail) = err else {
+        panic!("expected Numpy error");
+    };
+    assert!(detail.contains("Fortran-order"), "{detail}");
+    assert!(!dir.path().join("fortran.tet").exists());
+}
+
+#[test]
+fn convert_npy_rejects_fortran_and_object_and_skips_scalar() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = 1.0f32.to_le_bytes().repeat(4);
+
+    let fortran = dir.path().join("fortran.npy");
+    std::fs::write(&fortran, npy_bytes("<f4", &[4], true, &data)).unwrap();
+    let err = convert_to_tet_with_options(
+        &fortran,
+        &dir.path().join("fortran.tet"),
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    let ConvertError::Numpy(detail) = err else {
+        panic!("expected Numpy error");
+    };
+    assert!(detail.contains("Fortran-order"), "{detail}");
+
+    let object = dir.path().join("object.npy");
+    std::fs::write(&object, npy_bytes("|O", &[1], false, &[0])).unwrap();
+    let err = convert_to_tet_with_options(
+        &object,
+        &dir.path().join("object.tet"),
+        ConvertOptions::default(),
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    let ConvertError::Numpy(detail) = err else {
+        panic!("expected Numpy error");
+    };
+    assert!(detail.contains("pickled"), "{detail}");
+
+    let scalar = dir.path().join("scalar.npy");
+    std::fs::write(&scalar, npy_bytes("<f4", &[], false, &1.0f32.to_le_bytes())).unwrap();
+    let err = convert_to_tet_with_options(
+        &scalar,
+        &dir.path().join("scalar.tet"),
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: true,
+        },
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    match err {
+        ConvertError::StrictSkips { count, .. } => assert_eq!(count, 1),
+        other => panic!("expected StrictSkips, got {other}"),
+    }
+    assert!(!dir.path().join("scalar.tet").exists());
 }

@@ -1,4 +1,4 @@
-//! `tet convert` (HDF5 / `NetCDF` / Zarr → `.tet`).
+//! `tet convert` (HDF5 / `NetCDF` / Zarr / `NumPy` → `.tet`).
 
 use std::path::Path;
 
@@ -40,11 +40,15 @@ pub(crate) fn run_convert(
         tetration::convert::ConvertInputFormat::H5 => "HDF5 convert",
         tetration::convert::ConvertInputFormat::Netcdf => "NetCDF convert",
         tetration::convert::ConvertInputFormat::Zarr => "Zarr convert",
+        tetration::convert::ConvertInputFormat::Npy
+        | tetration::convert::ConvertInputFormat::Npz => "NumPy convert",
     };
     let progress_prefix = match format {
         tetration::convert::ConvertInputFormat::H5 => "HDF5 → .tet",
         tetration::convert::ConvertInputFormat::Netcdf => "NetCDF → .tet",
         tetration::convert::ConvertInputFormat::Zarr => "Zarr → .tet",
+        tetration::convert::ConvertInputFormat::Npy
+        | tetration::convert::ConvertInputFormat::Npz => "NumPy → .tet",
     };
 
     let pb = ProgressBar::new(0);

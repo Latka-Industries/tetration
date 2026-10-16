@@ -164,4 +164,4 @@ uv run generate-fixtures small
 uv run bench-large h5
 ```
 
-Other dense formats (**`.npy`**, GRIB, GeoTIFF, …) get fixtures only if/when convert support is added.
+NumPy `.npy` / `.npz` convert is covered by in-memory fixtures in `src/tests/convert.rs` (the large speed bench is `.npy` only, and is not generated here). Other dense formats (GRIB, GeoTIFF, …) get fixtures only if/when convert support is added.

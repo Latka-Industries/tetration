@@ -27,6 +27,16 @@ impl NetcdfConvertInput {
     pub const SUPPORTED_EXTENSIONS: &str = ".nc, .netcdf, .nc4, .nc3, .cdf, .ncdf";
 }
 
+/// `NumPy` `.npy` / `.npz` convert input recognition.
+pub struct NumpyConvertInput;
+
+impl NumpyConvertInput {
+    pub const MAGIC: [u8; 6] = *b"\x93NUMPY";
+    pub const NPY_EXTENSIONS: &[&str] = &["npy"];
+    pub const NPZ_EXTENSIONS: &[&str] = &["npz"];
+    pub const SUPPORTED_EXTENSIONS: &str = ".npy, .npz";
+}
+
 /// Zarr v3 directory store recognition (`.zarr` extension or root `zarr.json`).
 pub struct ZarrConvertInput;
 
@@ -46,10 +56,12 @@ impl ConvertCompressionSuffixes {
 ///
 /// Extension lookup is ASCII case-insensitive. Known compression suffixes (`.gz`, `.bz2`, …)
 /// are stripped once before matching (e.g. `model.nc.gz` → `NetCDF`). When the extension is
-/// missing or unrecognized, classic `NetCDF` (`CDF\\x01` / `CDF\\x02`) and HDF5
-/// (`\\x89HDF\\r\\n\\x1a\\n`) signatures are checked. NetCDF-4 (HDF5 container) should use
-/// a `NetCDF` extension so the `NetCDF` importer is selected. Zarr v3 directory stores are
-/// detected when the path is a directory containing root `zarr.json` (`zarr_format: 3`).
+/// missing or unrecognized, classic `NetCDF` (`CDF\\x01` / `CDF\\x02`), HDF5
+/// (`\\x89HDF\\r\\n\\x1a\\n`), and `NumPy` (`\\x93NUMPY`) signatures are checked. NetCDF-4
+/// (HDF5 container) should use a `NetCDF` extension so the `NetCDF` importer is selected.
+/// `.npz` is extension-only (a bare zip signature is not treated as `NumPy`). Zarr v3
+/// directory stores are detected when the path is a directory containing root `zarr.json`
+/// (`zarr_format: 3`).
 ///
 /// # Errors
 ///
@@ -89,6 +101,10 @@ fn format_from_extension(ext: &str) -> Option<ConvertInputFormat> {
         Some(ConvertInputFormat::Netcdf)
     } else if ZarrConvertInput::EXTENSIONS.contains(&ext) {
         Some(ConvertInputFormat::Zarr)
+    } else if NumpyConvertInput::NPY_EXTENSIONS.contains(&ext) {
+        Some(ConvertInputFormat::Npy)
+    } else if NumpyConvertInput::NPZ_EXTENSIONS.contains(&ext) {
+        Some(ConvertInputFormat::Npz)
     } else {
         None
     }
@@ -122,6 +138,9 @@ fn sniff_format_from_file(path: &Path) -> io::Result<ConvertInputFormat> {
     {
         return Ok(ConvertInputFormat::Netcdf);
     }
+    if n >= NumpyConvertInput::MAGIC.len() && header[..6] == NumpyConvertInput::MAGIC {
+        return Ok(ConvertInputFormat::Npy);
+    }
     Err(io::Error::new(
         io::ErrorKind::InvalidData,
         "unrecognized convert input signature",
@@ -135,5 +154,6 @@ fn unsupported_input(path: &Path, ext: &str) -> ConvertError {
         h5_ext: Hdf5ConvertInput::SUPPORTED_EXTENSIONS,
         nc_ext: NetcdfConvertInput::SUPPORTED_EXTENSIONS,
         zarr_ext: ZarrConvertInput::SUPPORTED_EXTENSIONS,
+        npy_ext: NumpyConvertInput::SUPPORTED_EXTENSIONS,
     }
 }
