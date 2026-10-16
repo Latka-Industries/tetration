@@ -46,7 +46,7 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | Topic | Detail |
 | ----- | ------ |
 | **Sniff** | `.h5`, `.hdf5`, `.hdf`, `.he2`, `.he5`, or `\x89HDF\r\n\x1a\n` signature |
-| **Walk** | Recursive groups; unsupported datasets **skipped silently** |
+| **Walk** | Recursive groups; unsupported datasets are **skipped** and listed on `ConvertReport.skipped` (CLI stderr). `--strict` fails instead of writing |
 | **Dtypes** | `f32`, `f64`, `u8` (incl. boolean), `i16`, `u16`, `i32`, `u32`, `i64`, `u64` |
 | **Skipped** | Scalars, 0-sized arrays, `f16`, strings, compounds, enums, opaque, VLEN, most exotic HDF5 types |
 | **CF** | Decode at import when attrs present; **requires `f32`/`f64` storage** for packed variables |
@@ -71,7 +71,7 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | Topic | Detail |
 | ----- | ------ |
 | **Sniff** | Directory with root `zarr.json`, `zarr_format: 3` |
-| **Walk** | `group` / `array` nodes; unsupported arrays skipped |
+| **Walk** | `group` / `array` nodes; unsupported arrays skipped and listed (`--strict` fails the convert) |
 | **Dtypes** | Wire-aligned set: `float16`–`float64`, `uint8`–`uint64`, `int16`–`int64`, `bool`/`int8` → `u8` |
 | **Chunk grid** | `chunk_grid.name == "regular"` only |
 | **Codecs** | **`bytes`** (little-endian) or **`bytes` + `zstd`** on chunk files — other codec chains fail at read |
@@ -106,11 +106,11 @@ These are intentional limits, silent skips, or sharp edges — not necessarily b
 
 ### Silent dataset drops
 
-Importers **skip** unsupported variables/arrays (`UnsupportedDtype`) and continue. Convert **fails only when zero** supported datasets remain (`NoDatasets`). A file that “mostly converted” may be missing string metadata datasets, compound tables, or auxiliary types with no error per skipped name.
+Importers **skip** unsupported variables/arrays (`UnsupportedDtype`) and continue. Convert **fails only when zero** supported datasets remain (`NoDatasets`), unless **`--strict`** is set.
 
-**Mitigation today:** compare `tet info` dataset list to source; check `ConvertReport.dataset_names` in library use.
+Each skip is a `{path, reason}` on [`ConvertReport.skipped`](../src/convert/mod.rs) and in the CLI JSON report. The CLI also prints `skipped N dataset(s):` on stderr. `--strict` returns `StrictSkips` **before writing** the `.tet`.
 
-**Future:** verbose skip log, `--strict` mode, or convert report JSON listing skipped paths.
+Scalars / 0-d NetCDF variables are recorded the same way.
 
 ### Type system mismatch
 
@@ -229,8 +229,8 @@ These often need **scientific semantics** (units, CRS, bounds) before raw conver
 
 | Feature | Why it matters |
 | ------- | -------------- |
-| **Convert report JSON** (`skipped`, `warnings`, dtype map) | Operability when datasets are silently dropped |
-| **`--strict`** | Fail on first unsupported dataset |
+| **Convert report JSON** (`skipped` shipped; extra warnings / dtype map still open) | Operability when datasets are left out |
+| **`--strict`** | Shipped: fail before write when any dataset was skipped |
 | **Rechunk policy flag** | Target chunk bytes (e.g. 4–64 MiB) on import |
 | **Cloud read source** | Convert from object store without full download |
 | **Streaming write from URL** | Pairs with cloud-native Phase 12 |

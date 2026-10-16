@@ -145,6 +145,9 @@ pub enum Commands {
         /// Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64).
         #[arg(long = "jobs", default_value_t = 0)]
         jobs: usize,
+        /// Fail when any source array is skipped (unsupported dtype, empty, or scalar).
+        #[arg(long)]
+        strict: bool,
     },
     /// Ingest one or more `.tet` files into a `.tet.d` package as sealed staging parts.
     Ingest {

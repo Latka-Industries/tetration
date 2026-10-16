@@ -11,8 +11,8 @@ use crate::utils::dtype::ElementDtype;
 use super::import_metadata::{finish_convert_footer, zarr_array_attrs};
 use super::parallel::ZarrParallelSource;
 use super::shared::{
-    ImportPlan, ImportTileRead, chunk_shape_for_import, ensure_non_empty, join_catalog_path,
-    write_plans_streaming,
+    ImportPlan, ImportTileRead, chunk_shape_for_import, ensure_non_empty, ensure_strict,
+    join_catalog_path, note_plan, write_plans_streaming,
 };
 use super::tile_io::tile_axis_ranges;
 use super::{ConvertError, ConvertProgress, ConvertReport, report};
@@ -38,6 +38,16 @@ pub fn convert_zarr_to_tet_with_progress(
     input: &Path,
     output: &Path,
     parallel_jobs: usize,
+    progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
+    convert_zarr_inner(input, output, parallel_jobs, false, progress)
+}
+
+pub(crate) fn convert_zarr_inner(
+    input: &Path,
+    output: &Path,
+    parallel_jobs: usize,
+    strict: bool,
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
@@ -45,12 +55,14 @@ pub fn convert_zarr_to_tet_with_progress(
         .canonicalize()
         .map_err(|e| ConvertError::Zarr(e.to_string()))?;
     let mut plans = Vec::new();
-    collect_zarr_plans(&store, "", "", &mut plans)?;
+    let mut skipped = Vec::new();
+    collect_zarr_plans(&store, "", "", &mut plans, &mut skipped)?;
 
     ensure_non_empty(
         input,
         &plans.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
     )?;
+    ensure_strict(input, &skipped, strict)?;
 
     let mut progress_bridge = |done: u64, total: u64, dataset: &str| {
         if let Some(ref mut cb) = progress {
@@ -77,6 +89,7 @@ pub fn convert_zarr_to_tet_with_progress(
         input,
         output,
         &plans,
+        skipped,
         history,
         started.elapsed().as_secs_f64(),
     ))
@@ -121,6 +134,7 @@ fn collect_zarr_plans(
     rel: &str,
     catalog_prefix: &str,
     plans: &mut Vec<ImportPlan>,
+    skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
     let dir = zarr_node_dir(store, rel);
     let meta = read_zarr_meta(&dir)?;
@@ -132,16 +146,12 @@ fn collect_zarr_plans(
         )));
     }
     match meta.node_type.as_str() {
-        "array" => match plan_zarr_array(catalog_prefix, rel, &meta) {
-            Ok(plan) => plans.push(plan),
-            Err(ConvertError::UnsupportedDtype { .. }) => {}
-            Err(e) => return Err(e),
-        },
+        "array" => note_plan(plan_zarr_array(catalog_prefix, rel, &meta), plans, skipped)?,
         "group" => {
             for child in zarr_child_names(&dir)? {
                 let child_rel = join_rel(rel, &child);
                 let child_catalog = join_catalog_path(catalog_prefix, &child);
-                collect_zarr_plans(store, &child_rel, &child_catalog, plans)?;
+                collect_zarr_plans(store, &child_rel, &child_catalog, plans, skipped)?;
             }
         }
         other => {

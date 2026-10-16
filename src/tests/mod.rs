@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 mod catalog;
+mod cli_convert;
 mod cli_history;
 mod cli_info;
 mod cli_output;

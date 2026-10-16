@@ -16,12 +16,12 @@ Build with `--no-default-features` for Zarr-only + query (no system HDF5/NetCDF 
 
 ## Public API
 
-- `convert_to_tet` / `convert_to_tet_with_progress` — auto-detect format, stream chunks
+- `convert_to_tet` / `convert_to_tet_with_progress` / `convert_to_tet_with_options` — auto-detect format, stream chunks (`ConvertOptions.strict` refuses skips)
 - `detect_convert_format` — extension + magic sniff
 - `default_parallel_jobs` / `resolve_parallel_jobs` — `--jobs` semantics
 - Per-format: `convert_h5_to_tet_*`, `convert_netcdf_to_tet_*`, `convert_zarr_to_tet_*`
 
-Returns `ConvertReport` (dataset names, dims, history row, elapsed).
+Returns `ConvertReport` (dataset names, dims, `skipped` paths, history row, elapsed).
 
 ## Submodules
 

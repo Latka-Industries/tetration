@@ -10,7 +10,7 @@ use crate::catalog::{
 };
 use crate::utils::dtype::ElementDtype;
 
-use super::ConvertError;
+use super::{ConvertError, ConvertSkip};
 
 /// Dataset geometry collected before a streaming write.
 #[derive(Clone)]
@@ -163,4 +163,54 @@ pub(crate) fn ensure_non_empty(
         });
     }
     Ok(())
+}
+
+/// Keep a planned dataset, or record an unsupported dtype as a skip.
+pub(crate) fn note_plan(
+    result: Result<ImportPlan, ConvertError>,
+    plans: &mut Vec<ImportPlan>,
+    skipped: &mut Vec<ConvertSkip>,
+) -> Result<(), ConvertError> {
+    match result {
+        Ok(plan) => {
+            plans.push(plan);
+            Ok(())
+        }
+        Err(ConvertError::UnsupportedDtype { name, detail }) => {
+            skipped.push(ConvertSkip {
+                path: name,
+                reason: detail,
+            });
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub(crate) fn record_skip(skipped: &mut Vec<ConvertSkip>, path: impl Into<String>, reason: &str) {
+    skipped.push(ConvertSkip {
+        path: path.into(),
+        reason: reason.to_owned(),
+    });
+}
+
+/// `--strict`: refuse to write when the walk skipped any dataset.
+pub(crate) fn ensure_strict(
+    path: &std::path::Path,
+    skipped: &[ConvertSkip],
+    strict: bool,
+) -> Result<(), ConvertError> {
+    if !strict || skipped.is_empty() {
+        return Ok(());
+    }
+    let detail = skipped
+        .iter()
+        .map(|skip| format!("{} ({})", skip.path, skip.reason))
+        .collect::<Vec<_>>()
+        .join("; ");
+    Err(ConvertError::StrictSkips {
+        path: path.display().to_string(),
+        count: skipped.len(),
+        detail,
+    })
 }
