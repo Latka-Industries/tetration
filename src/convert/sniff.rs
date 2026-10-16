@@ -27,6 +27,15 @@ impl NetcdfConvertInput {
     pub const SUPPORTED_EXTENSIONS: &str = ".nc, .netcdf, .nc4, .nc3, .cdf, .ncdf";
 }
 
+/// CSV / TSV convert input recognition. Delimiter follows the extension.
+pub struct CsvConvertInput;
+
+impl CsvConvertInput {
+    pub const CSV_EXTENSIONS: &[&str] = &["csv"];
+    pub const TSV_EXTENSIONS: &[&str] = &["tsv"];
+    pub const SUPPORTED_EXTENSIONS: &str = ".csv (comma), .tsv (tab)";
+}
+
 /// `NumPy` `.npy` / `.npz` convert input recognition.
 pub struct NumpyConvertInput;
 
@@ -105,6 +114,10 @@ fn format_from_extension(ext: &str) -> Option<ConvertInputFormat> {
         Some(ConvertInputFormat::Npy)
     } else if NumpyConvertInput::NPZ_EXTENSIONS.contains(&ext) {
         Some(ConvertInputFormat::Npz)
+    } else if CsvConvertInput::CSV_EXTENSIONS.contains(&ext)
+        || CsvConvertInput::TSV_EXTENSIONS.contains(&ext)
+    {
+        Some(ConvertInputFormat::Csv)
     } else {
         None
     }

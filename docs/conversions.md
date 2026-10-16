@@ -10,7 +10,7 @@ Implementation: [`src/convert/`](../src/convert/), [`src/export/`](../src/export
 
 | Direction | Formats | CLI / API |
 | --------- | ------- | --------- |
-| **Import → `.tet`** | HDF5, NetCDF, Zarr v3, NumPy `.npy` / `.npz` | `tet convert <in> <out.tet>` · `convert_to_tet` |
+| **Import → `.tet`** | HDF5, NetCDF, Zarr v3, NumPy `.npy` / `.npz`, CSV / TSV | `tet convert <in> <out.tet>` · `convert_to_tet` |
 | **Export `.tet` →** | Zarr v3 directory only | `tet export <in.tet> <out.zarr/>` · `export_tet_to_zarr` |
 | **Not implemented** | HDF5 / NetCDF / Parquet / Arrow / `.npy` export; Zarr v2 import; cloud URIs as convert input | — |
 
@@ -91,6 +91,20 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | **Chunking** | No source grid. Default tiles are about **64 MiB**, splitting the leading axis so each tile is one contiguous read. Smaller arrays stay one tile |
 | **CF** | Not applied |
 
+### Import: CSV / TSV (always available)
+
+| Topic | Detail |
+| ----- | ------ |
+| **Sniff** | `.csv` or `.tsv`. Delimiter is comma or tab from the extension. No content sniff |
+| **Header** | The first row is a header when any cell is not a number. Otherwise columns are `col0`, `col1`, … and that row is data. Cells are trimmed. A line with no fields is ignored |
+| **Mapping** | One 1-D dataset per numeric column, in file order. Not one 2-D table (columns may differ in dtype) |
+| **Dtypes** | A column of plain integers is `i64`. A decimal, exponent, `nan`, or `inf` makes the column `f64`. A blank cell is `NaN` and promotes an integer column to `f64` |
+| **Categories** | A column of text labels becomes an `i64` dataset. Codes start at 0 in first-seen order. A blank is `-1`. Footer attr `tetration_categories` is `{"codes":{…},"missing":-1}`. The JSON must fit in one 1024-byte attribute |
+| **Skipped** | Mixed number/text columns, category maps over that 1024-byte limit, and columns that are empty or only blank. Listed on `ConvertReport.skipped`. `--strict` still refuses to write |
+| **Rejected** | Ragged rows, and two columns with the same name. No `.tet` is written |
+| **Chunking** | ~64 MiB tiles along the column, same default as NumPy. CSV is parsed into column buffers first (rows are not hyperslabs). A `--chunk-mib` override waits on THI-487 |
+| **CF** | Not applied |
+
 ### Export: `.tet` → Zarr v3
 
 | Topic | Detail |
@@ -105,8 +119,8 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 
 | Build | Convert capability |
 | ----- | ------------------ |
-| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr, NumPy |
-| **`--no-default-features`** | Zarr + NumPy import, plus query on existing `.tet` (no system HDF5/NetCDF libs) |
+| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr, NumPy, CSV |
+| **`--no-default-features`** | Zarr, NumPy, and CSV import, plus query on existing `.tet` (no system HDF5/NetCDF libs) |
 | **`tetration-ffi` lean lib** | Same as no-default-features inside shared library |
 
 System packages for default builds: see [README — cargo install](../README.md).
@@ -213,9 +227,9 @@ Prioritized by fit with Tetration’s **dense chunked array** model. Effort is q
 | ------ | ----- | ---------------- |
 | **Apache Parquet** | Analytics, cloud warehouses | Columnar vs N-D tensor; nested/repeated fields; row groups ≠ chunk grid; statistics as index seed ([roadmap — Phase 13](roadmap.md#2-smarter-indexing-prospective-phase-13)) |
 | **Apache Arrow / Feather / IPC** | Zero-copy interchange | Record batches vs single ndarray; schema with nulls; chunked arrays |
-| **CSV / TSV** | Human interchange | Not chunked; infer types; size limits; poor fit for `.tet` strengths |
+| **CSV / TSV** | Shipped: one 1-D dataset per numeric column, plus integer codes for category columns | Delimiter is the extension only (comma or tab). No custom delimiter flag |
 
-**Design question:** import as **one dataset per column** (wide table) vs **materialized tensor** (requires reshape rules).
+**Design question:** import as **one dataset per column** (wide table) vs **materialized tensor** (requires reshape rules). CSV uses one 1-D dataset per numeric column.
 
 ### Tier C — domain geospatial / signal formats
 

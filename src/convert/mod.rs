@@ -15,6 +15,7 @@ use serde::Serialize;
 use crate::catalog::CatalogError;
 
 mod cf;
+mod csv;
 #[cfg(feature = "tetration-hdf5")]
 mod hdf5;
 #[cfg(feature = "tetration-hdf5")]
@@ -31,6 +32,9 @@ mod zarr;
 
 pub use parallel::{default_parallel_jobs, resolve_parallel_jobs};
 
+#[cfg(test)]
+pub(crate) use csv::convert_csv_with_chunk_bytes;
+pub use csv::{convert_csv_to_tet, convert_csv_to_tet_with_progress};
 #[cfg(feature = "tetration-hdf5")]
 pub use hdf5::{convert_h5_to_tet, convert_h5_to_tet_with_progress};
 #[cfg(feature = "tetration-netcdf")]
@@ -51,10 +55,11 @@ pub enum ConvertInputFormat {
     Zarr,
     Npy,
     Npz,
+    Csv,
 }
 
 impl ConvertInputFormat {
-    /// History footer source tag (`"h5"`, `"nc"`, `"zarr"`, `"npy"`, or `"npz"`).
+    /// History footer source tag (`"h5"`, `"nc"`, `"zarr"`, `"npy"`, `"npz"`, or `"csv"`).
     #[must_use]
     pub const fn history_source(self) -> &'static str {
         match self {
@@ -63,6 +68,7 @@ impl ConvertInputFormat {
             Self::Zarr => "zarr",
             Self::Npy => "npy",
             Self::Npz => "npz",
+            Self::Csv => "csv",
         }
     }
 }
@@ -71,8 +77,8 @@ impl ConvertInputFormat {
 ///
 /// See [`detect_convert_format`] and [`Hdf5ConvertInput`] / [`NetcdfConvertInput`].
 pub use sniff::{
-    ConvertCompressionSuffixes, Hdf5ConvertInput, NetcdfConvertInput, NumpyConvertInput,
-    ZarrConvertInput, detect_convert_format,
+    ConvertCompressionSuffixes, CsvConvertInput, Hdf5ConvertInput, NetcdfConvertInput,
+    NumpyConvertInput, ZarrConvertInput, detect_convert_format,
 };
 
 /// Convert a foreign array file to `.tet`, picking the importer from the input extension.
@@ -158,6 +164,13 @@ pub fn convert_to_tet_with_options(
             options.parallel_jobs,
             options.strict,
             ConvertInputFormat::Npz,
+            progress,
+        ),
+        ConvertInputFormat::Csv => csv::convert_csv_inner(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
             progress,
         ),
     }
@@ -285,6 +298,8 @@ pub enum ConvertError {
     Zarr(String),
     #[error("NumPy open/read failed: {0}")]
     Numpy(String),
+    #[error("CSV open/read failed: {0}")]
+    Csv(String),
     #[error("unsupported element type in variable `{name}`: {detail}")]
     UnsupportedDtype { name: String, detail: String },
     #[error("skipped {count} unsupported dataset(s) in {path} (--strict): {detail}")]
@@ -294,7 +309,7 @@ pub enum ConvertError {
         detail: String,
     },
     #[error(
-        "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; {npy_ext}; or recognizable HDF5 / NetCDF-3 / NumPy file signature / Zarr v3 directory store)"
+        "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; {npy_ext}; .csv (comma), .tsv (tab); or recognizable HDF5 / NetCDF-3 / NumPy file signature / Zarr v3 directory store)"
     )]
     UnsupportedInputExtension {
         path: String,
