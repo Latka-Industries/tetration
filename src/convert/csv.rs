@@ -117,6 +117,7 @@ pub(crate) fn convert_csv_with_chunk_bytes(
     ))
 }
 
+/// One column that will become a 1-D dataset.
 struct ParsedColumn {
     name: String,
     dtype: ElementDtype,
@@ -124,11 +125,22 @@ struct ParsedColumn {
     attrs: BTreeMap<String, String>,
 }
 
+/// Columns kept for import, plus columns recorded as skips.
 struct ParsedTable {
     columns: Vec<ParsedColumn>,
     skipped: Vec<super::ConvertSkip>,
 }
 
+/// Parse the file into one buffer per column.
+///
+/// `.csv` is comma-separated and `.tsv` is tab-separated. Cells are trimmed and a
+/// leading BOM is stripped. The first row is a header when any cell is text;
+/// otherwise names are `col0`, `col1`, … and that row is data. A blank in an
+/// integer column promotes the column to `f64` with NaN for the blank. A column
+/// whose non-blank cells are all text becomes category codes. Mixed text and
+/// numbers, and columns that are empty or all NaN, are skips. Ragged rows and
+/// duplicate names are errors. The csv crate drops lines with no fields; a
+/// whitespace-only field is a blank.
 fn read_table(input: &Path) -> Result<ParsedTable, ConvertError> {
     let delimiter = delimiter_for(input)?;
     let mut reader = csv::ReaderBuilder::new()
@@ -199,6 +211,7 @@ fn read_table(input: &Path) -> Result<ParsedTable, ConvertError> {
     })
 }
 
+/// Comma for `.csv`, tab for `.tsv`. Any other extension is an error.
 fn delimiter_for(path: &Path) -> Result<u8, ConvertError> {
     let ext = path
         .extension()
@@ -214,6 +227,7 @@ fn delimiter_for(path: &Path) -> Result<u8, ConvertError> {
     }
 }
 
+/// Header labels, trimmed. An empty cell becomes `col{index}`.
 fn header_names(record: &csv::StringRecord) -> Vec<String> {
     record
         .iter()
@@ -229,6 +243,7 @@ fn header_names(record: &csv::StringRecord) -> Vec<String> {
         .collect()
 }
 
+/// Reject two columns that would share a catalog name.
 fn ensure_unique_names(input: &Path, names: &[String]) -> Result<(), ConvertError> {
     let mut seen = std::collections::BTreeSet::new();
     for name in names {
@@ -242,6 +257,7 @@ fn ensure_unique_names(input: &Path, names: &[String]) -> Result<(), ConvertErro
     Ok(())
 }
 
+/// Append one record. `row_index` is 1-based in the error text.
 fn push_row(
     input: &Path,
     record: &csv::StringRecord,
@@ -263,6 +279,7 @@ fn push_row(
 }
 
 #[derive(Clone, Copy, PartialEq)]
+/// A trimmed cell after the header decision.
 enum Cell {
     Blank,
     Int(i64),
@@ -270,6 +287,8 @@ enum Cell {
     Text,
 }
 
+/// Plain integers (optional sign, digits only) stay integers. Decimals, exponents,
+/// and `nan` / `inf` spellings are floats. Anything else is text.
 fn classify(field: &str) -> Cell {
     let token = field.trim().trim_start_matches('\u{feff}');
     if token.is_empty() {
@@ -288,11 +307,13 @@ fn classify(field: &str) -> Cell {
     Cell::Text
 }
 
+/// Optional `+` or `-`, then one or more ASCII digits.
 fn is_plain_integer(token: &str) -> bool {
     let digits = token.strip_prefix(['+', '-']).unwrap_or(token);
     !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+/// `nan`, `inf`, and `infinity`, with an optional sign, ignoring case.
 fn is_non_finite_token(token: &str) -> bool {
     matches!(
         token.to_ascii_lowercase().as_str(),
@@ -303,6 +324,7 @@ fn is_non_finite_token(token: &str) -> bool {
 const SKIP_NON_NUMERIC: &str = "non-numeric";
 const SKIP_EMPTY: &str = "empty";
 
+/// Column state while rows are scanned. The first non-blank cell chooses the kind.
 enum Building {
     Empty,
     Blanks(u64),
@@ -312,6 +334,7 @@ enum Building {
     Skip(String),
 }
 
+/// Little-endian payload ready to tile, or a skip reason.
 enum Finished {
     Import {
         dtype: ElementDtype,
@@ -324,6 +347,7 @@ enum Finished {
 }
 
 impl Building {
+    /// Route one cell into the column state machine.
     fn push_field(&mut self, field: &str) {
         if matches!(self, Self::Skip(_)) {
             return;
@@ -337,6 +361,7 @@ impl Building {
         }
     }
 
+    /// Start or extend a category column. A number already stored makes the column a skip.
     fn push_text(&mut self, label: &str) {
         match self {
             Self::Empty => {
@@ -364,6 +389,7 @@ impl Building {
         }
     }
 
+    /// A blank is a category missing code, or NaN after an integer column promotes to `f64`.
     fn push_blank(&mut self) {
         match self {
             Self::Empty => *self = Self::Blanks(1),
@@ -379,6 +405,7 @@ impl Building {
         }
     }
 
+    /// Keep an all-integer column as `i64`. A blank seen earlier promotes it to `f64`.
     fn push_int(&mut self, value: i64) {
         match self {
             Self::Empty => *self = Self::Int(vec![value]),
@@ -394,6 +421,7 @@ impl Building {
         }
     }
 
+    /// Store a decimal or non-finite value, promoting an integer column to `f64`.
     fn push_float(&mut self, value: f64) {
         match self {
             Self::Empty => *self = Self::Float(vec![value]),
@@ -413,6 +441,7 @@ impl Building {
         }
     }
 
+    /// Emit `i64`, `f64`, or category bytes. Empty, all-NaN, and mixed columns are skips.
     fn finish(self) -> Finished {
         match self {
             Self::Skip(reason) => Finished::Skip { reason },
@@ -457,6 +486,7 @@ impl Building {
     }
 }
 
+/// Little-endian `i64` payload.
 fn i64s_to_le_bytes(values: &[i64]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(values.len() * 8);
     for value in values {
@@ -465,6 +495,7 @@ fn i64s_to_le_bytes(values: &[i64]) -> Vec<u8> {
     bytes
 }
 
+/// Attach the input path to a csv crate error.
 fn csv_io(path: &Path, err: &csv::Error) -> ConvertError {
     ConvertError::Csv(format!("{}: {err}", path.display()))
 }

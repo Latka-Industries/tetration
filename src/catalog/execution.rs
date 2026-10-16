@@ -17,6 +17,7 @@ pub struct FileExecutionSettingsV1 {
 }
 
 impl FileExecutionSettingsV1 {
+    /// Length of the execution tail in the chunk index header.
     pub const WIRE_LEN: usize = 16;
 
     /// All-zero settings: use engine default percent of detected host RAM.
