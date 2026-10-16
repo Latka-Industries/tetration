@@ -22,6 +22,7 @@ mod hdf5_shared;
 mod import_metadata;
 #[cfg(feature = "tetration-netcdf")]
 mod netcdf;
+mod numpy;
 mod parallel;
 mod shared;
 mod sniff;
@@ -34,6 +35,12 @@ pub use parallel::{default_parallel_jobs, resolve_parallel_jobs};
 pub use hdf5::{convert_h5_to_tet, convert_h5_to_tet_with_progress};
 #[cfg(feature = "tetration-netcdf")]
 pub use netcdf::{convert_netcdf_to_tet, convert_netcdf_to_tet_with_progress};
+#[cfg(test)]
+pub(crate) use numpy::convert_numpy_with_chunk_bytes;
+pub use numpy::{
+    convert_npy_to_tet, convert_npy_to_tet_with_progress, convert_npz_to_tet,
+    convert_npz_to_tet_with_progress,
+};
 pub use zarr::{convert_zarr_to_tet, convert_zarr_to_tet_with_progress, is_zarr_v3_directory};
 
 /// Supported foreign input formats for [`convert_to_tet`].
@@ -42,16 +49,20 @@ pub enum ConvertInputFormat {
     H5,
     Netcdf,
     Zarr,
+    Npy,
+    Npz,
 }
 
 impl ConvertInputFormat {
-    /// History footer source tag (`"h5"`, `"nc"`, or `"zarr"`).
+    /// History footer source tag (`"h5"`, `"nc"`, `"zarr"`, `"npy"`, or `"npz"`).
     #[must_use]
     pub const fn history_source(self) -> &'static str {
         match self {
             Self::H5 => "h5",
             Self::Netcdf => "nc",
             Self::Zarr => "zarr",
+            Self::Npy => "npy",
+            Self::Npz => "npz",
         }
     }
 }
@@ -60,8 +71,8 @@ impl ConvertInputFormat {
 ///
 /// See [`detect_convert_format`] and [`Hdf5ConvertInput`] / [`NetcdfConvertInput`].
 pub use sniff::{
-    ConvertCompressionSuffixes, Hdf5ConvertInput, NetcdfConvertInput, ZarrConvertInput,
-    detect_convert_format,
+    ConvertCompressionSuffixes, Hdf5ConvertInput, NetcdfConvertInput, NumpyConvertInput,
+    ZarrConvertInput, detect_convert_format,
 };
 
 /// Convert a foreign array file to `.tet`, picking the importer from the input extension.
@@ -131,6 +142,22 @@ pub fn convert_to_tet_with_options(
             output,
             options.parallel_jobs,
             options.strict,
+            progress,
+        ),
+        ConvertInputFormat::Npy => numpy::convert_numpy_inner(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
+            ConvertInputFormat::Npy,
+            progress,
+        ),
+        ConvertInputFormat::Npz => numpy::convert_numpy_inner(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
+            ConvertInputFormat::Npz,
             progress,
         ),
     }
@@ -256,6 +283,8 @@ pub enum ConvertError {
     Hdf5(String),
     #[error("Zarr open/read failed: {0}")]
     Zarr(String),
+    #[error("NumPy open/read failed: {0}")]
+    Numpy(String),
     #[error("unsupported element type in variable `{name}`: {detail}")]
     UnsupportedDtype { name: String, detail: String },
     #[error("skipped {count} unsupported dataset(s) in {path} (--strict): {detail}")]
@@ -265,7 +294,7 @@ pub enum ConvertError {
         detail: String,
     },
     #[error(
-        "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; or recognizable HDF5 / NetCDF-3 file signature / Zarr v3 directory store)"
+        "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; {npy_ext}; or recognizable HDF5 / NetCDF-3 / NumPy file signature / Zarr v3 directory store)"
     )]
     UnsupportedInputExtension {
         path: String,
@@ -273,6 +302,7 @@ pub enum ConvertError {
         h5_ext: &'static str,
         nc_ext: &'static str,
         zarr_ext: &'static str,
+        npy_ext: &'static str,
     },
     #[error("{format:?} convert requires Cargo feature `{feature}`")]
     ConvertFeatureDisabled {

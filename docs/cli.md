@@ -9,7 +9,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet repair`](#tet-repair) `<path.tet\|.tet.d>`   | —      | Plan or apply safe in-place fixes (footer, stale publish)   |
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
-| [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 → `.tet`                            |
+| [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy → `.tet`                    |
 | [`tet export`](#tet-export) `<in.tet> <out.zarr/>` | —      | `.tet` → Zarr v3 directory store                            |
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
 | [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
@@ -117,6 +117,7 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | HDF5    | `.h5`, `.hdf5`, `.hdf`, `.he2`, `.he5`, or file signature |
 | NetCDF  | `.nc`, `.netcdf`, `.nc4`, `.nc3`, `.cdf`, or signature    |
 | Zarr v3 | Directory with root `zarr.json`                           |
+| NumPy   | `.npy`, `.npz` (one dataset per member), or `\x93NUMPY` magic |
 
 | Flag       | Effect                                                                         |
 | ---------- | ------------------------------------------------------------------------------ |

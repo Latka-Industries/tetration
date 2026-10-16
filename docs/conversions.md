@@ -10,7 +10,7 @@ Implementation: [`src/convert/`](../src/convert/), [`src/export/`](../src/export
 
 | Direction | Formats | CLI / API |
 | --------- | ------- | --------- |
-| **Import → `.tet`** | HDF5, NetCDF, Zarr v3 | `tet convert <in> <out.tet>` · `convert_to_tet` |
+| **Import → `.tet`** | HDF5, NetCDF, Zarr v3, NumPy `.npy` / `.npz` | `tet convert <in> <out.tet>` · `convert_to_tet` |
 | **Export `.tet` →** | Zarr v3 directory only | `tet export <in.tet> <out.zarr/>` · `export_tet_to_zarr` |
 | **Not implemented** | HDF5 / NetCDF / Parquet / Arrow / `.npy` export; Zarr v2 import; cloud URIs as convert input | — |
 
@@ -30,7 +30,7 @@ sniff format → walk groups/variables/arrays → ImportPlan per dataset
 | ----- | -------- |
 | **Sniff** | Extension (case-insensitive), optional compression suffix peel (`.gz`, `.bz2`, … — **name only**, file is not decompressed), then magic bytes or Zarr v3 `zarr.json` |
 | **Plan** | One catalog dataset per supported numeric array; nested groups → slash names (`group/var`) |
-| **Chunk grid** | Reuse source chunking when rank matches; else **one tile = full array** |
+| **Chunk grid** | Reuse source chunking when rank matches; else **one tile = full array**. NumPy has no source chunks, so `.npy` / `.npz` use a **64 MiB** leading-axis tile instead |
 | **CF decode** | `scale_factor`, `add_offset`, `_FillValue` applied at tile read (HDF5 / NetCDF); stored values become decoded floats + NaN for fill |
 | **Write** | Streaming multi-dataset `.tet`; payloads **raw** or **zstd** (v1 catalog codecs) |
 | **Metadata** | Selected attrs, `dim_names`, coordinate labels → footer `metadata` (64 KiB inline limit; larger metadata spills — see layout doc) |
@@ -78,6 +78,19 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | **CF** | Not applied (values stored as in Zarr) |
 | **Metadata** | Array `attributes` copied to footer attrs |
 
+### Import: NumPy `.npy` / `.npz` (always available)
+
+| Topic | Detail |
+| ----- | ------ |
+| **Sniff** | `.npy`, `.npz`, or `\x93NUMPY` magic. A bare zip signature is not treated as `.npz` |
+| **`.npy`** | One C-order numeric array → dataset `data`. Payload is read from the header data offset in tiles (the array is not loaded whole) |
+| **`.npz`** | One dataset per `.npy` member (`weights.npy` → `weights`, `group/bias.npy` → `group/bias`). Duplicate catalog names are an error. Stored members are sliced in the zip; compressed members are inflated one at a time to a temp file, then tiled |
+| **Rejected** | Fortran-order, object / pickled dtypes (`\|O`). These fail the convert; they are not skips |
+| **Skipped** | Scalars, 0-sized arrays, big-endian, bool, complex, strings, structured dtypes. `--strict` still refuses to write |
+| **Dtypes** | Little-endian `<f2` (`f16`), `<f4`, `<f8`, `<i2`, `<i4`, `<i8`, `\|u1`, `<u2`, `<u4`, `<u8` |
+| **Chunking** | No source grid. Default tiles are about **64 MiB**, splitting the leading axis so each tile is one contiguous read. Smaller arrays stay one tile |
+| **CF** | Not applied |
+
 ### Export: `.tet` → Zarr v3
 
 | Topic | Detail |
@@ -92,8 +105,8 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 
 | Build | Convert capability |
 | ----- | ------------------ |
-| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr |
-| **`--no-default-features`** | Zarr import + query on existing `.tet` (no system HDF5/NetCDF libs) |
+| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr, NumPy |
+| **`--no-default-features`** | Zarr + NumPy import, plus query on existing `.tet` (no system HDF5/NetCDF libs) |
 | **`tetration-ffi` lean lib** | Same as no-default-features inside shared library |
 
 System packages for default builds: see [README — cargo install](../README.md).
@@ -189,7 +202,6 @@ Prioritized by fit with Tetration’s **dense chunked array** model. Effort is q
 
 | Format | Value | Main roadblocks |
 | ------ | ----- | ---------------- |
-| **NumPy `.npy` / `.npz`** | Ubiquitous in Python science stack | `.npz` multi-array naming; default chunk policy; Fortran-order arrays; pickling in `.npz` (reject) |
 | **Zarr v2** | Large installed base | Different metadata (`/.zgroup`, `.zarray`); codec matrix; v2→v3 mapping |
 | **HDF5 export** | Round-trip with HDF5 ecosystems | Writer API, filter/chunk choices, group attrs, compound types not in v1 |
 | **NetCDF export** | CF workflows, tools expecting `.nc` | Shared dimensions, coordinate variables, CF attrs, unlimited dims |
