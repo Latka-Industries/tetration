@@ -136,9 +136,9 @@ pub enum Commands {
         /// Destination Zarr v3 directory (must not exist or must be empty).
         output: PathBuf,
     },
-    /// Convert HDF5 / `NetCDF` / Zarr v3 directory store into `.tet` (format from input extension or sniff).
+    /// Convert HDF5, `NetCDF`, `Zarr`, `NumPy`, CSV, or Parquet into `.tet`.
     Convert {
-        /// Source array file (`.h5`/`.hdf5`/`.hdf`/`.he2`/`.he5`, `.nc`/`.netcdf`/`.nc4`/`.nc3`/`.cdf`, Zarr v3 directory with root `zarr.json`, or recognizable signature).
+        /// Source array file or Zarr directory (extension or file signature).
         input: PathBuf,
         /// Destination `.tet` file.
         output: PathBuf,
@@ -148,6 +148,11 @@ pub enum Commands {
         /// Fail when any source array is skipped (unsupported dtype, empty, or scalar).
         #[arg(long)]
         strict: bool,
+        /// Retile every dataset to about N MiB along the leading axis.
+        ///
+        /// Omit to keep source chunking, or the 64 MiB default for `NumPy`, CSV, and Parquet.
+        #[arg(long, value_name = "N")]
+        chunk_mib: Option<u32>,
     },
     /// Ingest one or more `.tet` files into a `.tet.d` package as sealed staging parts.
     Ingest {

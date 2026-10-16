@@ -121,10 +121,11 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | CSV     | `.csv` (comma) or `.tsv` (tab). One 1-D dataset per numeric column. Text labels become `i64` codes plus a `tetration_categories` footer attr when the map fits in 1024 bytes |
 | Parquet | `.parquet`, `.pq`, or `PAR1`. Same column mapping as CSV. Requires `--features tetration-parquet` |
 
-| Flag       | Effect                                                                         |
-| ---------- | ------------------------------------------------------------------------------ |
-| `--jobs N` | Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64) |
-| `--strict` | Fail (no output file) when any source array is skipped |
+| Flag            | Effect                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `--jobs N`      | Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64)                  |
+| `--strict`      | Fail (no output file) when any source array is skipped                                          |
+| `--chunk-mib N` | Retile every dataset to about N MiB along the leading axis. Omit to keep source chunks (or 64 MiB for NumPy, CSV, and Parquet) |
 
 ## `tet export`
 

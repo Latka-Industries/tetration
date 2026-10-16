@@ -42,7 +42,7 @@ pub fn convert_parquet_to_tet_with_progress(
     parallel_jobs: usize,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    convert_parquet_inner(input, output, parallel_jobs, false, progress)
+    convert_parquet_inner(input, output, parallel_jobs, false, None, progress)
 }
 
 pub(crate) fn convert_parquet_inner(
@@ -50,6 +50,7 @@ pub(crate) fn convert_parquet_inner(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     convert_parquet_with_chunk_bytes(
@@ -57,7 +58,7 @@ pub(crate) fn convert_parquet_inner(
         output,
         parallel_jobs,
         strict,
-        NUMPY_DEFAULT_CHUNK_BYTES,
+        chunk_bytes.unwrap_or(NUMPY_DEFAULT_CHUNK_BYTES),
         progress,
     )
 }

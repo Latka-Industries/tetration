@@ -32,6 +32,7 @@ pub(crate) fn run_convert(
     output: &Path,
     jobs: usize,
     strict: bool,
+    chunk_mib: Option<u32>,
 ) -> Result<(), String> {
     use indicatif::{ProgressBar, ProgressStyle};
 
@@ -77,6 +78,7 @@ pub(crate) fn run_convert(
         ConvertOptions {
             parallel_jobs: jobs,
             strict,
+            chunk_mib,
         },
         progress,
     )

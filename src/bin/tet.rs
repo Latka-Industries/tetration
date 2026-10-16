@@ -174,7 +174,8 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             output,
             jobs,
             strict,
-        } => run_convert(&input, &output, jobs, strict),
+            chunk_mib,
+        } => run_convert(&input, &output, jobs, strict, chunk_mib),
         Commands::Ingest {
             inputs,
             out,

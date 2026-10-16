@@ -122,6 +122,7 @@ pub fn convert_to_tet_with_progress(
         ConvertOptions {
             parallel_jobs,
             strict: false,
+            chunk_mib: None,
         },
         progress,
     )
@@ -139,12 +140,14 @@ pub fn convert_to_tet_with_options(
     options: ConvertOptions,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
+    let chunk_bytes = shared::chunk_target_bytes(options.chunk_mib)?;
     match detect_convert_format(input)? {
         ConvertInputFormat::H5 => convert_h5_dispatch(
             input,
             output,
             options.parallel_jobs,
             options.strict,
+            chunk_bytes,
             progress,
         ),
         ConvertInputFormat::Netcdf => convert_netcdf_dispatch(
@@ -152,6 +155,7 @@ pub fn convert_to_tet_with_options(
             output,
             options.parallel_jobs,
             options.strict,
+            chunk_bytes,
             progress,
         ),
         ConvertInputFormat::Zarr => zarr::convert_zarr_inner(
@@ -159,6 +163,7 @@ pub fn convert_to_tet_with_options(
             output,
             options.parallel_jobs,
             options.strict,
+            chunk_bytes,
             progress,
         ),
         ConvertInputFormat::Npy => numpy::convert_numpy_inner(
@@ -167,6 +172,7 @@ pub fn convert_to_tet_with_options(
             options.parallel_jobs,
             options.strict,
             ConvertInputFormat::Npy,
+            chunk_bytes,
             progress,
         ),
         ConvertInputFormat::Npz => numpy::convert_numpy_inner(
@@ -175,6 +181,7 @@ pub fn convert_to_tet_with_options(
             options.parallel_jobs,
             options.strict,
             ConvertInputFormat::Npz,
+            chunk_bytes,
             progress,
         ),
         ConvertInputFormat::Csv => csv::convert_csv_inner(
@@ -182,6 +189,7 @@ pub fn convert_to_tet_with_options(
             output,
             options.parallel_jobs,
             options.strict,
+            chunk_bytes,
             progress,
         ),
         ConvertInputFormat::Parquet => convert_parquet_dispatch(
@@ -189,6 +197,7 @@ pub fn convert_to_tet_with_options(
             output,
             options.parallel_jobs,
             options.strict,
+            chunk_bytes,
             progress,
         ),
     }
@@ -200,9 +209,10 @@ fn convert_parquet_dispatch(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    parquet::convert_parquet_inner(input, output, parallel_jobs, strict, progress)
+    parquet::convert_parquet_inner(input, output, parallel_jobs, strict, chunk_bytes, progress)
 }
 
 #[cfg(not(feature = "tetration-parquet"))]
@@ -211,6 +221,7 @@ fn convert_parquet_dispatch(
     _output: &Path,
     _parallel_jobs: usize,
     _strict: bool,
+    _chunk_bytes: Option<u64>,
     _progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     Err(ConvertError::ConvertFeatureDisabled {
@@ -225,9 +236,10 @@ fn convert_h5_dispatch(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    hdf5::convert_h5_inner(input, output, parallel_jobs, strict, progress)
+    hdf5::convert_h5_inner(input, output, parallel_jobs, strict, chunk_bytes, progress)
 }
 
 #[cfg(not(feature = "tetration-hdf5"))]
@@ -236,6 +248,7 @@ fn convert_h5_dispatch(
     _output: &Path,
     _parallel_jobs: usize,
     _strict: bool,
+    _chunk_bytes: Option<u64>,
     _progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     Err(ConvertError::ConvertFeatureDisabled {
@@ -250,9 +263,10 @@ fn convert_netcdf_dispatch(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    netcdf::convert_netcdf_inner(input, output, parallel_jobs, strict, progress)
+    netcdf::convert_netcdf_inner(input, output, parallel_jobs, strict, chunk_bytes, progress)
 }
 
 #[cfg(not(feature = "tetration-netcdf"))]
@@ -261,6 +275,7 @@ fn convert_netcdf_dispatch(
     _output: &Path,
     _parallel_jobs: usize,
     _strict: bool,
+    _chunk_bytes: Option<u64>,
     _progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     Err(ConvertError::ConvertFeatureDisabled {
@@ -276,6 +291,9 @@ pub struct ConvertOptions {
     pub parallel_jobs: usize,
     /// Fail before writing when any dataset was skipped.
     pub strict: bool,
+    /// Retile every dataset to about this many MiB along the leading axis.
+    /// `None` keeps source chunking, or the 64 MiB default for `NumPy`, CSV, and Parquet.
+    pub chunk_mib: Option<u32>,
 }
 
 /// Progress event emitted while streaming chunk payloads during convert.
@@ -364,6 +382,8 @@ pub enum ConvertError {
         zarr_ext: &'static str,
         npy_ext: &'static str,
     },
+    #[error("--chunk-mib must be at least 1")]
+    ChunkMibZero,
     #[error("{format:?} convert requires Cargo feature `{feature}`")]
     ConvertFeatureDisabled {
         format: ConvertInputFormat,
