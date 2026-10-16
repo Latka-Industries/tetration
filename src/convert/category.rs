@@ -1,12 +1,19 @@
 //! First-seen category codes shared by CSV and Parquet.
+//!
+//! Text cells become `i64` codes starting at 0. Blank or null is [`CATEGORY_MISSING`]
+//! (`-1`). The label map is stored as the footer attr [`CATEGORY_ATTR`]. A map that
+//! does not fit in [`MetadataLimitsV1::attr_string_bytes`] is a skip, not a truncated note.
 
 use std::collections::BTreeMap;
 
 use crate::catalog::MetadataLimitsV1;
 
+/// Footer attribute holding `{"codes":{...},"missing":-1}`.
 pub(crate) const CATEGORY_ATTR: &str = "tetration_categories";
+/// Code written for a blank CSV cell or a Parquet null.
 pub(crate) const CATEGORY_MISSING: i64 = -1;
 
+/// One text column accumulated in first-seen order.
 pub(crate) struct CategoryColumn {
     codes: BTreeMap<String, i64>,
     next: i64,
@@ -14,6 +21,7 @@ pub(crate) struct CategoryColumn {
     overflow: bool,
 }
 
+/// Little-endian `i64` payload plus the footer attribute map.
 pub(crate) struct CategoryImport {
     pub bytes: Vec<u8>,
     pub attrs: BTreeMap<String, String>,

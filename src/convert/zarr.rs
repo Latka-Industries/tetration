@@ -1,4 +1,7 @@
-//! Zarr v3 directory store → `.tet` conversion.
+//! Zarr v2 and v3 directory stores → `.tet`.
+//!
+//! v3 (`zarr.json`) wins when both metadata files are present. v2 (`.zgroup` / `.zarray`)
+//! uses history source `zarr2`. Chunk files are raw or zstd; other codecs are skips.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,6 +12,7 @@ use serde::Deserialize;
 use crate::utils::dtype::ElementDtype;
 
 use super::import_metadata::{finish_convert_footer, zarr_array_attrs};
+use super::numpy::numpy_chunk_shape;
 use super::parallel::ZarrParallelSource;
 use super::shared::{
     ImportPlan, ImportTileRead, chunk_shape_for_import, ensure_non_empty, ensure_strict,
@@ -17,10 +21,10 @@ use super::shared::{
 use super::tile_io::tile_axis_ranges;
 use super::{ConvertError, ConvertProgress, ConvertReport, report};
 
-/// Import supported numeric arrays from a Zarr v3 directory store into one `.tet`.
+/// Import supported numeric arrays from a Zarr v2 or v3 directory store into one `.tet`.
 ///
-/// Supported element types: `float32`, `float64`, `int32`, `int64`. Nested groups map to
-/// slash-separated catalog names (`primary/f32`). Chunk payloads may be raw `bytes` or `bytes` + `zstd`.
+/// Nested groups map to slash-separated catalog names (`primary/f32`). Chunk payloads may be
+/// raw bytes or zstd.
 ///
 /// # Errors
 ///
@@ -40,7 +44,7 @@ pub fn convert_zarr_to_tet_with_progress(
     parallel_jobs: usize,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    convert_zarr_inner(input, output, parallel_jobs, false, progress)
+    convert_zarr_inner(input, output, parallel_jobs, false, None, progress)
 }
 
 pub(crate) fn convert_zarr_inner(
@@ -48,6 +52,7 @@ pub(crate) fn convert_zarr_inner(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
@@ -58,9 +63,9 @@ pub(crate) fn convert_zarr_inner(
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
     if v2 {
-        collect_zarr_v2_plans(&store, "", "", &mut plans, &mut skipped)?;
+        collect_zarr_v2_plans(&store, "", "", chunk_bytes, &mut plans, &mut skipped)?;
     } else {
-        collect_zarr_plans(&store, "", "", &mut plans, &mut skipped)?;
+        collect_zarr_plans(&store, "", "", chunk_bytes, &mut plans, &mut skipped)?;
     }
 
     ensure_non_empty(
@@ -108,6 +113,9 @@ pub(crate) fn read_zarr_tile_le_into(
     spec: ImportTileRead<'_>,
     buf: &mut [u8],
 ) -> Result<(), ConvertError> {
+    if let Some(source_chunks) = spec.zarr_source_chunks {
+        return read_zarr_rechunked_tile(store, array_rel, zstd, v2_sep, spec, source_chunks, buf);
+    }
     let elem_size = spec.dtype.elem_size();
     let ranges = tile_axis_ranges(spec);
     let tile_shape = tile_shape_from_ranges(&ranges)?;
@@ -136,10 +144,229 @@ pub(crate) fn read_zarr_tile_le_into(
     .copy_into(buf)
 }
 
+/// Assemble one `.tet` tile from Zarr chunk files whose grid is not the output grid.
+fn read_zarr_rechunked_tile(
+    store: &Path,
+    array_rel: &str,
+    zstd: bool,
+    v2_sep: Option<u8>,
+    spec: ImportTileRead<'_>,
+    source_chunks: &[u64],
+    buf: &mut [u8],
+) -> Result<(), ConvertError> {
+    let ndim = spec.ndim;
+    let ranges = tile_axis_ranges(spec);
+    let tile_extent: Vec<u64> = ranges.iter().map(|(start, end)| end - start).collect();
+    let mut lo = vec![0u64; ndim];
+    let mut hi = vec![0u64; ndim];
+    for axis in 0..ndim {
+        let cs = source_chunks[axis].max(1);
+        lo[axis] = ranges[axis].0 / cs;
+        let last = ranges[axis].1.saturating_sub(1);
+        hi[axis] = last / cs + 1;
+    }
+    let mut coord = vec![0u64; ndim];
+    visit_source_chunks(
+        0,
+        &mut coord,
+        &lo,
+        &hi,
+        &SourceChunkVisit {
+            store,
+            array_rel,
+            zstd,
+            v2_sep,
+            shape: spec.shape,
+            source_chunks,
+            ranges: &ranges,
+            tile_extent: &tile_extent,
+            elem_size: spec.dtype.elem_size(),
+            ndim,
+        },
+        buf,
+    )
+}
+
+struct SourceChunkVisit<'a> {
+    store: &'a Path,
+    array_rel: &'a str,
+    zstd: bool,
+    v2_sep: Option<u8>,
+    shape: &'a [u64],
+    source_chunks: &'a [u64],
+    ranges: &'a [(u64, u64)],
+    tile_extent: &'a [u64],
+    elem_size: usize,
+    ndim: usize,
+}
+
+fn visit_source_chunks(
+    axis: usize,
+    coord: &mut [u64],
+    lo: &[u64],
+    hi: &[u64],
+    visit: &SourceChunkVisit<'_>,
+    buf: &mut [u8],
+) -> Result<(), ConvertError> {
+    if axis == visit.ndim {
+        return copy_source_chunk_into_tile(coord, visit, buf);
+    }
+    for index in lo[axis]..hi[axis] {
+        coord[axis] = index;
+        visit_source_chunks(axis + 1, coord, lo, hi, visit, buf)?;
+    }
+    Ok(())
+}
+
+fn copy_source_chunk_into_tile(
+    coord: &[u64],
+    visit: &SourceChunkVisit<'_>,
+    buf: &mut [u8],
+) -> Result<(), ConvertError> {
+    let (bytes, layout) = load_zarr_source_chunk(coord, visit)?;
+    let mut overlap = Vec::with_capacity(visit.ndim);
+    let mut src_origin = Vec::with_capacity(visit.ndim);
+    let mut tile_origin = Vec::with_capacity(visit.ndim);
+    for axis in 0..visit.ndim {
+        let origin = coord[axis].saturating_mul(visit.source_chunks[axis]);
+        let src_end = origin.saturating_add(layout[axis]);
+        let start = visit.ranges[axis].0.max(origin);
+        let end = visit.ranges[axis].1.min(src_end);
+        if start >= end {
+            return Ok(());
+        }
+        overlap.push((start, end));
+        src_origin.push(origin);
+        tile_origin.push(visit.ranges[axis].0);
+    }
+    let mut src_local = vec![0u64; visit.ndim];
+    let mut dst_local = vec![0u64; visit.ndim];
+    blit_overlap(
+        &Blit {
+            src: &bytes,
+            layout: &layout,
+            src_origin: &src_origin,
+            tile_origin: &tile_origin,
+            overlap: &overlap,
+            tile_extent: visit.tile_extent,
+            elem_size: visit.elem_size,
+            ndim: visit.ndim,
+        },
+        0,
+        &mut src_local,
+        &mut dst_local,
+        buf,
+    )
+}
+
+fn load_zarr_source_chunk(
+    coord: &[u64],
+    visit: &SourceChunkVisit<'_>,
+) -> Result<(Vec<u8>, Vec<u64>), ConvertError> {
+    let path = zarr_chunk_path(
+        visit.store,
+        visit.array_rel,
+        visit.v2_sep,
+        coord,
+        visit.ndim,
+    );
+    let on_disk = fs::read(&path).map_err(|err| ConvertError::Zarr(err.to_string()))?;
+    let decoded = if visit.zstd {
+        zstd::decode_all(on_disk.as_slice()).map_err(|err| ConvertError::Zarr(err.to_string()))?
+    } else {
+        on_disk
+    };
+    let partial: Vec<u64> = (0..visit.ndim)
+        .map(|axis| {
+            let start = coord[axis].saturating_mul(visit.source_chunks[axis]);
+            let end = start
+                .saturating_add(visit.source_chunks[axis])
+                .min(visit.shape[axis]);
+            end.saturating_sub(start).max(1)
+        })
+        .collect();
+    let partial_bytes = axis_product_bytes(&partial, visit.elem_size);
+    let full_bytes = axis_product_bytes(visit.source_chunks, visit.elem_size);
+    if Some(decoded.len()) == partial_bytes {
+        return Ok((decoded, partial));
+    }
+    if Some(decoded.len()) == full_bytes {
+        return Ok((decoded, visit.source_chunks.to_vec()));
+    }
+    Err(ConvertError::Zarr(format!(
+        "chunk {} byte length mismatch (got {})",
+        path.display(),
+        decoded.len()
+    )))
+}
+
+fn axis_product_bytes(dims: &[u64], elem_size: usize) -> Option<usize> {
+    let mut acc = elem_size;
+    for dim in dims {
+        acc = acc.checked_mul(usize::try_from(*dim).ok()?)?;
+    }
+    Some(acc)
+}
+
+struct Blit<'a> {
+    src: &'a [u8],
+    layout: &'a [u64],
+    src_origin: &'a [u64],
+    tile_origin: &'a [u64],
+    overlap: &'a [(u64, u64)],
+    tile_extent: &'a [u64],
+    elem_size: usize,
+    ndim: usize,
+}
+
+fn blit_overlap(
+    blit: &Blit<'_>,
+    axis: usize,
+    src_local: &mut [u64],
+    dst_local: &mut [u64],
+    out: &mut [u8],
+) -> Result<(), ConvertError> {
+    let (start, end) = blit.overlap[axis];
+    if axis + 1 == blit.ndim {
+        let len = usize::try_from(end - start).map_err(map_usize_err)?;
+        src_local[axis] = start - blit.src_origin[axis];
+        dst_local[axis] = start - blit.tile_origin[axis];
+        let src_off = linear_u64(src_local, blit.layout, blit.ndim, blit.elem_size)?;
+        let dst_off = linear_u64(dst_local, blit.tile_extent, blit.ndim, blit.elem_size)?;
+        let nbytes = len.saturating_mul(blit.elem_size);
+        out[dst_off..dst_off + nbytes].copy_from_slice(&blit.src[src_off..src_off + nbytes]);
+        return Ok(());
+    }
+    for index in start..end {
+        src_local[axis] = index - blit.src_origin[axis];
+        dst_local[axis] = index - blit.tile_origin[axis];
+        blit_overlap(blit, axis + 1, src_local, dst_local, out)?;
+    }
+    Ok(())
+}
+
+fn linear_u64(
+    idx: &[u64],
+    shape: &[u64],
+    ndim: usize,
+    elem_size: usize,
+) -> Result<usize, ConvertError> {
+    let mut stride = elem_size;
+    let mut offset = 0usize;
+    for axis in (0..ndim).rev() {
+        let index = usize::try_from(idx[axis]).map_err(map_usize_err)?;
+        offset = offset.saturating_add(index.saturating_mul(stride));
+        let dim = usize::try_from(shape[axis]).map_err(map_usize_err)?;
+        stride = stride.saturating_mul(dim);
+    }
+    Ok(offset)
+}
+
 fn collect_zarr_plans(
     store: &Path,
     rel: &str,
     catalog_prefix: &str,
+    chunk_bytes: Option<u64>,
     plans: &mut Vec<ImportPlan>,
     skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
@@ -153,12 +380,23 @@ fn collect_zarr_plans(
         )));
     }
     match meta.node_type.as_str() {
-        "array" => note_plan(plan_zarr_array(catalog_prefix, rel, &meta), plans, skipped)?,
+        "array" => note_plan(
+            plan_zarr_array(catalog_prefix, rel, &meta, chunk_bytes),
+            plans,
+            skipped,
+        )?,
         "group" => {
             for child in zarr_child_names(&dir)? {
                 let child_rel = join_rel(rel, &child);
                 let child_catalog = join_catalog_path(catalog_prefix, &child);
-                collect_zarr_plans(store, &child_rel, &child_catalog, plans, skipped)?;
+                collect_zarr_plans(
+                    store,
+                    &child_rel,
+                    &child_catalog,
+                    chunk_bytes,
+                    plans,
+                    skipped,
+                )?;
             }
         }
         other => {
@@ -175,6 +413,7 @@ fn plan_zarr_array(
     name: &str,
     array_rel: &str,
     meta: &ZarrNodeMeta,
+    chunk_bytes: Option<u64>,
 ) -> Result<ImportPlan, ConvertError> {
     let shape = meta
         .shape
@@ -196,12 +435,18 @@ fn plan_zarr_array(
                 .map(|c| usize::try_from(c).unwrap_or(0))
                 .collect()
         });
-    let chunk_shape = chunk_shape_for_import(&shape, zarr_chunks);
-    Ok(
-        ImportPlan::new(name.to_owned(), dtype, shape, chunk_shape, None)
-            .with_zarr(array_rel.to_owned(), zarr_chunk_payload_zstd(meta))
-            .with_import(zarr_array_attrs(&meta.attributes), None, None),
-    )
+    let source = chunk_shape_for_import(&shape, zarr_chunks);
+    Ok(finish_zarr_plan(ZarrPlanBuild {
+        name,
+        array_rel,
+        dtype,
+        shape,
+        source,
+        zstd: zarr_chunk_payload_zstd(meta),
+        v2_sep: None,
+        attrs: zarr_array_attrs(&meta.attributes),
+        chunk_bytes,
+    }))
 }
 
 fn map_zarr_dtype(
@@ -453,6 +698,7 @@ fn collect_zarr_v2_plans(
     store: &Path,
     rel: &str,
     catalog_prefix: &str,
+    chunk_bytes: Option<u64>,
     plans: &mut Vec<ImportPlan>,
     skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
@@ -463,7 +709,11 @@ fn collect_zarr_v2_plans(
         } else {
             catalog_prefix.to_owned()
         };
-        return note_plan(plan_zarr_v2_array(&name, rel, &dir), plans, skipped);
+        return note_plan(
+            plan_zarr_v2_array(&name, rel, &dir, chunk_bytes),
+            plans,
+            skipped,
+        );
     }
     if !dir.join(".zgroup").is_file() {
         return Err(ConvertError::Zarr(format!(
@@ -474,12 +724,24 @@ fn collect_zarr_v2_plans(
     for child in zarr_v2_child_names(&dir)? {
         let child_rel = join_rel(rel, &child);
         let child_catalog = join_catalog_path(catalog_prefix, &child);
-        collect_zarr_v2_plans(store, &child_rel, &child_catalog, plans, skipped)?;
+        collect_zarr_v2_plans(
+            store,
+            &child_rel,
+            &child_catalog,
+            chunk_bytes,
+            plans,
+            skipped,
+        )?;
     }
     Ok(())
 }
 
-fn plan_zarr_v2_array(name: &str, array_rel: &str, dir: &Path) -> Result<ImportPlan, ConvertError> {
+fn plan_zarr_v2_array(
+    name: &str,
+    array_rel: &str,
+    dir: &Path,
+    chunk_bytes: Option<u64>,
+) -> Result<ImportPlan, ConvertError> {
     let raw = fs::read_to_string(dir.join(".zarray"))
         .map_err(|err| ConvertError::Zarr(err.to_string()))?;
     let meta: ZarrV2Array =
@@ -519,14 +781,55 @@ fn plan_zarr_v2_array(name: &str, array_rel: &str, dir: &Path) -> Result<ImportP
         .iter()
         .map(|dim| usize::try_from(*dim).unwrap_or(0))
         .collect();
-    let chunk_shape = chunk_shape_for_import(&meta.shape, Some(chunks));
+    let source = chunk_shape_for_import(&meta.shape, Some(chunks));
     let attrs = read_zarr_v2_attrs(dir);
-    Ok(
-        ImportPlan::new(name.to_owned(), dtype, meta.shape, chunk_shape, None)
-            .with_zarr(array_rel.to_owned(), zstd)
-            .with_zarr_v2_keys(sep)
-            .with_import(attrs, None, None),
+    Ok(finish_zarr_plan(ZarrPlanBuild {
+        name,
+        array_rel,
+        dtype,
+        shape: meta.shape,
+        source,
+        zstd,
+        v2_sep: Some(sep),
+        attrs,
+        chunk_bytes,
+    }))
+}
+
+struct ZarrPlanBuild<'a> {
+    name: &'a str,
+    array_rel: &'a str,
+    dtype: ElementDtype,
+    shape: Vec<u64>,
+    source: Vec<u64>,
+    zstd: bool,
+    v2_sep: Option<u8>,
+    attrs: std::collections::BTreeMap<String, String>,
+    chunk_bytes: Option<u64>,
+}
+
+/// Apply `--chunk-mib` on top of the Zarr chunk grid, keeping the source grid for reads.
+fn finish_zarr_plan(build: ZarrPlanBuild<'_>) -> ImportPlan {
+    let chunk_shape = match build.chunk_bytes {
+        Some(bytes) => numpy_chunk_shape(&build.shape, build.dtype.elem_size(), bytes),
+        None => build.source.clone(),
+    };
+    let mut plan = ImportPlan::new(
+        build.name.to_owned(),
+        build.dtype,
+        build.shape,
+        chunk_shape.clone(),
+        None,
     )
+    .with_zarr(build.array_rel.to_owned(), build.zstd)
+    .with_import(build.attrs, None, None);
+    if let Some(sep) = build.v2_sep {
+        plan = plan.with_zarr_v2_keys(sep);
+    }
+    if chunk_shape != build.source {
+        plan = plan.with_zarr_source_chunks(build.source);
+    }
+    plan
 }
 
 fn map_zarr_v2_dtype(name: &str, dtype: &str) -> Result<ElementDtype, ConvertError> {

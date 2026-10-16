@@ -30,7 +30,7 @@ sniff format → walk groups/variables/arrays → ImportPlan per dataset
 | ----- | -------- |
 | **Sniff** | Extension (case-insensitive), optional compression suffix peel (`.gz`, `.bz2`, … — **name only**, file is not decompressed), then magic bytes or Zarr v3 `zarr.json` |
 | **Plan** | One catalog dataset per supported numeric array; nested groups → slash names (`group/var`) |
-| **Chunk grid** | Reuse source chunking when rank matches; else **one tile = full array**. NumPy has no source chunks, so `.npy` / `.npz` use a **64 MiB** leading-axis tile instead |
+| **Chunk grid** | Reuse source chunking when rank matches; else **one tile = full array**. NumPy, CSV, and Parquet have no source chunks, so they use a **64 MiB** leading-axis tile. `--chunk-mib N` retile every dataset to about N MiB and replaces a source grid |
 | **CF decode** | `scale_factor`, `add_offset`, `_FillValue` applied at tile read (HDF5 / NetCDF); stored values become decoded floats + NaN for fill |
 | **Write** | Streaming multi-dataset `.tet`; payloads **raw** or **zstd** (v1 catalog codecs) |
 | **Metadata** | Selected attrs, `dim_names`, coordinate labels → footer `metadata` (64 KiB inline limit; larger metadata spills — see layout doc) |
@@ -115,7 +115,7 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | **Categories** | A column of text labels becomes an `i64` dataset. Codes start at 0 in first-seen order. A blank is `-1`. Footer attr `tetration_categories` is `{"codes":{…},"missing":-1}`. The JSON must fit in one 1024-byte attribute |
 | **Skipped** | Mixed number/text columns, category maps over that 1024-byte limit, and columns that are empty or only blank. Listed on `ConvertReport.skipped`. `--strict` still refuses to write |
 | **Rejected** | Ragged rows, and two columns with the same name. No `.tet` is written |
-| **Chunking** | ~64 MiB tiles along the column, same default as NumPy. CSV is parsed into column buffers first (rows are not hyperslabs). A `--chunk-mib` override waits on THI-487 |
+| **Chunking** | ~64 MiB tiles along the column, same default as NumPy. CSV is parsed into column buffers first (rows are not hyperslabs). `--chunk-mib N` overrides the tile size |
 | **CF** | Not applied |
 
 ### Import: Parquet (feature `tetration-parquet`)
@@ -196,8 +196,8 @@ Scalars / 0-d NetCDF variables are recorded the same way.
 
 | Issue | Detail |
 | ----- | ------ |
-| **Rechunk on import** | Source chunk shape reused when valid; mismatch or missing chunking → **one chunk = full array** (large RAM pressure during convert of huge arrays) |
-| **CF-packed arrays** | Chunk shape forced to full array (decode requires full tile context) |
+| **Rechunk on import** | Default reuses a valid source chunk shape. Missing chunking is still one full-array tile, except NumPy / CSV / Parquet (64 MiB). `--chunk-mib N` forces a leading-axis tile of about N MiB, including over a source grid (Zarr chunk files are assembled into the new tiles) |
+| **CF-packed arrays** | Without `--chunk-mib`, chunk shape stays the full array. The flag retile those arrays too; CF scale and fill are applied per element |
 | **Non-regular Zarr grid** | Only `chunk_grid: regular` |
 | **Rotate / permute layout** | Row-major `.tet` only; no automatic layout transform |
 
@@ -282,7 +282,7 @@ These often need **scientific semantics** (units, CRS, bounds) before raw conver
 | ------- | -------------- |
 | **Convert report JSON** (`skipped` shipped; extra warnings / dtype map still open) | Operability when datasets are left out |
 | **`--strict`** | Shipped: fail before write when any dataset was skipped |
-| **Rechunk policy flag** | Target chunk bytes (e.g. 4–64 MiB) on import |
+| **Rechunk policy flag** | Shipped: `--chunk-mib N` / `ConvertOptions::chunk_mib` |
 | **Cloud read source** | Convert from object store without full download |
 | **Streaming write from URL** | Pairs with cloud-native Phase 12 |
 | **Python bindings repo** | [`tet-py`](https://github.com/Latka-Industries/tet-py) — `tet.convert` planned ([#10](https://github.com/Latka-Industries/tet-py/issues/10)); `h5py` / `xarray` / `zarr` via optional extras — see [`ffi.md`](ffi.md) |

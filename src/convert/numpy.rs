@@ -53,6 +53,7 @@ pub fn convert_npy_to_tet_with_progress(
         parallel_jobs,
         false,
         ConvertInputFormat::Npy,
+        None,
         progress,
     )
 }
@@ -88,6 +89,7 @@ pub fn convert_npz_to_tet_with_progress(
         parallel_jobs,
         false,
         ConvertInputFormat::Npz,
+        None,
         progress,
     )
 }
@@ -98,6 +100,7 @@ pub(crate) fn convert_numpy_inner(
     parallel_jobs: usize,
     strict: bool,
     format: ConvertInputFormat,
+    chunk_bytes: Option<u64>,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     convert_numpy_with_chunk_bytes(
@@ -106,7 +109,7 @@ pub(crate) fn convert_numpy_inner(
         parallel_jobs,
         strict,
         format,
-        NUMPY_DEFAULT_CHUNK_BYTES,
+        chunk_bytes.unwrap_or(NUMPY_DEFAULT_CHUNK_BYTES),
         progress,
     )
 }
@@ -136,7 +139,7 @@ pub(crate) fn convert_numpy_with_chunk_bytes(
                     path: array.payload_path,
                     data_offset: array.data_offset,
                 });
-                note_plan(Ok(plan), &mut plans, &mut skipped)?;
+                note_plan(Ok(*plan), &mut plans, &mut skipped)?;
             }
             ArrayDecision::Skip { reason } => {
                 super::shared::record_skip(&mut skipped, name, &reason);
@@ -265,7 +268,7 @@ impl NumpySource {
 }
 
 enum ArrayDecision {
-    Import(ImportPlan),
+    Import(Box<ImportPlan>),
     Skip { reason: String },
 }
 
@@ -519,13 +522,13 @@ fn plan_array(array: &NpyArray, chunk_bytes: u64) -> Result<ArrayDecision, Conve
         });
     };
     let chunk_shape = numpy_chunk_shape(&header.shape, dtype.elem_size(), chunk_bytes);
-    Ok(ArrayDecision::Import(ImportPlan::new(
+    Ok(ArrayDecision::Import(Box::new(ImportPlan::new(
         array.name.clone(),
         dtype,
         header.shape.clone(),
         chunk_shape,
         None,
-    )))
+    ))))
 }
 
 fn parse_npy_header(file: &mut File, path: &Path) -> Result<NpyHeader, ConvertError> {

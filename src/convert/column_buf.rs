@@ -1,4 +1,7 @@
 //! In-memory column buffers tiled into `.tet` (CSV and Parquet).
+//!
+//! Both importers parse the whole column before writing. Tiles are copied out of that
+//! buffer at the same leading-axis size as `NumPy` (default 64 MiB, or `--chunk-mib`).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -12,6 +15,7 @@ use super::numpy::numpy_chunk_shape;
 use super::shared::{ImportPlan, record_skip, write_plans_streaming};
 use super::{ConvertError, ConvertProgress, ConvertSkip};
 
+/// Parsed column bytes plus the tile width used to slice them during the stream write.
 pub(crate) struct BufferedColumn {
     name: String,
     elem_size: usize,
@@ -19,6 +23,7 @@ pub(crate) struct BufferedColumn {
     bytes: Vec<u8>,
 }
 
+/// One finished column ready to become a 1-D dataset.
 pub(crate) struct BufferedColumnSpec {
     pub name: String,
     pub dtype: ElementDtype,

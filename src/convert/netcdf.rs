@@ -14,15 +14,16 @@ use super::import_metadata::{
 };
 use super::parallel::NetcdfParallelSource;
 use super::shared::{
-    ImportPlan, chunk_shape_for_import, ensure_non_empty, ensure_strict, join_catalog_path,
-    note_plan, record_skip, write_plans_streaming,
+    ImportPlan, ensure_non_empty, ensure_strict, import_chunk_shape, join_catalog_path, note_plan,
+    record_skip, write_plans_streaming,
 };
 use super::{ConvertError, ConvertProgress, ConvertReport, report};
 
 /// Import all supported numeric variables from a `NetCDF` file into one `.tet`.
 ///
-/// Walks nested groups (`group/var` → catalog name `group/var`). Supported element types:
-/// `f32`, `f64`, `i32`, `i64`. CF `scale_factor` / `add_offset` / `_FillValue` are decoded at import.
+/// Walks nested groups (`group/var` → catalog name `group/var`). Numeric dtypes from `u8`
+/// through `f64` are imported. CF `scale_factor` / `add_offset` / `_FillValue` are decoded
+/// per element at tile read.
 ///
 /// # Errors
 ///
@@ -44,7 +45,7 @@ pub fn convert_netcdf_to_tet_with_progress(
     parallel_jobs: usize,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    convert_netcdf_inner(input, output, parallel_jobs, false, progress)
+    convert_netcdf_inner(input, output, parallel_jobs, false, None, progress)
 }
 
 pub(crate) fn convert_netcdf_inner(
@@ -52,6 +53,7 @@ pub(crate) fn convert_netcdf_inner(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
@@ -59,7 +61,7 @@ pub(crate) fn convert_netcdf_inner(
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
     if let Some(root) = file.root() {
-        collect_nc_plans(&root, "", &mut plans, &mut skipped)?;
+        collect_nc_plans(&root, "", chunk_bytes, &mut plans, &mut skipped)?;
     } else {
         let mut vars: Vec<Variable<'_>> = file.variables().collect();
         vars.sort_by_key(Variable::name);
@@ -68,7 +70,7 @@ pub(crate) fn convert_netcdf_inner(
                 record_skip(&mut skipped, var.name(), "scalar or 0-d variable");
                 continue;
             }
-            note_plan(plan_variable(var), &mut plans, &mut skipped)?;
+            note_plan(plan_variable(var, chunk_bytes), &mut plans, &mut skipped)?;
         }
     }
 
@@ -112,6 +114,7 @@ pub(crate) fn convert_netcdf_inner(
 fn collect_nc_plans(
     grp: &netcdf::Group<'_>,
     prefix: &str,
+    chunk_bytes: Option<u64>,
     plans: &mut Vec<ImportPlan>,
     skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
@@ -124,22 +127,32 @@ fn collect_nc_plans(
             record_skip(skipped, path, "scalar or 0-d variable");
             continue;
         }
-        note_plan(plan_variable_at(&path, &var), plans, skipped)?;
+        note_plan(plan_variable_at(&path, &var, chunk_bytes), plans, skipped)?;
     }
     let mut groups: Vec<netcdf::Group<'_>> = grp.groups().collect();
     groups.sort_by_key(netcdf::Group::name);
     for sub in groups {
         let sub_name = sub.name();
-        collect_nc_plans(&sub, &join_catalog_path(prefix, &sub_name), plans, skipped)?;
+        collect_nc_plans(
+            &sub,
+            &join_catalog_path(prefix, &sub_name),
+            chunk_bytes,
+            plans,
+            skipped,
+        )?;
     }
     Ok(())
 }
 
-fn plan_variable(var: &Variable<'_>) -> Result<ImportPlan, ConvertError> {
-    plan_variable_at(&var.name(), var)
+fn plan_variable(var: &Variable<'_>, chunk_bytes: Option<u64>) -> Result<ImportPlan, ConvertError> {
+    plan_variable_at(&var.name(), var, chunk_bytes)
 }
 
-fn plan_variable_at(name: &str, var: &Variable<'_>) -> Result<ImportPlan, ConvertError> {
+fn plan_variable_at(
+    name: &str,
+    var: &Variable<'_>,
+    chunk_bytes: Option<u64>,
+) -> Result<ImportPlan, ConvertError> {
     let dtype = map_netcdf_dtype(name, var.vartype())?;
     let shape: Vec<u64> = var
         .dimensions()
@@ -153,11 +166,12 @@ fn plan_variable_at(name: &str, var: &Variable<'_>) -> Result<ImportPlan, Conver
         });
     }
     let cf = cf_from_netcdf(var);
-    let chunk_shape = if cf.is_some() {
-        chunk_shape_for_import(&shape, None)
+    let source_chunks = if cf.is_some() {
+        None
     } else {
-        chunk_shape_for_import(&shape, var.chunking().ok().flatten())
+        var.chunking().ok().flatten()
     };
+    let chunk_shape = import_chunk_shape(&shape, dtype.elem_size(), source_chunks, chunk_bytes);
     Ok(
         ImportPlan::new(name.to_owned(), dtype, shape, chunk_shape, cf).with_import(
             netcdf_variable_attrs(var),

@@ -642,6 +642,7 @@ fn convert_reports_skipped_dtype_and_strict_refuses_write() {
         ConvertOptions {
             parallel_jobs: 1,
             strict: false,
+            chunk_mib: None,
         },
         None::<fn(_)>,
     )
@@ -659,6 +660,7 @@ fn convert_reports_skipped_dtype_and_strict_refuses_write() {
         ConvertOptions {
             parallel_jobs: 1,
             strict: true,
+            chunk_mib: None,
         },
         None::<fn(_)>,
     )
@@ -767,6 +769,99 @@ fn convert_npy_roundtrips_bytes_across_tiles() {
 }
 
 #[test]
+fn convert_chunk_mib_retile_numpy_and_zarr_and_rejects_zero() {
+    use crate::layout::mmap_file_read;
+
+    let err = convert_to_tet_with_options(
+        Path::new("missing.npy"),
+        Path::new("missing.tet"),
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: false,
+            chunk_mib: Some(0),
+        },
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ConvertError::ChunkMibZero));
+
+    let dir = tempfile::tempdir().unwrap();
+    let n = 524_288u64;
+    let mut data = Vec::with_capacity(usize::try_from(n).unwrap() * 4);
+    for value in 0..n {
+        data.extend_from_slice(&(value as f32).to_le_bytes());
+    }
+    let src = dir.path().join("wide.npy");
+    std::fs::write(&src, npy_bytes("<f4", &[n], false, &data)).unwrap();
+
+    let default_out = dir.path().join("default.tet");
+    convert_to_tet_with_options(
+        &src,
+        &default_out,
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: false,
+            chunk_mib: None,
+        },
+        None::<fn(_)>,
+    )
+    .unwrap();
+    let default_summary = read_tet_summary_v1(&mmap_file_read(&default_out).unwrap()).unwrap();
+    assert_eq!(default_summary.datasets[0].chunk_shape, vec![n]);
+
+    let tiled_out = dir.path().join("tiled.tet");
+    convert_to_tet_with_options(
+        &src,
+        &tiled_out,
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: false,
+            chunk_mib: Some(1),
+        },
+        None::<fn(_)>,
+    )
+    .unwrap();
+    let tiled = mmap_file_read(&tiled_out).unwrap();
+    let tiled_summary = read_tet_summary_v1(&tiled).unwrap();
+    assert_eq!(tiled_summary.datasets[0].chunk_shape, vec![n / 2]);
+    assert_eq!(materialize_dataset_le_bytes(&tiled, "data"), data);
+
+    let store = dir.path().join("wide.zarr");
+    let array = store.join("data");
+    std::fs::create_dir_all(array.join("c")).unwrap();
+    std::fs::write(
+        store.join("zarr.json"),
+        r#"{"zarr_format":3,"node_type":"group"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        array.join("zarr.json"),
+        format!(
+            r#"{{"zarr_format":3,"node_type":"array","shape":[{n}],"data_type":"float32","chunk_grid":{{"name":"regular","configuration":{{"chunk_shape":[{n}]}}}},"codecs":[{{"name":"bytes","configuration":{{"endian":"little"}}}}]}}"#
+        ),
+    )
+    .unwrap();
+    std::fs::write(array.join("c/0"), &data).unwrap();
+    let zarr_out = dir.path().join("wide-zarr.tet");
+    convert_to_tet_with_options(
+        &store,
+        &zarr_out,
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: false,
+            chunk_mib: Some(1),
+        },
+        None::<fn(_)>,
+    )
+    .unwrap();
+    let zarr_mmap = mmap_file_read(&zarr_out).unwrap();
+    let zarr_summary = read_tet_summary_v1(&zarr_mmap).unwrap();
+    assert_eq!(zarr_summary.datasets[0].chunk_shape, vec![n / 2]);
+    assert_eq!(materialize_dataset_le_bytes(&zarr_mmap, "data"), data);
+    assert_tet_verify_ok(&zarr_out);
+}
+
+#[test]
 fn convert_npz_single_array_roundtrips_stored_and_deflated() {
     use crate::layout::mmap_file_read;
 
@@ -786,6 +881,7 @@ fn convert_npz_single_array_roundtrips_stored_and_deflated() {
             ConvertOptions {
                 parallel_jobs: 1,
                 strict: false,
+                chunk_mib: None,
             },
             None::<fn(_)>,
         )
@@ -830,6 +926,7 @@ fn convert_npz_multi_array_roundtrips_each_member() {
         ConvertOptions {
             parallel_jobs: 2,
             strict: false,
+            chunk_mib: None,
         },
         None::<fn(_)>,
     )
@@ -944,6 +1041,7 @@ fn convert_npy_rejects_fortran_and_object_and_skips_scalar() {
         ConvertOptions {
             parallel_jobs: 1,
             strict: true,
+            chunk_mib: None,
         },
         None::<fn(_)>,
     )
@@ -1001,6 +1099,7 @@ fn convert_csv_numeric_columns_roundtrip_and_skip_text() {
         ConvertOptions {
             parallel_jobs: 1,
             strict: true,
+            chunk_mib: None,
         },
         None::<fn(_)>,
     )

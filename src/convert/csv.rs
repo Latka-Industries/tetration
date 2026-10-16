@@ -4,7 +4,8 @@
 //! in one footer attribute becomes an `i64` category dataset ([THI-492](https://linear.app/thicclatka/issue/THI-492)).
 //! Mixed columns, and category maps that do not fit, are skips.
 //! The file is parsed once into column buffers (CSV rows are not hyperslabs);
-//! those buffers are then written in the same ~64 MiB tiles as `NumPy`.
+//! those buffers are then written in the same ~64 MiB tiles as `NumPy`
+//! (`--chunk-mib` overrides that target).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -39,7 +40,7 @@ pub fn convert_csv_to_tet_with_progress(
     parallel_jobs: usize,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    convert_csv_inner(input, output, parallel_jobs, false, progress)
+    convert_csv_inner(input, output, parallel_jobs, false, None, progress)
 }
 
 pub(crate) fn convert_csv_inner(
@@ -47,6 +48,7 @@ pub(crate) fn convert_csv_inner(
     output: &Path,
     parallel_jobs: usize,
     strict: bool,
+    chunk_bytes: Option<u64>,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     convert_csv_with_chunk_bytes(
@@ -54,7 +56,7 @@ pub(crate) fn convert_csv_inner(
         output,
         parallel_jobs,
         strict,
-        NUMPY_DEFAULT_CHUNK_BYTES,
+        chunk_bytes.unwrap_or(NUMPY_DEFAULT_CHUNK_BYTES),
         progress,
     )
 }
