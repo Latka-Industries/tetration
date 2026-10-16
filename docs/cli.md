@@ -121,6 +121,7 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | Flag       | Effect                                                                         |
 | ---------- | ------------------------------------------------------------------------------ |
 | `--jobs N` | Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64) |
+| `--strict` | Fail (no output file) when any source array is skipped |
 
 ## `tet export`
 

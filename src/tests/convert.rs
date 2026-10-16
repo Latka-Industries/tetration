@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::catalog::{DATASET_DTYPE_TAG_V1, read_tet_summary_v1};
+use crate::convert::{ConvertError, ConvertOptions, convert_to_tet_with_options};
 #[cfg(feature = "tetration-hdf5")]
 use crate::convert::{
     convert_h5_to_tet_with_progress, convert_netcdf_to_tet_with_progress,
@@ -585,4 +586,73 @@ fn convert_small_zarr_groups_3d_matches_nested_source_bytes() {
         assert_eq!(got, want, "dataset {path} bytes differ");
     }
     assert_tet_verify_ok(&output);
+}
+
+fn write_mixed_zarr(root: &Path) {
+    let data = root.join("data");
+    std::fs::create_dir_all(data.join("c")).unwrap();
+    std::fs::create_dir_all(root.join("label")).unwrap();
+    std::fs::write(
+        root.join("zarr.json"),
+        r#"{"zarr_format":3,"node_type":"group"}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        data.join("zarr.json"),
+        r#"{"zarr_format":3,"node_type":"array","shape":[2],"data_type":"float32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2]}},"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"#,
+    )
+    .unwrap();
+    let mut bytes = Vec::new();
+    bytes.extend(1.0f32.to_le_bytes());
+    bytes.extend(2.0f32.to_le_bytes());
+    std::fs::write(data.join("c/0"), bytes).unwrap();
+    std::fs::write(
+        root.join("label/zarr.json"),
+        r#"{"zarr_format":3,"node_type":"array","shape":[2],"data_type":"string","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2]}},"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn convert_reports_skipped_dtype_and_strict_refuses_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("mixed.zarr");
+    write_mixed_zarr(&store);
+    let output = dir.path().join("mixed.tet");
+
+    let report = convert_to_tet_with_options(
+        &store,
+        &output,
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: false,
+        },
+        None::<fn(_)>,
+    )
+    .unwrap();
+    assert_eq!(report.dataset_names, vec!["data".to_owned()]);
+    assert_eq!(report.skipped.len(), 1);
+    assert_eq!(report.skipped[0].path, "label");
+    assert!(report.skipped[0].reason.contains("string"));
+    assert!(output.is_file());
+
+    let strict_out = dir.path().join("strict.tet");
+    let err = convert_to_tet_with_options(
+        &store,
+        &strict_out,
+        ConvertOptions {
+            parallel_jobs: 1,
+            strict: true,
+        },
+        None::<fn(_)>,
+    )
+    .unwrap_err();
+    match err {
+        ConvertError::StrictSkips { count, detail, .. } => {
+            assert_eq!(count, 1);
+            assert!(detail.contains("label"));
+        }
+        other => panic!("expected StrictSkips, got {other}"),
+    }
+    assert!(!strict_out.exists());
 }

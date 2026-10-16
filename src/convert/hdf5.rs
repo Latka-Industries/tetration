@@ -12,7 +12,8 @@ use super::import_metadata::{
 };
 use super::parallel::H5ParallelSource;
 use super::shared::{
-    ImportPlan, chunk_shape_for_import, ensure_non_empty, join_catalog_path, write_plans_streaming,
+    ImportPlan, chunk_shape_for_import, ensure_non_empty, ensure_strict, join_catalog_path,
+    note_plan, write_plans_streaming,
 };
 use super::{ConvertError, ConvertProgress, ConvertReport, report};
 
@@ -39,18 +40,30 @@ pub fn convert_h5_to_tet_with_progress(
     input: &Path,
     output: &Path,
     parallel_jobs: usize,
+    progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
+    convert_h5_inner(input, output, parallel_jobs, false, progress)
+}
+
+pub(crate) fn convert_h5_inner(
+    input: &Path,
+    output: &Path,
+    parallel_jobs: usize,
+    strict: bool,
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
     let file = File::open(input).map_err(|e| ConvertError::Hdf5(e.to_string()))?;
     let mut plans = Vec::new();
-    collect_h5_plans(&file, "", &mut plans)?;
+    let mut skipped = Vec::new();
+    collect_h5_plans(&file, "", &mut plans, &mut skipped)?;
     enrich_hdf5_cf_coordinates(&file, &mut plans);
 
     ensure_non_empty(
         input,
         &plans.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
     )?;
+    ensure_strict(input, &skipped, strict)?;
 
     let mut progress_bridge = |done: u64, total: u64, dataset: &str| {
         if let Some(ref mut cb) = progress {
@@ -77,6 +90,7 @@ pub fn convert_h5_to_tet_with_progress(
         input,
         output,
         &plans,
+        skipped,
         history,
         started.elapsed().as_secs_f64(),
     ))
@@ -86,6 +100,7 @@ fn collect_h5_plans(
     loc: &hdf5_metno::Group,
     prefix: &str,
     plans: &mut Vec<ImportPlan>,
+    skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
     let err = |e: hdf5_metno::Error| ConvertError::Hdf5(e.to_string());
     let mut names = loc.member_names().map_err(err)?;
@@ -94,14 +109,10 @@ fn collect_h5_plans(
         if loc.dataset(&name).is_ok() {
             let ds = loc.dataset(&name).map_err(err)?;
             let path = join_catalog_path(prefix, &name);
-            match plan_dataset(&path, &ds) {
-                Ok(plan) => plans.push(plan),
-                Err(ConvertError::UnsupportedDtype { .. }) => {}
-                Err(e) => return Err(e),
-            }
+            note_plan(plan_dataset(&path, &ds), plans, skipped)?;
         } else if loc.group(&name).is_ok() {
             let grp = loc.group(&name).map_err(err)?;
-            collect_h5_plans(&grp, &join_catalog_path(prefix, &name), plans)?;
+            collect_h5_plans(&grp, &join_catalog_path(prefix, &name), plans, skipped)?;
         }
     }
     Ok(())

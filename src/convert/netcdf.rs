@@ -14,7 +14,8 @@ use super::import_metadata::{
 };
 use super::parallel::NetcdfParallelSource;
 use super::shared::{
-    ImportPlan, chunk_shape_for_import, ensure_non_empty, join_catalog_path, write_plans_streaming,
+    ImportPlan, chunk_shape_for_import, ensure_non_empty, ensure_strict, join_catalog_path,
+    note_plan, record_skip, write_plans_streaming,
 };
 use super::{ConvertError, ConvertProgress, ConvertReport, report};
 
@@ -41,25 +42,33 @@ pub fn convert_netcdf_to_tet_with_progress(
     input: &Path,
     output: &Path,
     parallel_jobs: usize,
+    progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
+    convert_netcdf_inner(input, output, parallel_jobs, false, progress)
+}
+
+pub(crate) fn convert_netcdf_inner(
+    input: &Path,
+    output: &Path,
+    parallel_jobs: usize,
+    strict: bool,
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
     let file = netcdf::open(input).map_err(|e| ConvertError::Netcdf(e.to_string()))?;
     let mut plans = Vec::new();
+    let mut skipped = Vec::new();
     if let Some(root) = file.root() {
-        collect_nc_plans(&root, "", &mut plans)?;
+        collect_nc_plans(&root, "", &mut plans, &mut skipped)?;
     } else {
         let mut vars: Vec<Variable<'_>> = file.variables().collect();
         vars.sort_by_key(Variable::name);
         for var in &vars {
             if var.dimensions().is_empty() {
+                record_skip(&mut skipped, var.name(), "scalar or 0-d variable");
                 continue;
             }
-            match plan_variable(var) {
-                Ok(plan) => plans.push(plan),
-                Err(ConvertError::UnsupportedDtype { .. }) => {}
-                Err(e) => return Err(e),
-            }
+            note_plan(plan_variable(var), &mut plans, &mut skipped)?;
         }
     }
 
@@ -67,6 +76,7 @@ pub fn convert_netcdf_to_tet_with_progress(
         input,
         &plans.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
     )?;
+    ensure_strict(input, &skipped, strict)?;
 
     let mut progress_bridge = |done: u64, total: u64, dataset: &str| {
         if let Some(ref mut cb) = progress {
@@ -93,6 +103,7 @@ pub fn convert_netcdf_to_tet_with_progress(
         input,
         output,
         &plans,
+        skipped,
         history,
         started.elapsed().as_secs_f64(),
     ))
@@ -102,26 +113,24 @@ fn collect_nc_plans(
     grp: &netcdf::Group<'_>,
     prefix: &str,
     plans: &mut Vec<ImportPlan>,
+    skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
     let mut vars: Vec<Variable<'_>> = grp.variables().collect();
     vars.sort_by_key(Variable::name);
     for var in vars {
-        if var.dimensions().is_empty() {
-            continue;
-        }
         let stem = var.name();
         let path = join_catalog_path(prefix, &stem);
-        match plan_variable_at(&path, &var) {
-            Ok(plan) => plans.push(plan),
-            Err(ConvertError::UnsupportedDtype { .. }) => {}
-            Err(e) => return Err(e),
+        if var.dimensions().is_empty() {
+            record_skip(skipped, path, "scalar or 0-d variable");
+            continue;
         }
+        note_plan(plan_variable_at(&path, &var), plans, skipped)?;
     }
     let mut groups: Vec<netcdf::Group<'_>> = grp.groups().collect();
     groups.sort_by_key(netcdf::Group::name);
     for sub in groups {
         let sub_name = sub.name();
-        collect_nc_plans(&sub, &join_catalog_path(prefix, &sub_name), plans)?;
+        collect_nc_plans(&sub, &join_catalog_path(prefix, &sub_name), plans, skipped)?;
     }
     Ok(())
 }

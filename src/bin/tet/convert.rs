@@ -3,7 +3,8 @@
 use std::path::Path;
 
 use tetration::convert::{
-    ConvertProgress, ConvertReport, convert_to_tet_with_progress, detect_convert_format,
+    ConvertOptions, ConvertProgress, ConvertReport, convert_to_tet_with_options,
+    detect_convert_format,
 };
 
 use crate::util::cli_error;
@@ -14,13 +15,24 @@ fn finish_convert_report(
     report: &ConvertReport,
 ) -> Result<(), String> {
     pb.finish_with_message(format!("{label} done in {:.2}s", report.elapsed_secs));
+    if !report.skipped.is_empty() {
+        eprintln!("skipped {} dataset(s):", report.skipped.len());
+        for skip in &report.skipped {
+            eprintln!("  {}: {}", skip.path, skip.reason);
+        }
+    }
     let pretty = serde_json::to_string_pretty(report).map_err(cli_error)?;
     println!();
     println!("{pretty}");
     Ok(())
 }
 
-pub(crate) fn run_convert(input: &Path, output: &Path, jobs: usize) -> Result<(), String> {
+pub(crate) fn run_convert(
+    input: &Path,
+    output: &Path,
+    jobs: usize,
+    strict: bool,
+) -> Result<(), String> {
     use indicatif::{ProgressBar, ProgressStyle};
 
     let format = detect_convert_format(input).map_err(cli_error)?;
@@ -51,6 +63,15 @@ pub(crate) fn run_convert(input: &Path, output: &Path, jobs: usize) -> Result<()
         pb.set_message(format!("{progress_prefix} ({})", p.dataset));
     });
 
-    let report = convert_to_tet_with_progress(input, output, jobs, progress).map_err(cli_error)?;
+    let report = convert_to_tet_with_options(
+        input,
+        output,
+        ConvertOptions {
+            parallel_jobs: jobs,
+            strict,
+        },
+        progress,
+    )
+    .map_err(cli_error)?;
     finish_convert_report(&pb, label, &report)
 }

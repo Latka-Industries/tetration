@@ -88,14 +88,51 @@ pub fn convert_to_tet_with_progress(
     parallel_jobs: usize,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
+    convert_to_tet_with_options(
+        input,
+        output,
+        ConvertOptions {
+            parallel_jobs,
+            strict: false,
+        },
+        progress,
+    )
+}
+
+/// Like [`convert_to_tet_with_progress`], with [`ConvertOptions::strict`].
+///
+/// # Errors
+///
+/// Returns [`ConvertError::StrictSkips`] when `options.strict` is set and any dataset was skipped.
+/// The output file is not written in that case.
+pub fn convert_to_tet_with_options(
+    input: &Path,
+    output: &Path,
+    options: ConvertOptions,
+    progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
     match detect_convert_format(input)? {
-        ConvertInputFormat::H5 => convert_h5_dispatch(input, output, parallel_jobs, progress),
-        ConvertInputFormat::Netcdf => {
-            convert_netcdf_dispatch(input, output, parallel_jobs, progress)
-        }
-        ConvertInputFormat::Zarr => {
-            convert_zarr_to_tet_with_progress(input, output, parallel_jobs, progress)
-        }
+        ConvertInputFormat::H5 => convert_h5_dispatch(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
+            progress,
+        ),
+        ConvertInputFormat::Netcdf => convert_netcdf_dispatch(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
+            progress,
+        ),
+        ConvertInputFormat::Zarr => zarr::convert_zarr_inner(
+            input,
+            output,
+            options.parallel_jobs,
+            options.strict,
+            progress,
+        ),
     }
 }
 
@@ -104,9 +141,10 @@ fn convert_h5_dispatch(
     input: &Path,
     output: &Path,
     parallel_jobs: usize,
+    strict: bool,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    convert_h5_to_tet_with_progress(input, output, parallel_jobs, progress)
+    hdf5::convert_h5_inner(input, output, parallel_jobs, strict, progress)
 }
 
 #[cfg(not(feature = "tetration-hdf5"))]
@@ -114,6 +152,7 @@ fn convert_h5_dispatch(
     _input: &Path,
     _output: &Path,
     _parallel_jobs: usize,
+    _strict: bool,
     _progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     Err(ConvertError::ConvertFeatureDisabled {
@@ -127,9 +166,10 @@ fn convert_netcdf_dispatch(
     input: &Path,
     output: &Path,
     parallel_jobs: usize,
+    strict: bool,
     progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    convert_netcdf_to_tet_with_progress(input, output, parallel_jobs, progress)
+    netcdf::convert_netcdf_inner(input, output, parallel_jobs, strict, progress)
 }
 
 #[cfg(not(feature = "tetration-netcdf"))]
@@ -137,12 +177,22 @@ fn convert_netcdf_dispatch(
     _input: &Path,
     _output: &Path,
     _parallel_jobs: usize,
+    _strict: bool,
     _progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     Err(ConvertError::ConvertFeatureDisabled {
         format: ConvertInputFormat::Netcdf,
         feature: "tetration-netcdf",
     })
+}
+
+/// Knobs for [`convert_to_tet_with_options`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ConvertOptions {
+    /// Chunk read workers (`0` = host default, cap 64).
+    pub parallel_jobs: usize,
+    /// Fail before writing when any dataset was skipped.
+    pub strict: bool,
 }
 
 /// Progress event emitted while streaming chunk payloads during convert.
@@ -164,6 +214,16 @@ pub struct ConvertDatasetSummary {
     pub dims: Vec<u64>,
 }
 
+/// A source array that was not imported.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ConvertSkip {
+    /// Catalog path that would have been used (`group/var`).
+    pub path: String,
+    /// Why it was skipped (unsupported dtype, empty, scalar, …).
+    pub reason: String,
+}
+
 /// Summary returned after a successful convert.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -173,6 +233,8 @@ pub struct ConvertReport {
     pub dataset_count: usize,
     pub dataset_names: Vec<String>,
     pub datasets: Vec<ConvertDatasetSummary>,
+    /// Unsupported arrays left out of the `.tet` (empty when nothing was skipped).
+    pub skipped: Vec<ConvertSkip>,
     /// History row written to the `.tet` footer (`HistoryEvent`: `op`, `source`, `at`, …).
     pub history: Vec<crate::catalog::HistoryEvent>,
     /// Wall-clock seconds for the full convert (plan + stream write + history footer).
@@ -196,6 +258,12 @@ pub enum ConvertError {
     Zarr(String),
     #[error("unsupported element type in variable `{name}`: {detail}")]
     UnsupportedDtype { name: String, detail: String },
+    #[error("skipped {count} unsupported dataset(s) in {path} (--strict): {detail}")]
+    StrictSkips {
+        path: String,
+        count: usize,
+        detail: String,
+    },
     #[error(
         "unsupported convert input `{path}`: extension `{ext}` (supported extensions: {h5_ext}; {nc_ext}; {zarr_ext}; or recognizable HDF5 / NetCDF-3 file signature / Zarr v3 directory store)"
     )]
@@ -217,6 +285,7 @@ fn report(
     path_in: &Path,
     path_out: &Path,
     plans: &[shared::ImportPlan],
+    skipped: Vec<ConvertSkip>,
     history: Vec<crate::catalog::HistoryEvent>,
     elapsed_secs: f64,
 ) -> ConvertReport {
@@ -235,6 +304,7 @@ fn report(
         dataset_count: datasets.len(),
         dataset_names,
         datasets,
+        skipped,
         history,
         elapsed_secs,
     }

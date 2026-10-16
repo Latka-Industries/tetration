@@ -173,7 +173,8 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             input,
             output,
             jobs,
-        } => run_convert(&input, &output, jobs),
+            strict,
+        } => run_convert(&input, &output, jobs, strict),
         Commands::Ingest {
             inputs,
             out,
