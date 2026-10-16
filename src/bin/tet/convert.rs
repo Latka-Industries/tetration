@@ -1,4 +1,4 @@
-//! `tet convert` (HDF5 / `NetCDF` / Zarr / `NumPy` → `.tet`).
+//! `tet convert` (HDF5, `NetCDF`, Zarr v2/v3, `NumPy`, CSV, Parquet → `.tet`).
 
 use std::path::Path;
 

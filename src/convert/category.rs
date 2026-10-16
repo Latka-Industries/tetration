@@ -28,6 +28,7 @@ pub(crate) struct CategoryImport {
 }
 
 impl CategoryColumn {
+    /// Empty column. The next new label receives code 0.
     pub(crate) fn new() -> Self {
         Self {
             codes: BTreeMap::new(),
@@ -37,16 +38,19 @@ impl CategoryColumn {
         }
     }
 
+    /// True after a label made the footer JSON exceed the attr byte cap.
     pub(crate) fn is_overflow(&self) -> bool {
         self.overflow
     }
 
+    /// Record a blank or null as [`CATEGORY_MISSING`].
     pub(crate) fn push_missing(&mut self) {
         if !self.overflow {
             self.values.push(CATEGORY_MISSING);
         }
     }
 
+    /// Record `label`, reusing the code from the first time it was seen.
     pub(crate) fn push_label(&mut self, label: &str) {
         if self.overflow {
             return;
@@ -70,6 +74,11 @@ impl CategoryColumn {
         self.values.push(code);
     }
 
+    /// Encode the column as little-endian `i64` plus the `tetration_categories` attr.
+    ///
+    /// # Errors
+    ///
+    /// Returns a skip reason when the map overflowed the footer cap or no label was seen.
     pub(crate) fn finish(self) -> Result<CategoryImport, String> {
         if self.overflow {
             return Err(format!(

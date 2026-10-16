@@ -31,6 +31,7 @@ pub(crate) struct BufferedColumnSpec {
     pub attrs: BTreeMap<String, String>,
 }
 
+/// Skip an empty column, or append a 1-D plan tiled at `chunk_bytes`.
 pub(crate) fn accept_buffered_column(
     plans: &mut Vec<ImportPlan>,
     payloads: &mut Vec<BufferedColumn>,
@@ -58,6 +59,9 @@ pub(crate) fn accept_buffered_column(
     plans.push(plan);
 }
 
+/// Copy each column buffer into the `.tet` tile stream and write the convert footer.
+///
+/// `map_err` turns a tile-bounds failure into the caller's [`ConvertError`] variant.
 pub(crate) fn stream_buffered_columns(
     output: &Path,
     plans: &[ImportPlan],

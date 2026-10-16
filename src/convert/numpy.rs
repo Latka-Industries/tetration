@@ -1,4 +1,7 @@
-//! `NumPy` `.npy` / single-array `.npz` → `.tet`.
+//! `NumPy` `.npy` / `.npz` → `.tet`.
+//!
+//! `.npz` imports every `.npy` member as its own dataset. Duplicate catalog names,
+//! Fortran order, and object or pickle dtypes are hard errors.
 //!
 //! `.npy` payloads are read from the data offset in tiles. `.npz` is a zip of `.npy`
 //! members: stored members are sliced in place; compressed members are inflated to a

@@ -128,11 +128,16 @@ pub(crate) fn convert_parquet_with_chunk_bytes(
     ))
 }
 
+/// One Parquet field accumulated across record batches.
 struct ColumnBuild {
     name: String,
     kind: Kind,
 }
 
+/// How a field is stored while batches are read.
+///
+/// An integer null promotes `Num` to `f64` NaN. A float null stays in that dtype as NaN.
+/// UTF-8 uses [`CategoryColumn`]. Bool, timestamps, decimals, and nested types are skips.
 enum Kind {
     Num {
         dtype: ElementDtype,
@@ -143,6 +148,7 @@ enum Kind {
     Skip(String),
 }
 
+/// Little-endian payload ready to tile, or a skip reason.
 enum Finished {
     Import {
         dtype: ElementDtype,
@@ -154,6 +160,8 @@ enum Finished {
     },
 }
 
+/// Read every row group into column buffers. Dictionary-encoded values that Arrow
+/// materializes as plain UTF-8 or numbers are handled as those types.
 fn read_columns(input: &Path) -> Result<Vec<ColumnBuild>, ConvertError> {
     let file = File::open(input)
         .map_err(|err| ConvertError::Parquet(format!("{}: {err}", input.display())))?;
@@ -178,6 +186,7 @@ fn read_columns(input: &Path) -> Result<Vec<ColumnBuild>, ConvertError> {
     Ok(columns)
 }
 
+/// Map an Arrow field type onto a numeric buffer, a category column, or a skip.
 fn kind_for(dtype: &DataType) -> Kind {
     let numeric = |dtype, signed| Kind::Num {
         dtype,
@@ -199,6 +208,7 @@ fn kind_for(dtype: &DataType) -> Kind {
     }
 }
 
+/// Append one record batch. The batch width must match the file schema.
 fn push_batch(columns: &mut [ColumnBuild], batch: &RecordBatch) -> Result<(), ConvertError> {
     if batch.num_columns() != columns.len() {
         return Err(ConvertError::Parquet(
@@ -388,14 +398,17 @@ impl ColumnBuild {
     }
 }
 
+/// Little-endian signed integer truncated to `width` bytes (2, 4, or 8).
 fn signed_le_bytes(value: i128, width: usize) -> Vec<u8> {
     value.to_le_bytes()[..width].to_vec()
 }
 
+/// Little-endian unsigned integer truncated to `width` bytes.
 fn unsigned_le_bytes(value: u128, width: usize) -> Vec<u8> {
     value.to_le_bytes()[..width].to_vec()
 }
 
+/// Interpret little-endian integer bits as `f64`. Signed values are sign-extended.
 fn integer_bits_as_f64(bits: &[u8], signed: bool) -> f64 {
     if signed {
         let mut wide = if bits.last().is_some_and(|byte| byte & 0x80 != 0) {
@@ -412,6 +425,7 @@ fn integer_bits_as_f64(bits: &[u8], signed: bool) -> f64 {
     }
 }
 
+/// Widen a packed integer column to little-endian `f64` after a null was seen.
 fn promote_to_f64(bytes: &[u8], width: usize, signed: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len() / width * 8);
     for chunk in bytes.chunks(width) {

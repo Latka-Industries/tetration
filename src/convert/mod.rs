@@ -1,4 +1,8 @@
-//! Foreign format → `.tet` conversion (Phase 5).
+//! Foreign format → `.tet` conversion.
+//!
+//! Importers: HDF5, `NetCDF`, Zarr v2 and v3, `NumPy` `.npy` / `.npz`, CSV / TSV, and Parquet
+//! (`tetration-parquet`). `--chunk-mib` retile the output grid; omitting it keeps source
+//! chunks, or a 64 MiB leading-axis tile for `NumPy`, CSV, and Parquet.
 //!
 //! With neither `tetration-hdf5` nor `tetration-netcdf` (e.g. lean `libtetration` for FFI),
 //! HDF5/NetCDF-only helpers in this tree are unused; see the `allow` below.
@@ -70,6 +74,9 @@ pub enum ConvertInputFormat {
 
 impl ConvertInputFormat {
     /// History footer source tag (`"h5"`, `"nc"`, `"zarr"`, `"npy"`, `"npz"`, `"csv"`, or `"parquet"`).
+    ///
+    /// Zarr v2 writes `"zarr2"` from the importer. This method still returns `"zarr"` for
+    /// [`Self::Zarr`], which is the sniff tag shared by both store versions.
     #[must_use]
     pub const fn history_source(self) -> &'static str {
         match self {
@@ -300,8 +307,11 @@ pub struct ConvertOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ConvertProgress {
+    /// Chunks whose payloads have been written.
     pub chunks_done: u64,
+    /// Chunks in the planned output grid.
     pub chunks_total: u64,
+    /// Catalog name of the dataset currently being written.
     pub dataset: String,
 }
 
@@ -309,7 +319,9 @@ pub struct ConvertProgress {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ConvertDatasetSummary {
+    /// Catalog path (`group/var`).
     pub name: String,
+    /// Rank of [`Self::dims`].
     pub ndim: usize,
     /// Per-axis lengths (same order as on-disk `.tet` / source array).
     pub dims: Vec<u64>,
@@ -329,9 +341,13 @@ pub struct ConvertSkip {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ConvertReport {
+    /// Source path that was converted.
     pub input: String,
+    /// `.tet` path that was written.
     pub output: String,
+    /// Number of datasets written. Same as [`Self::dataset_names`] length.
     pub dataset_count: usize,
+    /// Catalog names, in write order.
     pub dataset_names: Vec<String>,
     pub datasets: Vec<ConvertDatasetSummary>,
     /// Unsupported arrays left out of the `.tet` (empty when nothing was skipped).

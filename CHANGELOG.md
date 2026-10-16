@@ -2,9 +2,20 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-16
+
 ### Added
 
 - `tet convert` reports skipped datasets (`ConvertReport.skipped`, stderr lines) and `--strict` fails before writing when any array was skipped (THI-485)
+- `tet convert` imports NumPy `.npy` and multi-member `.npz` (THI-486)
+- `tet convert` imports CSV and TSV, with text columns stored as integer category codes (THI-488, THI-492)
+- `tet convert` imports Zarr v2 stores beside v3 (THI-490)
+- `tet convert` imports Parquet behind the `tetration-parquet` feature (THI-489)
+- `tet convert --chunk-mib N` retile imports to about N MiB along the leading axis (THI-487)
+
+### Changed
+
+- Convert rustdoc now matches those importers: Zarr v2, multi-member `.npz`, CSV categories, and Parquet
 
 ## [0.2.1] - 2026-10-15
 

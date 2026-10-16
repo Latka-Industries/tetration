@@ -1,6 +1,6 @@
 [package]
 name = "tetration"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.95"
 authors = ["AHurowitz <thicclatka@users.noreply.github.com>"]
@@ -20,7 +20,7 @@ crate-type = ["rlib", "cdylib"]
 # rustdoc on docs.rs: build with default features off (avoid native NetCDF/HDF5; gate optional imports).
 [package.metadata.docs.rs]
 no-default-features = true
-features = ["tetration-ffi"]
+features = ["tetration-ffi", "tetration-parquet"]
 
 [features]
 default = ["tetration-netcdf", "tetration-hdf5"]
