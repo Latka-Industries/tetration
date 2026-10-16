@@ -34,6 +34,8 @@ tetration-gpu = ["dep:cudarc"]
 tetration-rocm = ["dep:cudarc"]
 # Phase 10c: Metal scalar f32 reductions (macOS + Apple GPU; build on macOS only).
 tetration-metal = ["dep:metal"]
+# Parquet import. Off by default: the Arrow reader is a large dependency.
+tetration-parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]
 
 [[bin]]
 name = "tet"
@@ -86,6 +88,9 @@ cudarc = { version = "0.19.7", optional = true, default-features = false, featur
 sha2 = "0.10"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 csv = { version = "1.4.0", default-features = false }
+parquet = { version = "60.0.0", default-features = false, features = ["arrow", "snap", "flate2", "flate2-zlib-rs", "zstd"], optional = true }
+arrow-array = { version = "60.0.0", optional = true }
+arrow-schema = { version = "60.0.0", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.102"

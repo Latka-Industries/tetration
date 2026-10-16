@@ -10,9 +10,9 @@ Implementation: [`src/convert/`](../src/convert/), [`src/export/`](../src/export
 
 | Direction | Formats | CLI / API |
 | --------- | ------- | --------- |
-| **Import → `.tet`** | HDF5, NetCDF, Zarr v3, NumPy `.npy` / `.npz`, CSV / TSV | `tet convert <in> <out.tet>` · `convert_to_tet` |
+| **Import → `.tet`** | HDF5, NetCDF, Zarr v2 / v3, NumPy `.npy` / `.npz`, CSV / TSV | `tet convert <in> <out.tet>` · `convert_to_tet` |
 | **Export `.tet` →** | Zarr v3 directory only | `tet export <in.tet> <out.zarr/>` · `export_tet_to_zarr` |
-| **Not implemented** | HDF5 / NetCDF / Parquet / Arrow / `.npy` export; Zarr v2 import; cloud URIs as convert input | — |
+| **Not implemented** | HDF5 / NetCDF / Parquet / Arrow / `.npy` export; cloud URIs as convert input | — |
 
 Tetration’s interchange model is **dense numeric N-D arrays** in a **single sealed `.tet` file**. Converters map foreign arrays into that model; they do not preserve every source construct (VLEN strings, compound types, ragged tables, SQL schemas).
 
@@ -78,6 +78,19 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | **CF** | Not applied (values stored as in Zarr) |
 | **Metadata** | Array `attributes` copied to footer attrs |
 
+### Import: Zarr v2 (always available)
+
+| Topic | Detail |
+| ----- | ------ |
+| **Sniff** | Directory with root `.zgroup` or `.zarray`, or a `.zarr` path. v3 `zarr.json` still wins when both could apply |
+| **Walk** | `.zgroup` children; a root `.zarray` with no group name becomes dataset `data` |
+| **Dtypes** | Little-endian `<f2`, `<f4`, `<f8`, `<i2`, `<i4`, `<i8`, `<u2`, `<u4`, `<u8`, `\|u1`. `\|i1` / `bool` → `u8`. Big-endian is a skip |
+| **Order** | C-order only. Fortran-order is a skip |
+| **Codecs** | No compressor, or `{"id":"zstd"}`. Blosc, gzip, and filters are skips. Chunk keys use `.` or `/` |
+| **History** | Source tag `zarr2` |
+| **Metadata** | `.zattrs` copied to footer attrs |
+| **CF** | Not applied |
+
 ### Import: NumPy `.npy` / `.npz` (always available)
 
 | Topic | Detail |
@@ -105,6 +118,17 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | **Chunking** | ~64 MiB tiles along the column, same default as NumPy. CSV is parsed into column buffers first (rows are not hyperslabs). A `--chunk-mib` override waits on THI-487 |
 | **CF** | Not applied |
 
+### Import: Parquet (feature `tetration-parquet`)
+
+| Topic | Detail |
+| ----- | ------ |
+| **Sniff** | `.parquet`, `.pq`, or `PAR1` magic |
+| **Mapping** | One 1-D dataset per primitive numeric column, same family as CSV. The file is read into column buffers, then tiled at ~64 MiB |
+| **Dtypes** | `int16`/`int32`/`int64`, `uint8`–`uint64`, `float32`, `float64`. A null in an integer column promotes that column to `f64` with `NaN`. A null in a float column is `NaN` |
+| **Categories** | UTF-8 columns use the CSV category rule: `i64` codes, blank/null is `-1`, footer attr `tetration_categories` when the JSON fits in 1024 bytes |
+| **Skipped** | Bool, timestamps, decimals, nested lists and structs, and other Arrow types. `--strict` still refuses to write |
+| **Build** | Off by default. `cargo build --features tetration-parquet` |
+
 ### Export: `.tet` → Zarr v3
 
 | Topic | Detail |
@@ -119,8 +143,9 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 
 | Build | Convert capability |
 | ----- | ------------------ |
-| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr, NumPy, CSV |
-| **`--no-default-features`** | Zarr, NumPy, and CSV import, plus query on existing `.tet` (no system HDF5/NetCDF libs) |
+| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr v2/v3, NumPy, CSV |
+| **`--features tetration-parquet`** | Adds Parquet import (Arrow). Not in the default build |
+| **`--no-default-features`** | Zarr v2/v3, NumPy, and CSV import, plus query on existing `.tet` (no system HDF5/NetCDF libs) |
 | **`tetration-ffi` lean lib** | Same as no-default-features inside shared library |
 
 System packages for default builds: see [README — cargo install](../README.md).
@@ -216,7 +241,7 @@ Prioritized by fit with Tetration’s **dense chunked array** model. Effort is q
 
 | Format | Value | Main roadblocks |
 | ------ | ----- | ---------------- |
-| **Zarr v2** | Large installed base | Different metadata (`/.zgroup`, `.zarray`); codec matrix; v2→v3 mapping |
+| **Zarr v2** | Shipped: C-order numeric arrays, raw or zstd chunks | Blosc, gzip, and other filters stay skips |
 | **HDF5 export** | Round-trip with HDF5 ecosystems | Writer API, filter/chunk choices, group attrs, compound types not in v1 |
 | **NetCDF export** | CF workflows, tools expecting `.nc` | Shared dimensions, coordinate variables, CF attrs, unlimited dims |
 | **`f16` HDF5** | Match wire tag 9 | Half-float HDF5 type support in reader |
@@ -225,7 +250,7 @@ Prioritized by fit with Tetration’s **dense chunked array** model. Effort is q
 
 | Format | Value | Main roadblocks |
 | ------ | ----- | ---------------- |
-| **Apache Parquet** | Analytics, cloud warehouses | Columnar vs N-D tensor; nested/repeated fields; row groups ≠ chunk grid; statistics as index seed ([roadmap — Phase 13](roadmap.md#2-smarter-indexing-prospective-phase-13)) |
+| **Apache Parquet** | Shipped behind `tetration-parquet`: one 1-D dataset per numeric column, category codes for UTF-8 | Nested lists, structs, and Parquet export are not implemented |
 | **Apache Arrow / Feather / IPC** | Zero-copy interchange | Record batches vs single ndarray; schema with nulls; chunked arrays |
 | **CSV / TSV** | Shipped: one 1-D dataset per numeric column, plus integer codes for category columns | Delimiter is the extension only (comma or tab). No custom delimiter flag |
 

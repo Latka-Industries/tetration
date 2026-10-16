@@ -54,9 +54,14 @@ pub(crate) fn convert_zarr_inner(
     let store = input
         .canonicalize()
         .map_err(|e| ConvertError::Zarr(e.to_string()))?;
+    let v2 = !is_zarr_v3_directory(&store) && is_zarr_v2_directory(&store);
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
-    collect_zarr_plans(&store, "", "", &mut plans, &mut skipped)?;
+    if v2 {
+        collect_zarr_v2_plans(&store, "", "", &mut plans, &mut skipped)?;
+    } else {
+        collect_zarr_plans(&store, "", "", &mut plans, &mut skipped)?;
+    }
 
     ensure_non_empty(
         input,
@@ -83,7 +88,7 @@ pub(crate) fn convert_zarr_inner(
         |job, buf| source.fill_tile(job, buf),
         Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
     )?;
-    let history = finish_convert_footer(output, "zarr", &plans)?;
+    let history = finish_convert_footer(output, if v2 { "zarr2" } else { "zarr" }, &plans)?;
 
     Ok(report(
         input,
@@ -99,6 +104,7 @@ pub(crate) fn read_zarr_tile_le_into(
     store: &Path,
     array_rel: &str,
     zstd: bool,
+    v2_sep: Option<u8>,
     spec: ImportTileRead<'_>,
     buf: &mut [u8],
 ) -> Result<(), ConvertError> {
@@ -108,15 +114,16 @@ pub(crate) fn read_zarr_tile_le_into(
     let chunk_origin: Vec<u64> = (0..spec.ndim)
         .map(|d| spec.chunk_coord[d] * spec.chunk_shape[d])
         .collect();
-    let chunk_bytes = read_zarr_chunk_le(
+    let chunk_bytes = read_zarr_chunk_le(&ZarrChunkRead {
         store,
         array_rel,
         zstd,
-        spec.chunk_coord,
-        spec.ndim,
-        spec.chunk_shape,
+        v2_sep,
+        chunk_coord: spec.chunk_coord,
+        ndim: spec.ndim,
+        chunk_shape: spec.chunk_shape,
         elem_size,
-    )?;
+    })?;
     ChunkTileCopy {
         chunk: &chunk_bytes,
         chunk_shape: spec.chunk_shape,
@@ -238,28 +245,38 @@ fn zarr_chunk_payload_zstd(meta: &ZarrNodeMeta) -> bool {
     })
 }
 
-fn read_zarr_chunk_le(
-    store: &Path,
-    array_rel: &str,
+struct ZarrChunkRead<'a> {
+    store: &'a Path,
+    array_rel: &'a str,
     zstd: bool,
-    chunk_coord: &[u64],
+    v2_sep: Option<u8>,
+    chunk_coord: &'a [u64],
     ndim: usize,
-    chunk_shape: &[u64],
+    chunk_shape: &'a [u64],
     elem_size: usize,
-) -> Result<Vec<u8>, ConvertError> {
-    let mut path = store.join(array_rel).join("c");
-    for &coord in chunk_coord.iter().take(ndim) {
-        path.push(coord.to_string());
-    }
+}
+
+fn read_zarr_chunk_le(read: &ZarrChunkRead<'_>) -> Result<Vec<u8>, ConvertError> {
+    let path = zarr_chunk_path(
+        read.store,
+        read.array_rel,
+        read.v2_sep,
+        read.chunk_coord,
+        read.ndim,
+    );
     let on_disk = fs::read(&path).map_err(|e| ConvertError::Zarr(e.to_string()))?;
-    let decoded = if zstd {
+    let decoded = if read.zstd {
         zstd::decode_all(on_disk.as_slice()).map_err(|e| ConvertError::Zarr(e.to_string()))?
     } else {
         on_disk
     };
-    let expected = chunk_shape.iter().take(ndim).fold(elem_size, |acc, &d| {
-        acc.saturating_mul(usize::try_from(d).unwrap_or(0))
-    });
+    let expected = read
+        .chunk_shape
+        .iter()
+        .take(read.ndim)
+        .fold(read.elem_size, |acc, &dim| {
+            acc.saturating_mul(usize::try_from(dim).unwrap_or(0))
+        });
     if decoded.len() != expected {
         return Err(ConvertError::Zarr(format!(
             "chunk {} byte length mismatch (expected {expected}, got {})",
@@ -398,6 +415,208 @@ fn zarr_child_names(dir: &Path) -> Result<Vec<String>, ConvertError> {
     Ok(out)
 }
 
+fn zarr_chunk_path(
+    store: &Path,
+    array_rel: &str,
+    v2_sep: Option<u8>,
+    chunk_coord: &[u64],
+    ndim: usize,
+) -> PathBuf {
+    let coords: Vec<String> = chunk_coord
+        .iter()
+        .take(ndim)
+        .map(ToString::to_string)
+        .collect();
+    match v2_sep {
+        Some(b'/') => {
+            let mut path = store.join(array_rel);
+            for coord in coords {
+                path.push(coord);
+            }
+            path
+        }
+        Some(sep) => {
+            let key = coords.join(std::str::from_utf8(&[sep]).unwrap_or("."));
+            store.join(array_rel).join(key)
+        }
+        None => {
+            let mut path = store.join(array_rel).join("c");
+            for coord in coords {
+                path.push(coord);
+            }
+            path
+        }
+    }
+}
+
+fn collect_zarr_v2_plans(
+    store: &Path,
+    rel: &str,
+    catalog_prefix: &str,
+    plans: &mut Vec<ImportPlan>,
+    skipped: &mut Vec<super::ConvertSkip>,
+) -> Result<(), ConvertError> {
+    let dir = zarr_node_dir(store, rel);
+    if dir.join(".zarray").is_file() {
+        let name = if catalog_prefix.is_empty() {
+            "data".to_owned()
+        } else {
+            catalog_prefix.to_owned()
+        };
+        return note_plan(plan_zarr_v2_array(&name, rel, &dir), plans, skipped);
+    }
+    if !dir.join(".zgroup").is_file() {
+        return Err(ConvertError::Zarr(format!(
+            "zarr v2 node {} has neither .zarray nor .zgroup",
+            dir.display()
+        )));
+    }
+    for child in zarr_v2_child_names(&dir)? {
+        let child_rel = join_rel(rel, &child);
+        let child_catalog = join_catalog_path(catalog_prefix, &child);
+        collect_zarr_v2_plans(store, &child_rel, &child_catalog, plans, skipped)?;
+    }
+    Ok(())
+}
+
+fn plan_zarr_v2_array(name: &str, array_rel: &str, dir: &Path) -> Result<ImportPlan, ConvertError> {
+    let raw = fs::read_to_string(dir.join(".zarray"))
+        .map_err(|err| ConvertError::Zarr(err.to_string()))?;
+    let meta: ZarrV2Array =
+        serde_json::from_str(&raw).map_err(|err| ConvertError::Zarr(err.to_string()))?;
+    if meta.zarr_format != 2 {
+        return Err(ConvertError::Zarr(format!(
+            "array `{name}` has zarr_format {}, expected 2",
+            meta.zarr_format
+        )));
+    }
+    if meta.shape.is_empty() || meta.shape.contains(&0) {
+        return Err(ConvertError::UnsupportedDtype {
+            name: name.to_owned(),
+            detail: "empty zarr array".into(),
+        });
+    }
+    if meta.order != "C" {
+        return Err(ConvertError::UnsupportedDtype {
+            name: name.to_owned(),
+            detail: format!("zarr order `{}` (only C-order is supported)", meta.order),
+        });
+    }
+    let dtype = map_zarr_v2_dtype(name, &meta.dtype)?;
+    let zstd = zarr_v2_zstd(name, &meta)?;
+    let sep = match meta.dimension_separator.as_deref() {
+        Some("/") => b'/',
+        Some(".") | None => b'.',
+        Some(other) => {
+            return Err(ConvertError::UnsupportedDtype {
+                name: name.to_owned(),
+                detail: format!("zarr dimension_separator `{other}`"),
+            });
+        }
+    };
+    let chunks = meta
+        .chunks
+        .iter()
+        .map(|dim| usize::try_from(*dim).unwrap_or(0))
+        .collect();
+    let chunk_shape = chunk_shape_for_import(&meta.shape, Some(chunks));
+    let attrs = read_zarr_v2_attrs(dir);
+    Ok(
+        ImportPlan::new(name.to_owned(), dtype, meta.shape, chunk_shape, None)
+            .with_zarr(array_rel.to_owned(), zstd)
+            .with_zarr_v2_keys(sep)
+            .with_import(attrs, None, None),
+    )
+}
+
+fn map_zarr_v2_dtype(name: &str, dtype: &str) -> Result<ElementDtype, ConvertError> {
+    let unsupported = |detail: String| ConvertError::UnsupportedDtype {
+        name: name.to_owned(),
+        detail,
+    };
+    if dtype.starts_with('>') {
+        return Err(unsupported(format!("big-endian zarr dtype `{dtype}`")));
+    }
+    match dtype {
+        "<f2" => Ok(ElementDtype::F16),
+        "<f4" => Ok(ElementDtype::F32),
+        "<f8" => Ok(ElementDtype::F64),
+        "|u1" | "<u1" | "|b1" | "|i1" | "<i1" => Ok(ElementDtype::U8),
+        "<u2" => Ok(ElementDtype::U16),
+        "<i2" => Ok(ElementDtype::I16),
+        "<i4" => Ok(ElementDtype::I32),
+        "<i8" => Ok(ElementDtype::I64),
+        "<u4" => Ok(ElementDtype::U32),
+        "<u8" => Ok(ElementDtype::U64),
+        other => Err(unsupported(format!("zarr dtype `{other}`"))),
+    }
+}
+
+fn zarr_v2_zstd(name: &str, meta: &ZarrV2Array) -> Result<bool, ConvertError> {
+    if let Some(filters) = &meta.filters
+        && !(filters.is_null() || filters.as_array().is_some_and(Vec::is_empty))
+    {
+        return Err(ConvertError::UnsupportedDtype {
+            name: name.to_owned(),
+            detail: "zarr v2 filters are not supported".into(),
+        });
+    }
+    match &meta.compressor {
+        None => Ok(false),
+        Some(value) if value.is_null() => Ok(false),
+        Some(value) => {
+            let id = value.get("id").and_then(|id| id.as_str()).unwrap_or("");
+            if id == "zstd" {
+                Ok(true)
+            } else {
+                Err(ConvertError::UnsupportedDtype {
+                    name: name.to_owned(),
+                    detail: format!("zarr v2 compressor `{id}`"),
+                })
+            }
+        }
+    }
+}
+
+fn read_zarr_v2_attrs(dir: &Path) -> std::collections::BTreeMap<String, String> {
+    let path = dir.join(".zattrs");
+    let Ok(raw) = fs::read_to_string(path) else {
+        return std::collections::BTreeMap::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw) else {
+        return std::collections::BTreeMap::new();
+    };
+    zarr_array_attrs(&value)
+}
+
+fn zarr_v2_child_names(dir: &Path) -> Result<Vec<String>, ConvertError> {
+    let mut out = Vec::new();
+    for entry in fs::read_dir(dir).map_err(|err| ConvertError::Zarr(err.to_string()))? {
+        let entry = entry.map_err(|err| ConvertError::Zarr(err.to_string()))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if !(path.join(".zarray").is_file() || path.join(".zgroup").is_file()) {
+            continue;
+        }
+        out.push(
+            entry
+                .file_name()
+                .into_string()
+                .map_err(|_| ConvertError::Zarr("non-utf8 zarr child name".into()))?,
+        );
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// Returns true when `path` is a directory containing Zarr v2 root metadata.
+#[must_use]
+pub fn is_zarr_v2_directory(path: &Path) -> bool {
+    path.is_dir() && (path.join(".zgroup").is_file() || path.join(".zarray").is_file())
+}
+
 /// Returns true when `path` is a directory containing Zarr v3 root metadata.
 #[must_use]
 pub fn is_zarr_v3_directory(path: &Path) -> bool {
@@ -439,4 +658,19 @@ struct ZarrChunkGrid {
 #[derive(Debug, Deserialize)]
 struct ZarrChunkGridConfig {
     chunk_shape: Vec<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ZarrV2Array {
+    zarr_format: u32,
+    shape: Vec<u64>,
+    chunks: Vec<u64>,
+    dtype: String,
+    order: String,
+    #[serde(default)]
+    compressor: Option<serde_json::Value>,
+    #[serde(default)]
+    filters: Option<serde_json::Value>,
+    #[serde(default)]
+    dimension_separator: Option<String>,
 }

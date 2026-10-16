@@ -24,6 +24,8 @@ pub(crate) struct ImportPlan {
     pub zarr_array_rel: Option<String>,
     /// When importing Zarr: chunk files on disk are zstd-compressed (`bytes` + `zstd` codecs).
     pub zarr_zstd: bool,
+    /// Zarr v2 chunk-key separator (`b'.'` or `b'/'`). `None` is a v3 `c/0/0` key.
+    pub zarr_v2_sep: Option<u8>,
     /// Dataset attributes copied into footer `metadata.datasets[name].attrs`.
     pub import_attrs: BTreeMap<String, String>,
     /// `NetCDF` dimension names → `metadata.datasets[name].dim_names`.
@@ -68,6 +70,7 @@ impl ImportPlan {
             cf,
             zarr_array_rel: None,
             zarr_zstd: false,
+            zarr_v2_sep: None,
             import_attrs: BTreeMap::new(),
             import_dim_names: None,
             import_coords: None,
@@ -78,6 +81,12 @@ impl ImportPlan {
     pub(crate) fn with_zarr(mut self, array_rel: String, zstd: bool) -> Self {
         self.zarr_array_rel = Some(array_rel);
         self.zarr_zstd = zstd;
+        self
+    }
+
+    /// Mark this plan as a Zarr v2 array whose chunk keys use `sep` (`.` or `/`).
+    pub(crate) fn with_zarr_v2_keys(mut self, sep: u8) -> Self {
+        self.zarr_v2_sep = Some(sep);
         self
     }
 

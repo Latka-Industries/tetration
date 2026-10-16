@@ -116,9 +116,10 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | ------- | --------------------------------------------------------- |
 | HDF5    | `.h5`, `.hdf5`, `.hdf`, `.he2`, `.he5`, or file signature |
 | NetCDF  | `.nc`, `.netcdf`, `.nc4`, `.nc3`, `.cdf`, or signature    |
-| Zarr v3 | Directory with root `zarr.json`                           |
+| Zarr    | v3 directory with root `zarr.json`, or v2 `.zgroup` / `.zarray` |
 | NumPy   | `.npy`, `.npz` (one dataset per member), or `\x93NUMPY` magic |
 | CSV     | `.csv` (comma) or `.tsv` (tab). One 1-D dataset per numeric column. Text labels become `i64` codes plus a `tetration_categories` footer attr when the map fits in 1024 bytes |
+| Parquet | `.parquet`, `.pq`, or `PAR1`. Same column mapping as CSV. Requires `--features tetration-parquet` |
 
 | Flag       | Effect                                                                         |
 | ---------- | ------------------------------------------------------------------------------ |

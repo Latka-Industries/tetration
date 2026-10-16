@@ -43,6 +43,7 @@ pub(crate) fn run_convert(
         tetration::convert::ConvertInputFormat::Npy
         | tetration::convert::ConvertInputFormat::Npz => "NumPy convert",
         tetration::convert::ConvertInputFormat::Csv => "CSV convert",
+        tetration::convert::ConvertInputFormat::Parquet => "Parquet convert",
     };
     let progress_prefix = match format {
         tetration::convert::ConvertInputFormat::H5 => "HDF5 → .tet",
@@ -51,6 +52,7 @@ pub(crate) fn run_convert(
         tetration::convert::ConvertInputFormat::Npy
         | tetration::convert::ConvertInputFormat::Npz => "NumPy → .tet",
         tetration::convert::ConvertInputFormat::Csv => "CSV → .tet",
+        tetration::convert::ConvertInputFormat::Parquet => "Parquet → .tet",
     };
 
     let pb = ProgressBar::new(0);

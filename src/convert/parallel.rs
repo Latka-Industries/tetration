@@ -169,6 +169,13 @@ impl ZarrParallelSource {
         let plan = &self.plans[job.dataset_id];
         let array_rel = plan.zarr_array_rel.as_deref().unwrap_or(plan.name.as_str());
         let spec = plan.tile_read(job);
-        super::zarr::read_zarr_tile_le_into(&self.store, array_rel, plan.zarr_zstd, spec, buf)
+        super::zarr::read_zarr_tile_le_into(
+            &self.store,
+            array_rel,
+            plan.zarr_zstd,
+            plan.zarr_v2_sep,
+            spec,
+            buf,
+        )
     }
 }

@@ -1164,3 +1164,170 @@ fn convert_csv_encodes_categories_and_skips_oversize_maps() {
         report.skipped[0].reason
     );
 }
+
+#[test]
+fn convert_zarr_v2_roundtrips_raw_and_zstd_and_skips_blosc() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("sample.zarr");
+    std::fs::create_dir_all(store.join("grp/bias")).unwrap();
+    std::fs::create_dir_all(store.join("temp")).unwrap();
+    std::fs::create_dir_all(store.join("packed")).unwrap();
+    std::fs::create_dir_all(store.join("blosc")).unwrap();
+    std::fs::write(store.join(".zgroup"), r#"{"zarr_format":2}"#).unwrap();
+    std::fs::write(
+        store.join("temp/.zarray"),
+        r#"{"zarr_format":2,"shape":[4],"chunks":[2],"dtype":"<f4","order":"C","compressor":null,"filters":null,"fill_value":0}"#,
+    )
+    .unwrap();
+    std::fs::write(store.join("temp/.zattrs"), r#"{"units":"K"}"#).unwrap();
+    let mut temp = Vec::new();
+    for value in [1.0f32, 2.0, 3.0, 4.0] {
+        temp.extend_from_slice(&value.to_le_bytes());
+    }
+    std::fs::write(store.join("temp/0"), &temp[..8]).unwrap();
+    std::fs::write(store.join("temp/1"), &temp[8..]).unwrap();
+
+    std::fs::write(store.join("grp/.zgroup"), r#"{"zarr_format":2}"#).unwrap();
+    std::fs::write(
+        store.join("grp/bias/.zarray"),
+        r#"{"zarr_format":2,"shape":[2,2],"chunks":[2,2],"dtype":"<i4","order":"C","compressor":null,"filters":null,"fill_value":0}"#,
+    )
+    .unwrap();
+    let bias: Vec<u8> = [5i32, 6, 7, 8]
+        .into_iter()
+        .flat_map(i32::to_le_bytes)
+        .collect();
+    std::fs::write(store.join("grp/bias/0.0"), bias).unwrap();
+
+    std::fs::write(
+        store.join("packed/.zarray"),
+        r#"{"zarr_format":2,"shape":[2],"chunks":[2],"dtype":"<f8","order":"C","compressor":{"id":"zstd","level":1},"filters":null,"fill_value":0}"#,
+    )
+    .unwrap();
+    let packed: Vec<u8> = [1.5f64, 2.5]
+        .into_iter()
+        .flat_map(f64::to_le_bytes)
+        .collect();
+    std::fs::write(
+        store.join("packed/0"),
+        zstd::encode_all(packed.as_slice(), 1).unwrap(),
+    )
+    .unwrap();
+
+    std::fs::write(
+        store.join("blosc/.zarray"),
+        r#"{"zarr_format":2,"shape":[2],"chunks":[2],"dtype":"<f4","order":"C","compressor":{"id":"blosc"},"filters":null,"fill_value":0}"#,
+    )
+    .unwrap();
+
+    let output = dir.path().join("sample.tet");
+    let report =
+        convert_to_tet_with_options(&store, &output, ConvertOptions::default(), None::<fn(_)>)
+            .unwrap();
+    assert_eq!(report.history[0].source, "zarr2");
+    assert_eq!(
+        report.dataset_names,
+        vec![
+            "grp/bias".to_owned(),
+            "packed".to_owned(),
+            "temp".to_owned()
+        ]
+    );
+    assert_eq!(report.skipped.len(), 1);
+    assert_eq!(report.skipped[0].path, "blosc");
+    assert!(report.skipped[0].reason.contains("blosc"));
+
+    let mmap = mmap_file_read(&output).unwrap();
+    assert_eq!(read_dataset_payload_le_bytes(&mmap, "temp"), temp);
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "grp/bias"),
+        [5i32, 6, 7, 8]
+            .into_iter()
+            .flat_map(i32::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(read_dataset_payload_le_bytes(&mmap, "packed"), packed);
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    assert_eq!(
+        summary.metadata.datasets["temp"]
+            .attrs
+            .get("units")
+            .map(String::as_str),
+        Some("K")
+    );
+    assert_tet_verify_ok(&output);
+}
+
+#[cfg(feature = "tetration-parquet")]
+#[test]
+fn convert_parquet_numeric_and_category_columns() {
+    use std::sync::Arc;
+
+    use arrow_array::{BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray};
+    use arrow_schema::{DataType, Field, Schema};
+    use parquet::arrow::ArrowWriter;
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("table.parquet");
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("temp", DataType::Float64, true),
+        Field::new("n", DataType::Int64, false),
+        Field::new("label", DataType::Utf8, true),
+        Field::new("flag", DataType::Boolean, true),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Float64Array::from(vec![Some(1.5), None, Some(2.5)])),
+            Arc::new(Int64Array::from(vec![2, 3, 4])),
+            Arc::new(StringArray::from(vec![
+                Some("control"),
+                None,
+                Some("treated"),
+            ])),
+            Arc::new(BooleanArray::from(vec![Some(true), Some(false), None])),
+        ],
+    )
+    .unwrap();
+    let file = std::fs::File::create(&src).unwrap();
+    let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+
+    let output = dir.path().join("table.tet");
+    let report =
+        convert_to_tet_with_options(&src, &output, ConvertOptions::default(), None::<fn(_)>)
+            .unwrap();
+    assert_eq!(report.history[0].source, "parquet");
+    assert_eq!(
+        report.dataset_names,
+        vec!["temp".to_owned(), "n".to_owned(), "label".to_owned()]
+    );
+    assert_eq!(report.skipped[0].path, "flag");
+    let mmap = mmap_file_read(&output).unwrap();
+    let mut expected = Vec::new();
+    expected.extend_from_slice(&1.5f64.to_le_bytes());
+    expected.extend_from_slice(&f64::NAN.to_le_bytes());
+    expected.extend_from_slice(&2.5f64.to_le_bytes());
+    assert_eq!(read_dataset_payload_le_bytes(&mmap, "temp"), expected);
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "n"),
+        [2i64, 3, 4]
+            .into_iter()
+            .flat_map(i64::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        read_dataset_payload_le_bytes(&mmap, "label"),
+        [0i64, -1, 1]
+            .into_iter()
+            .flat_map(i64::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    let note = &summary.metadata.datasets["label"].attrs["tetration_categories"];
+    let parsed: serde_json::Value = serde_json::from_str(note).unwrap();
+    assert_eq!(parsed["codes"]["control"], 0);
+    assert_eq!(parsed["codes"]["treated"], 1);
+    assert_tet_verify_ok(&output);
+}
