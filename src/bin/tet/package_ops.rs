@@ -38,18 +38,8 @@ pub(crate) fn resolve_tet_read_path(path: &Path) -> Result<PathBuf, String> {
         return Ok(path.to_path_buf());
     }
     let pkg = TetPackage::open(path).map_err(cli_error)?;
-    let g = pkg
-        .current()
-        .map_err(cli_error)?
-        .ok_or_else(|| cli_error("package has no CURRENT generation (publish first)"))?;
-    let packed = pkg.packed_tet_path(g);
-    if !packed.is_file() {
-        return Err(cli_error(format!(
-            "CURRENT points at missing {}",
-            packed.display()
-        )));
-    }
-    Ok(packed)
+    let pin = pkg.pin_current().map_err(cli_error)?;
+    Ok(pin.packed_tet_path().to_path_buf())
 }
 
 pub(crate) struct IngestOpts {

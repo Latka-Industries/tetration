@@ -50,7 +50,7 @@ pub use metadata::{
 };
 pub use package::{
     DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION, PackageProtocol,
-    TetPackage, format_generation_id,
+    TetPackage, TetPackagePin, format_generation_id,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
