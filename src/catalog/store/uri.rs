@@ -33,7 +33,8 @@ pub enum TetOpenTarget {
         /// Which generation to pin when opening.
         generation: GenerationPin,
     },
-    /// Recognized shape; backend is 0.3.1 ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
+    /// Recognized shape. `S3Store` (feature `tetration-s3`) speaks the store trait;
+    /// the query engine does not open this variant yet.
     S3 {
         /// Bucket name from `s3://bucket/…`.
         bucket: String,

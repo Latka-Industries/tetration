@@ -36,6 +36,8 @@ mod shard;
 mod small_tet_fixtures;
 mod store;
 mod store_query;
+#[cfg(feature = "tetration-s3")]
+mod store_s3;
 mod utils;
 mod variance_simd;
 mod verify;

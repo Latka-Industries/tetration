@@ -34,12 +34,12 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libnetcdf-dev libhdf5-dev pkg-config
+          sudo apt-get install -y libnetcdf-dev libhdf5-dev pkg-config cmake
 
       - name: Install system deps (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install netcdf
+          brew install netcdf cmake
 
       - name: Install system deps (Windows)
         if: matrix.os == 'windows-latest'
@@ -76,7 +76,7 @@ jobs:
         run: |
           # `tetration-metal` is macOS-only (see Cargo.toml). Do not use `--all-features` on Linux/Windows.
           # `tetration-gpu` and `tetration-rocm` are mutually exclusive — enable at most one driver backend.
-          FEAT="tetration-netcdf,tetration-hdf5,tetration-gpu,tetration-parquet"
+          FEAT="tetration-netcdf,tetration-hdf5,tetration-gpu,tetration-parquet,tetration-s3"
           if [ "${{ runner.os }}" = "macOS" ]; then
             FEAT="${FEAT},tetration-metal"
           fi
@@ -85,7 +85,17 @@ jobs:
       - name: Run clippy
         run: cargo clippy --features ${{ steps.cargo_features.outputs.value }} -- -D warnings
 
+      - name: Start MinIO
+        if: runner.os == 'Linux'
+        run: ./.github/scripts/start-minio.sh
+
       - name: Run tests
+        env:
+          TETRATION_S3_ENDPOINT: ${{ runner.os == 'Linux' && 'http://127.0.0.1:9000' || '' }}
+          TETRATION_S3_BUCKET: ${{ runner.os == 'Linux' && 'tetration-test' || '' }}
+          TETRATION_S3_ACCESS_KEY: ${{ runner.os == 'Linux' && 'tetration' || '' }}
+          TETRATION_S3_SECRET_KEY: ${{ runner.os == 'Linux' && 'tetration-secret' || '' }}
+          TETRATION_S3_REQUIRED: ${{ runner.os == 'Linux' && '1' || '' }}
         run: cargo test --features ${{ steps.cargo_features.outputs.value }} --verbose
 
       - name: FFI tests (Phase 11)
@@ -114,7 +124,7 @@ jobs:
       - name: Install NetCDF (Ubuntu)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libnetcdf-dev libhdf5-dev pkg-config
+          sudo apt-get install -y libnetcdf-dev libhdf5-dev pkg-config cmake
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v5
@@ -128,4 +138,4 @@ jobs:
           key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check MSRV
-        run: cargo check --all-targets
+        run: cargo check --all-targets --features tetration-s3
