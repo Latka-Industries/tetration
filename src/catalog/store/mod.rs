@@ -1,10 +1,12 @@
-//! Package blob store (THI-469): filesystem vs object-store backends behind one protocol.
+//! Package blob store: filesystem vs object-store backends behind one protocol.
 //!
 //! Keys are package-relative POSIX paths (`CURRENT`, `staging/…`, `generations/00000001/packed.tet`).
 //! Local `.tet.d` uses [`LocalStore`]; tests use [`MemoryStore`].
 //! S3-compatible backends are `S3Store` behind the `tetration-s3` feature.
 //! [`stage_part`] / [`publish_staged_parts`] upload parts and CAS-publish one generation.
-//! A query pins `packed.tet` once and does not follow a newer `CURRENT`.
+//! Publish takes an exclusive `publishing/<G>` claim ([`PublishOptions`]); a second host that
+//! loses the claim does not write `CURRENT`. A query pins `packed.tet` once and does not follow
+//! a newer `CURRENT`.
 
 mod fetch;
 mod ingest;
@@ -130,7 +132,8 @@ pub trait PublishGeneration {
     /// Set `CURRENT` to `generation` when the prior value matches `expected_current`.
     ///
     /// Local backends may treat the write as POSIX rename-atomic and still check `expected`.
-    /// Object stores use conditional put (0.3.1).
+    /// Object stores use conditional put (0.3.1). Callers should hold the `publishing/<G>` claim
+    /// ([`begin_publish_store`]) before sealing; only the claim winner should call this.
     ///
     /// # Errors
     ///

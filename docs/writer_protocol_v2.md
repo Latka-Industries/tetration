@@ -139,7 +139,7 @@ example.tet.d/
 6. Atomically set `CURRENT` → `G`.
 7. Staging GC optional afterward (decision **D**): sealed verify must **not** require staging files.
 
-**Stale lock:** if `publishing/<G>/` is older than N and heartbeat is dead, `tet verify` / `tet repair` may **quarantine** the dir. Taking over requires explicit **`--force`** (decision **G**).
+**Stale lock:** if `publishing/<G>/` is older than N and heartbeat is dead, `tet verify` / `tet repair` may **quarantine** the dir. Taking over requires explicit **`--force`** (decision **G**). On `PackageStore`, the same rule is [`PublishOptions::force`](../src/catalog/store/publish_lock.rs) via `begin_publish_store` / `publish_staged_parts_with_options` (0.3.2).
 
 ### Crash behavior
 

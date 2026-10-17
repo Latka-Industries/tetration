@@ -12,7 +12,9 @@ use super::{ReadAt, WritePart};
 
 const HEARTBEAT_FILE: &str = "HEARTBEAT";
 
-/// Options for store-backed publish (THI-500).
+/// Options for store-backed publish (writer protocol decision **G**).
+///
+/// Default: no force takeover; stale age is [`DEFAULT_PUBLISH_LOCK_STALE`](crate::catalog::DEFAULT_PUBLISH_LOCK_STALE) (1h).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PublishOptions {
     /// When `true`, quarantine a **stale** lock and retry the exclusive claim.
