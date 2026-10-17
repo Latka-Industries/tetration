@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-17
+
+### Added
+
+- Optional `tetration-s3` feature: `S3Store` / `S3Config` speak `PackageStore` against an S3-compatible bucket (path-style, ETag conditional put). Tests use local MinIO and skip unless `TETRATION_S3_ENDPOINT` is set (THI-499)
+- `stage_part`, `seal_staged_generation`, and `publish_staged_parts`: N writers upload parts, one CAS publish. A lost precondition leaves the previous `CURRENT` and its `packed.tet` (THI-471)
+
+### Changed
+
+- A query keeps the generation it opened. A newer `CURRENT` is invisible until the next open. Replacing the pinned `packed.tet` is not a new generation (roadmap, layout, query docs, `tet query` help, and the pin rustdoc; THI-472)
+
 ## [0.3.0] - 2026-10-17
 
 ### Added

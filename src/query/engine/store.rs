@@ -49,11 +49,14 @@ pub fn execute_query_with_store(
     plan_query_with_tet_mmap_ex(doc, None, &buf, options.preview_max, spill_allowlist)
 }
 
-/// Pin `CURRENT` (or an explicit generation) and execute `doc`.
+/// Pin `CURRENT` (or an explicit generation) once and execute `doc` against that object.
+///
+/// Does not re-read `CURRENT` if a publish lands during the call. Does not open an `s3://`
+/// URI; pass a store you already connected (`S3Store` needs feature `tetration-s3`).
 ///
 /// # Errors
 ///
-/// Pin, store, or query failures. `s3://` is not opened here.
+/// Pin, store, or query failures.
 pub fn execute_query_on_store_pin(
     doc: &QueryDocument,
     store: &dyn PackageStore,
