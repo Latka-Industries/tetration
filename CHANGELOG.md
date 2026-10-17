@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-17
+
 ### Added
 
 - `open_s3_package` and `tet query -t s3://bucket/prefix` pin one generation and read it through the existing range planner (`tetration-s3`, `TETRATION_S3_ENDPOINT`, optional `?generation=N`). The query fetches the catalog and the chunks it touches (THI-517)

@@ -21,7 +21,7 @@ pub(crate) fn minio_store(prefix: &str) -> Option<S3Store> {
     )
 }
 
-fn unique_prefix(label: &str) -> String {
+pub(crate) fn unique_prefix(label: &str) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static N: AtomicU64 = AtomicU64::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
@@ -32,7 +32,7 @@ fn unique_prefix(label: &str) -> String {
     format!("tests/{label}-{nanos}-{n}")
 }
 
-struct ClearOnDrop(S3Store);
+pub(crate) struct ClearOnDrop(pub(crate) S3Store);
 
 impl Drop for ClearOnDrop {
     fn drop(&mut self) {

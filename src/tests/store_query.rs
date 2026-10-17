@@ -321,33 +321,17 @@ fn query_fetch_plan_covers_touched_chunks() {
 }
 
 #[cfg(feature = "tetration-s3")]
-struct ClearMinio(crate::catalog::S3Store);
-
-#[cfg(feature = "tetration-s3")]
-impl Drop for ClearMinio {
-    fn drop(&mut self) {
-        let _ = self.0.clear();
-    }
-}
-
-#[cfg(feature = "tetration-s3")]
 #[test]
 fn query_s3_package_uri_sum_matches_mmap() {
-    use super::store_s3::minio_store;
+    use super::store_s3::{ClearOnDrop, minio_store, unique_prefix};
     use crate::catalog::{PublishGeneration, WritePart, open_s3_package, packed_tet_key};
     use crate::query::query_opened_s3_package;
 
-    let prefix = format!(
-        "tests/query-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-    );
+    let prefix = unique_prefix("query");
     let Some(store) = minio_store(&prefix) else {
         return;
     };
-    let store = ClearMinio(store);
+    let store = ClearOnDrop(store);
     let packed = multi_chunk_tet();
     store.0.write_part(&packed_tet_key(1), &packed).unwrap();
     store

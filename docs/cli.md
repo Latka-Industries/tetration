@@ -154,6 +154,7 @@ Local concurrent package workflow ([writer protocol v2](writer_protocol_v2.md)):
 tet ingest a.tet b.tet --out climate.tet.d --jobs 2
 tet publish climate.tet.d
 tet query '{"dataset":"temp","mean":[]}' -t climate.tet.d -x -q
+tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/prefix?generation=3' -x -q
 tet pack climate.tet.d -o climate.tet
 ```
 
