@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 
 use super::CatalogError;
 use super::session::TetFile;
+use super::store::{LocalStore, PublishGeneration};
 use crate::utils::fs_device;
 
 /// Package protocol version locked with writer protocol v2 (decision F).
@@ -24,8 +25,6 @@ pub const PACKAGE_PROTOCOL_VERSION: u32 = 2;
 pub const DEFAULT_PUBLISH_LOCK_STALE: Duration = Duration::from_hours(1);
 
 const PROTOCOL_FILE: &str = "PROTOCOL";
-const CURRENT_FILE: &str = "CURRENT";
-const CURRENT_TMP: &str = "CURRENT.tmp";
 const GENERATIONS_DIR: &str = "generations";
 const STAGING_DIR: &str = "staging";
 const PUBLISHING_DIR: &str = "publishing";
@@ -62,9 +61,10 @@ pub struct GenerationManifest {
 /// Open handle to a `.tet.d` package root.
 ///
 /// Cheap to clone (path + parsed [`PackageProtocol`]); does not hold file locks.
+/// Blob I/O for `CURRENT` (and store-keyed objects) goes through [`LocalStore`] (THI-469).
 #[derive(Debug, Clone)]
 pub struct TetPackage {
-    root: PathBuf,
+    store: LocalStore,
     protocol: PackageProtocol,
 }
 
@@ -72,7 +72,13 @@ impl TetPackage {
     /// Package root directory (the `.tet.d` path).
     #[must_use]
     pub fn root(&self) -> &Path {
-        &self.root
+        self.store.root()
+    }
+
+    /// Local filesystem store for this package (THI-469).
+    #[must_use]
+    pub fn store(&self) -> &LocalStore {
+        &self.store
     }
 
     /// Parsed `PROTOCOL` document from open/create.
@@ -105,7 +111,10 @@ impl TetPackage {
             created_unix: Some(unix_now()),
         };
         write_json_atomic(&root.join(PROTOCOL_FILE), &protocol)?;
-        Ok(Self { root, protocol })
+        Ok(Self {
+            store: LocalStore::new(root),
+            protocol,
+        })
     }
 
     /// Open an existing package and validate `PROTOCOL`.
@@ -127,7 +136,10 @@ impl TetPackage {
                 protocol.protocol_version,
             ));
         }
-        Ok(Self { root, protocol })
+        Ok(Self {
+            store: LocalStore::new(root),
+            protocol,
+        })
     }
 
     /// Read `CURRENT` generation id, if any sealed generation has been published.
@@ -136,47 +148,40 @@ impl TetPackage {
     ///
     /// Returns [`CatalogError::InvalidCurrent`] when the pointer cannot be parsed, or I/O errors.
     pub fn current(&self) -> Result<Option<u64>, CatalogError> {
-        let path = self.root.join(CURRENT_FILE);
-        if !path.is_file() {
-            return Ok(None);
-        }
-        let text = fs::read_to_string(&path)?;
-        parse_current(&text).map(Some)
+        self.store.current_generation()
     }
 
-    /// Atomically set `CURRENT` via temp file + same-filesystem rename (decision K).
+    /// Atomically set `CURRENT` via the local [`PackageStore`] (decision K).
     ///
     /// # Errors
     ///
     /// Returns [`CatalogError::GenerationNotSealed`] when the generation directory exists but
-    /// lacks `packed.tet`, or I/O / cross-volume publish failures.
+    /// lacks `packed.tet`, [`CatalogError::InvalidCurrent`] when a concurrent CAS check fails,
+    /// or I/O / cross-volume publish failures.
     pub fn set_current(&self, generation: u64) -> Result<(), CatalogError> {
         if self.generation_dir(generation).exists() && !self.packed_tet_path(generation).is_file() {
             return Err(CatalogError::GenerationNotSealed(generation));
         }
-        let tmp = self.root.join(CURRENT_TMP);
-        let dest = self.root.join(CURRENT_FILE);
-        write_text_atomic(&tmp, &format!("{generation}\n"))?;
-        fs_device::publish_file(&tmp, &dest)?;
-        Ok(())
+        let expected = self.store.current_generation()?;
+        self.store.publish_generation(generation, expected)
     }
 
     /// `staging/` — shard writers only; never reader-visible.
     #[must_use]
     pub fn staging_dir(&self) -> PathBuf {
-        self.root.join(STAGING_DIR)
+        self.root().join(STAGING_DIR)
     }
 
     /// `publishing/` — committer scratch / publish locks.
     #[must_use]
     pub fn publishing_dir(&self) -> PathBuf {
-        self.root.join(PUBLISHING_DIR)
+        self.root().join(PUBLISHING_DIR)
     }
 
     /// `generations/` — sealed generation trees.
     #[must_use]
     pub fn generations_dir(&self) -> PathBuf {
-        self.root.join(GENERATIONS_DIR)
+        self.root().join(GENERATIONS_DIR)
     }
 
     /// `generations/<G>/` for a generation id.
@@ -442,26 +447,6 @@ pub(crate) fn is_safe_path_segment(id: &str) -> bool {
 
 fn is_safe_session_id(session_id: &str) -> bool {
     is_safe_path_segment(session_id)
-}
-
-fn parse_current(text: &str) -> Result<u64, CatalogError> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Err(CatalogError::InvalidCurrent);
-    }
-    // Bare integer or `{"generation": N}`.
-    if trimmed.starts_with('{') {
-        #[derive(Deserialize)]
-        struct CurrentJson {
-            generation: u64,
-        }
-        let v: CurrentJson =
-            serde_json::from_str(trimmed).map_err(|_| CatalogError::InvalidCurrent)?;
-        return Ok(v.generation);
-    }
-    trimmed
-        .parse::<u64>()
-        .map_err(|_| CatalogError::InvalidCurrent)
 }
 
 pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CatalogError> {

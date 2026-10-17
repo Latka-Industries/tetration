@@ -34,6 +34,7 @@ mod resolve_selection;
 mod session;
 mod shard;
 mod small_tet_fixtures;
+mod store;
 mod utils;
 mod variance_simd;
 mod verify;
