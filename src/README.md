@@ -7,7 +7,7 @@ The **tetration** library and **`tet`** CLI live here. Public embedder API is re
 | Module                          | Role                                                     | CLI                      |
 | ------------------------------- | -------------------------------------------------------- | ------------------------ |
 | [`layout.rs`](layout.rs)        | 32-byte superblock, mmap helpers                         | —                        |
-| [`catalog/`](catalog/README.md) | Dataset directory, chunk index, codecs, writers, readers | `tet info`               |
+| [`catalog/`](catalog/README.md) | Dataset directory, chunk index, packages, `PackageStore`, writers, readers | `tet info`, package cmds |
 | [`query/`](query/README.md)     | JSON/TOML queries: plan, decode, fold, execute           | `tet query`, `tet qhist` |
 | [`convert/`](convert/README.md) | HDF5 / NetCDF / Zarr / NumPy / CSV / Parquet → `.tet`    | `tet convert`            |
 | [`export/`](export/README.md)   | `.tet` → Zarr v3 / HDF5 / NetCDF                         | `tet export`             |
