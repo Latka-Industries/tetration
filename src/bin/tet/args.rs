@@ -129,11 +129,11 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Export a `.tet` file to a Zarr v3 directory store.
+    /// Export a `.tet` file to Zarr v3, HDF5, or NetCDF (format from output path).
     Export {
         /// Source `.tet` file.
         input: PathBuf,
-        /// Destination Zarr v3 directory (must not exist or must be empty).
+        /// Destination: Zarr directory (empty/missing), `.h5`/`.hdf5`, or `.nc`/`.netcdf`.
         output: PathBuf,
     },
     /// Convert HDF5, `NetCDF`, `Zarr`, `NumPy`, CSV, or Parquet into `.tet`.

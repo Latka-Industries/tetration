@@ -10,7 +10,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet`              |
-| [`tet export`](#tet-export) `<in.tet> <out.zarr/>` | —      | `.tet` → Zarr v3 directory store                            |
+| [`tet export`](#tet-export) `<in.tet> <out>`       | —      | `.tet` → Zarr v3 / HDF5 / NetCDF (from output path)         |
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
 | [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
 | [`tet pack`](#tet-ingest--publish--compact--pack)  | —      | Copy sealed `packed.tet` → standalone `.tet`                |
@@ -132,10 +132,16 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | Flag / arg | Effect                                                                                 |
 | ---------- | -------------------------------------------------------------------------------------- |
 | `<in.tet>` | Source file (mmap read + catalog summary)                                              |
-| `<out>`    | Zarr v3 **directory**; must be missing or **empty** (creates `zarr.json` + chunk tree) |
+| `<out>`    | Format from path: Zarr **directory** (missing/empty), `.h5`/`.hdf5`, or `.nc`/`.netcdf` |
 | _(stderr)_ | Progress line: dataset count, chunks written, elapsed seconds                          |
 
-Preserves per-dataset **raw** or **zstd** chunk bytes; slash-separated dataset names become nested groups (`primary/f32`). Library: [`export_tet_to_zarr`](https://docs.rs/tetration/latest/tetration/export/fn.export_tet_to_zarr.html).
+| Output | Behavior |
+| ------ | -------- |
+| Zarr directory / `.zarr` | Copies per-dataset **raw** or **zstd** chunk bytes; slash names → nested groups |
+| `.h5` / `.hdf5` / … | Dense numeric HDF5 (`tetration-hdf5`); path must not exist |
+| `.nc` / `.netcdf` / … | Dense numeric NetCDF-4 (`tetration-netcdf`); carries `dim_names` when present |
+
+Slash-separated dataset names become nested groups (`primary/f32`). Library: [`export_tet`](https://docs.rs/tetration/latest/tetration/export/fn.export_tet.html) (or format-specific `export_tet_to_*`).
 
 Import/export matrix, roadblocks, and future formats: [`conversions.md`](conversions.md).
 

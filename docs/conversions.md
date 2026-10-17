@@ -11,8 +11,8 @@ Implementation: [`src/convert/`](../src/convert/), [`src/export/`](../src/export
 | Direction | Formats | CLI / API |
 | --------- | ------- | --------- |
 | **Import → `.tet`** | HDF5, NetCDF, Zarr v2 / v3, NumPy `.npy` / `.npz`, CSV / TSV, Parquet (`tetration-parquet`) | `tet convert <in> <out.tet>` · `convert_to_tet` |
-| **Export `.tet` →** | Zarr v3 directory only | `tet export <in.tet> <out.zarr/>` · `export_tet_to_zarr` |
-| **Not implemented** | HDF5 / NetCDF / Parquet / Arrow / `.npy` export; cloud URIs as convert input | — |
+| **Export `.tet` →** | Zarr v3 directory; HDF5 / NetCDF (`tetration-hdf5` / `tetration-netcdf`) | `tet export <in.tet> <out>` · `export_tet` |
+| **Not implemented** | Parquet / Arrow / `.npy` export; cloud URIs as convert input | — |
 
 Tetration’s interchange model is **dense numeric N-D arrays** in a **single sealed `.tet` file**. Converters map foreign arrays into that model; they do not preserve every source construct (VLEN strings, compound types, ragged tables, SQL schemas).
 
@@ -139,13 +139,34 @@ Readers mmap the sealed output; convert is **single-writer**, not read-while-wri
 | **Metadata** | Footer dataset attrs merged into Zarr `attributes` + `tetration_dtype` stamp |
 | **Limit** | Per-dataset chunks must be **all raw or all zstd** — mixed codecs error |
 
+### Export: `.tet` → HDF5 (feature `tetration-hdf5`, default)
+
+| Topic | Detail |
+| ----- | ------ |
+| **Output** | New `.h5` / `.hdf5` / … file (must not exist); slash names → nested groups |
+| **Payloads** | Densifies decoded tiles into one contiguous array per dataset (chunk grid preserved when writing) |
+| **Dtypes** | `f32`/`f64`/`i16`/`u16`/`i32`/`u32`/`i64`/`u64`/`u8` — **not** `f16` |
+| **Metadata** | Basic string attrs (`units`, `long_name`, `standard_name`, …); `dim_names` as a comma-joined attr when present; typed CF packing attrs (`scale_factor`, `_FillValue`, …) are **not** rewritten |
+
+### Export: `.tet` → NetCDF-4 (feature `tetration-netcdf`, default)
+
+| Topic | Detail |
+| ----- | ------ |
+| **Output** | New `.nc` / `.netcdf` / … file (must not exist); slash names → nested groups |
+| **Payloads** | Same densify path as HDF5 export |
+| **Dtypes** | `f32`/`f64`/`u8`/`i16`/`u16`/`i32`/`i64` — **not** `f16` / `u32` / `u64` |
+| **Dimensions** | Footer `dim_names` when present and length-matched; otherwise synthetic `{leaf}_d{i}` per dataset. Shared dims reuse matching name+length in a group |
+| **Metadata** | Same basic string attrs as HDF5 export; not full CF rewrite |
+
+CLI / library pick the writer from the output path via [`export_tet`](../src/export/mod.rs).
+
 ### Build / deploy variants
 
-| Build | Convert capability |
+| Build | Convert / export capability |
 | ----- | ------------------ |
-| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5, NetCDF, Zarr v2/v3, NumPy, CSV |
+| **Default** (`tetration-hdf5` + `tetration-netcdf`) | HDF5 + NetCDF import **and** export; Zarr v2/v3, NumPy, CSV import; Zarr export |
 | **`--features tetration-parquet`** | Adds Parquet import (Arrow). Not in the default build |
-| **`--no-default-features`** | Zarr v2/v3, NumPy, and CSV import, plus query on existing `.tet` (no system HDF5/NetCDF libs) |
+| **`--no-default-features`** | Zarr v2/v3, NumPy, and CSV import; Zarr-only export; query on existing `.tet` (no system HDF5/NetCDF libs) |
 | **`tetration-ffi` lean lib** | Same as no-default-features inside shared library |
 
 System packages for default builds: see [README — cargo install](../README.md).
@@ -206,7 +227,7 @@ Scalars / 0-d NetCDF variables are recorded the same way.
 | Issue | Detail |
 | ----- | ------ |
 | **Footer size cap** | Large metadata may spill; importers trim/prefer attrs — not every source attr preserved |
-| **Zarr-only export** | No `tet export` to HDF5/NetCDF; round-trip is **`.tet` ↔ Zarr v3** for interchange |
+| **Export subset** | HDF5/NetCDF export densifies (not chunk-byte identity); typed CF packing attrs are not rewritten; `f16` (and NetCDF `u32`/`u64`) rejected |
 | **History** | Convert writes one `convert` history row; full provenance chain not reconstructed from source |
 | **Dim/coord fidelity** | NetCDF dim names and 1-D coords imported when found; arbitrary HDF5 soft-link graphs not preserved |
 
@@ -229,7 +250,8 @@ Scalars / 0-d NetCDF variables are recorded the same way.
 | `NoDatasets` | Every array filtered out (types, empty file) |
 | `UnsupportedDtype { name, detail }` | Per-dataset (often swallowed during walk) |
 | `Hdf5` / `Netcdf` / `Zarr` | Library I/O, corrupt file, codec mismatch |
-| `OutputNotEmpty` (export) | Target Zarr directory not empty |
+| `OutputNotEmpty` / `OutputExists` (export) | Target Zarr directory not empty, or HDF5/NetCDF path already exists |
+| `ExportFeatureDisabled` | HDF5/NetCDF export with `--no-default-features` build |
 
 ---
 
@@ -242,8 +264,8 @@ Prioritized by fit with Tetration’s **dense chunked array** model. Effort is q
 | Format | Value | Main roadblocks |
 | ------ | ----- | ---------------- |
 | **Zarr v2** | Shipped: C-order numeric arrays, raw or zstd chunks | Blosc, gzip, and other filters stay skips |
-| **HDF5 export** | Round-trip with HDF5 ecosystems | Writer API, filter/chunk choices, group attrs, compound types not in v1 |
-| **NetCDF export** | CF workflows, tools expecting `.nc` | Shared dimensions, coordinate variables, CF attrs, unlimited dims |
+| **HDF5 export** | Shipped (`tetration-hdf5`): dense numeric + basic attrs | Compounds, `f16`, typed CF packing attrs, exotic filters |
+| **NetCDF export** | Shipped (`tetration-netcdf`): dense numeric + `dim_names` | Full CF/CRS, unlimited dims, `u32`/`u64`/`f16` |
 | **`f16` HDF5** | Match wire tag 9 | Half-float HDF5 type support in reader |
 
 ### Tier B — columnar / table formats (mapping required)
@@ -293,7 +315,7 @@ Fixtures policy: [`fixtures/README.md`](../fixtures/README.md) — new formats g
 
 ## Round-trip fidelity checklist
 
-Use when validating **source → `.tet` → Zarr → `.tet`** or comparing to source:
+Use when validating **source → `.tet` → Zarr/HDF5/NetCDF → `.tet`** or comparing to source:
 
 1. **Dataset names** — same count and paths (slash groups)?
 2. **Shape / dtype** — wire tag matches expected promotion (e.g. bool → `u8`)?
@@ -312,6 +334,6 @@ Use when validating **source → `.tet` → Zarr → `.tet`** or comparing to so
 | [`layout_v1.md`](layout_v1.md) | Wire dtypes, footer metadata, codecs |
 | [`roadmap.md`](roadmap.md) | Cloud I/O, indexing, semantics (affects convert priorities) |
 | [`src/convert/README.md`](../src/convert/README.md) | Module map for contributors |
-| [`src/export/README.md`](../src/export/README.md) | Zarr export internals |
+| [`src/export/README.md`](../src/export/README.md) | Zarr / HDF5 / NetCDF export internals |
 
 **Discussion:** extend this doc via PR; track new format requests in [issue #17](https://github.com/Latka-Industries/tetration/issues/17). Python-side convert orchestration: [tet-py#10](https://github.com/Latka-Industries/tet-py/issues/10).

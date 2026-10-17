@@ -14,7 +14,7 @@ Full flag reference: [`docs/cli.md`](../../docs/cli.md).
 | `tet/query.rs`   | `tet query` (`q`)        | `query::execute_*`, `cli::output` |
 | `tet/qhist.rs`   | `tet qhist` (`hist`)     | `query::cli::history`             |
 | `tet/convert.rs` | `tet convert`            | `convert::convert_to_tet_*`       |
-| `tet/export.rs`  | `tet export`             | `export::export_tet_to_zarr_*`    |
+| `tet/export.rs`  | `tet export`             | `export::export_tet_*`            |
 | `tet/args.rs`    | clap `Cli` / `Commands`  | —                                 |
 | `tet/util.rs`    | stdin query read, errors | `parse_query_text`                |
 
