@@ -105,18 +105,12 @@ pub fn parse_s3_package_uri(input: &str) -> Result<S3PackageLocation, TetUriErro
     else {
         return Err(TetUriError::NotS3Package(input.trim().to_string()));
     };
-    let prefix = key.trim_matches('/');
-    if !prefix.is_empty()
-        && prefix
-            .split('/')
-            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
-    {
-        return Err(TetUriError::InvalidS3(input.trim().to_string()));
-    }
+    let prefix = normalize_package_prefix(&key)
+        .map_err(|_| TetUriError::InvalidS3(input.trim().to_string()))?;
     Ok(S3PackageLocation {
         label: parsed.label,
         bucket,
-        prefix: prefix.to_string(),
+        prefix,
         generation,
     })
 }
@@ -153,6 +147,16 @@ pub fn parse_tet_uri(input: &str) -> Result<ParsedTetUri, TetUriError> {
     };
 
     Ok(ParsedTetUri { label, target })
+}
+
+/// Package root inside a bucket. Empty is the bucket root. Same segment rules as store keys.
+pub(crate) fn normalize_package_prefix(key: &str) -> Result<String, TetUriError> {
+    let prefix = key.trim_matches('/');
+    if prefix.is_empty() {
+        return Ok(String::new());
+    }
+    super::validate_store_key(prefix).map_err(|_| TetUriError::InvalidS3(key.to_string()))?;
+    Ok(prefix.to_string())
 }
 
 fn looks_like_scheme_or_path(s: &str) -> bool {

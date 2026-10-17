@@ -517,7 +517,8 @@ pub enum S3OpenError {
 ///
 /// Credentials come from `TETRATION_S3_*` (`TETRATION_S3_ENDPOINT` is required). The URI may be
 /// `label@s3://bucket/prefix` or end with `?generation=N`. This reads `CURRENT` at most once
-/// when no generation is given, then range-reads through [`PinnedPackedTet`].
+/// when no generation is given and keeps that [`PinnedPackedTet`]. Query range reads happen
+/// later, against this pin.
 ///
 /// # Errors
 ///

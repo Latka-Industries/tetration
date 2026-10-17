@@ -105,8 +105,8 @@ pub fn query_opened_s3_package(
     } else {
         plan_query_with_store(doc, opened.store(), opened.pin(), tet_label)?
     };
-    if response.tet_file.is_none() {
-        response.tet_file = tet_label.map(str::to_string);
+    if let Some(label) = tet_label {
+        response.tet_file = Some(label.to_string());
     }
     Ok(response)
 }
