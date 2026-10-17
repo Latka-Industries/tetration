@@ -16,6 +16,7 @@ pub mod metadata;
 pub mod package;
 pub mod session;
 pub mod shard;
+pub mod store;
 mod stream_write;
 pub mod tile;
 mod write;
@@ -58,6 +59,9 @@ pub use shard::{
     DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, ingest_tet_file, list_sealed_parts,
     open_sealed_part, part_id_from_path, publish_parts, read_part_meta, resolve_part_ids,
     verify_part_meta,
+};
+pub use store::{
+    LocalStore, MemoryStore, ObjectMeta, PackageStore, PublishGeneration, ReadAt, WritePart,
 };
 pub use stream_write::{
     ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,
