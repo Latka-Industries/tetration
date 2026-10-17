@@ -61,7 +61,11 @@ pub use shard::{
     verify_part_meta,
 };
 pub use store::{
-    LocalStore, MemoryStore, ObjectMeta, PackageStore, PublishGeneration, ReadAt, WritePart,
+    ByteRange, GenerationPin, LocalStore, MemoryStore, ObjectFetchPlan, ObjectMeta, PackageStore,
+    ParsedTetUri, PinnedPackedTet, PublishGeneration, ReadAt, TetOpenTarget, TetUriError,
+    WritePart, assemble_object_from_ranges, fetch_ranges, merge_byte_ranges, packed_tet_key,
+    parse_tet_uri, pin_packed_tet, plan_catalog_fetch, read_superblock_at,
+    read_tet_summary_at_store,
 };
 pub use stream_write::{
     ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,

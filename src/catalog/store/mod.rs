@@ -4,15 +4,27 @@
 //! Local `.tet.d` uses [`LocalStore`]; tests and future planners use [`MemoryStore`].
 //! S3-compatible backends are 0.3.1 ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
 
+mod fetch;
 mod local;
 mod memory;
+mod pin;
+mod uri;
 
 use std::fmt;
 
 use super::CatalogError;
 
+pub use fetch::{
+    ByteRange, MAX_ASSEMBLE_OBJECT_MIB, ObjectFetchPlan, assemble_object_from_ranges, fetch_ranges,
+    merge_byte_ranges, plan_catalog_fetch, read_superblock_at, read_tet_summary_at_store,
+};
 pub use local::LocalStore;
 pub use memory::MemoryStore;
+pub use pin::{
+    PinnedPackedTet, generation_manifest_key, packed_tet_key, pin_packed_tet,
+    read_generation_manifest,
+};
+pub use uri::{GenerationPin, ParsedTetUri, TetOpenTarget, TetUriError, parse_tet_uri};
 
 /// Metadata for one store object (file-like key).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

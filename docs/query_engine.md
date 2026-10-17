@@ -72,6 +72,36 @@ Success stdout is formatted by [`format_query_response`](../src/query/cli/output
 
 Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-query-output).
 
+## Store-backed reads (0.3.0 / Phase 12 preview)
+
+**Status:** library API on `main` (THI-470). Local mmap via `TetFile` is unchanged. Object-store backends (`s3://`) are recognized in URI parse but not opened until 0.3.1.
+
+Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
+
+```text
+parse_tet_uri → pin_packed_tet (CURRENT once or explicit G)
+  → plan_catalog_fetch (superblock + TIDX [+ footer probe])
+  → build_read_plan
+  → plan_query_fetch (catalog ranges ∪ touched chunk payloads)
+  → assemble_object_from_ranges → existing mmap query engine
+```
+
+Entry points: `pin_packed_tet`, `execute_query_with_store`, `execute_query_on_store_pin`, `parse_tet_uri` (`file://`, paths, `memory://`, `s3://` shape only).
+
+### Pin / consistency
+
+- Resolve `CURRENT` **once** (or take an explicit generation id). The handle keeps `generations/{G}/packed.tet` for the life of the query.
+- Advancing `CURRENT` under an open pin does **not** change which object the pin reads (writer protocol reader rules; THI-498 hardens the public package API).
+- Sealed `packed.tet` for a generation is immutable. If bytes under that key change, treat as verify failure — the planner does not re-resolve mid-query.
+
+### Latency assumptions
+
+- Catalog bootstrap is typically **one or two** `read_at` calls (header through TIDX; optional EOF footer probe when the history flag is set).
+- Each planned chunk is one `read_at` unless ranges merge. There is **no** local block cache yet (0.3.3).
+- `assemble_object_from_ranges` builds a sparse in-memory image (zero-filled gaps) capped at 64 MiB so the existing mmap engine can run. Larger objects need a non-assembling execute path later.
+
+See also [`docs/roadmap.md`](roadmap.md) Phase 12 and [`docs/writer_protocol_v2.md`](writer_protocol_v2.md) (decision **K**, reader pin).
+
 ## Phase 10 — optional GPU (experimental)
 
 **Status:** merged on `main` ([PR #12](https://github.com/Latka-Industries/tetration/pull/12)). Routing, CUDA/Metal/ROCm kernels, **streaming per-chunk GPU fold**, decode∥GPU pipeline, and multi-GPU sharding ship behind optional crate features. **CPU streaming fold remains the fast, correct default** for large and extra-large selections on typical Apple Silicon benches.

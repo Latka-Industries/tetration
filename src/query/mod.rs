@@ -48,6 +48,9 @@ pub use embed_materialize::{
 };
 #[doc(hidden)]
 pub use engine::TempSpillFile;
+pub use engine::store::{
+    execute_query_on_store_pin, execute_query_with_store, plan_query_with_store,
+};
 pub use engine::{
     DEFAULT_MEMORY_BUDGET_BYTES, ExecutionBudget, MaterializeReadPlanF32IntoOutcome,
     MemoryStrategy, PlannedRead, SpillPathAllowlist, materialize_read_plan_f32_le,
@@ -60,6 +63,7 @@ pub use engine::{
     spill_read_plan_i32_le, spill_read_plan_i64_le, spill_read_plan_u8_le, spill_read_plan_u16_le,
 };
 pub use execute::{ExecuteQueryOptions, execute_query_document, execute_query_json};
+pub use plan::fetch::{chunk_payload_ranges, plan_query_fetch};
 pub use types::{
     AxisSlice, CHUNK_TOUCH_POLICY, ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint,
     ExecutionHints, Operation, OutputHint, OutputHints, PlannedChunkIo, QueryDocument,

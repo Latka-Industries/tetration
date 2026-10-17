@@ -4,6 +4,7 @@ pub(crate) mod budget;
 mod operations;
 mod run;
 pub(crate) mod spill_policy;
+pub mod store;
 
 pub use crate::query::decode::planned_chunk_mmap_slices;
 pub use crate::query::materialize::int::{
