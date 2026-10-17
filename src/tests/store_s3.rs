@@ -15,21 +15,9 @@ pub(crate) fn minio_store(prefix: &str) -> Option<S3Store> {
         return None;
     }
     let bucket = std::env::var("TETRATION_S3_BUCKET").unwrap_or_else(|_| "tetration-test".into());
-    let access_key_id =
-        std::env::var("TETRATION_S3_ACCESS_KEY").unwrap_or_else(|_| "tetration".into());
-    let secret_access_key =
-        std::env::var("TETRATION_S3_SECRET_KEY").unwrap_or_else(|_| "tetration-secret".into());
-    let region = std::env::var("TETRATION_S3_REGION").unwrap_or_else(|_| "us-east-1".into());
     Some(
-        S3Store::connect(S3Config {
-            endpoint,
-            bucket,
-            prefix: prefix.to_string(),
-            region,
-            access_key_id,
-            secret_access_key,
-        })
-        .expect("connect minio"),
+        S3Store::connect(S3Config::from_env(bucket, prefix).expect("s3 env"))
+            .expect("connect minio"),
     )
 }
 

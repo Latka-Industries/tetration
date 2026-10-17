@@ -9,6 +9,7 @@
 //! `S3Store` (feature `tetration-s3`) is an optional S3-compatible backend for that same store.
 //! Cross-host publish uses an exclusive `publishing/<G>` claim ([`PublishOptions`](catalog::PublishOptions)).
 //! Optional [`CachingStore`](catalog::CachingStore) remembers packed ranges by generation + offset.
+//! [`convert_s3_object_to_tet`](convert::convert_s3_object_to_tet) downloads one `s3://` file and runs the existing importer (`tetration-s3`).
 //!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).

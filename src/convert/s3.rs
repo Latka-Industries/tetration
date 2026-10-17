@@ -122,24 +122,14 @@ fn convert_s3_object_to_tet_enabled(
 ) -> Result<ConvertReport, ConvertError> {
     use crate::catalog::store::{ReadAt, S3Config, S3Store};
 
-    let endpoint = std::env::var("TETRATION_S3_ENDPOINT")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .ok_or(ConvertError::S3ConfigMissing("TETRATION_S3_ENDPOINT"))?;
-    let access_key_id =
-        std::env::var("TETRATION_S3_ACCESS_KEY").unwrap_or_else(|_| "tetration".to_string());
-    let secret_access_key =
-        std::env::var("TETRATION_S3_SECRET_KEY").unwrap_or_else(|_| "tetration-secret".to_string());
-    let region = std::env::var("TETRATION_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
-    let store = S3Store::connect(S3Config {
-        endpoint,
-        bucket: object.bucket.clone(),
-        prefix: String::new(),
-        region,
-        access_key_id,
-        secret_access_key,
-    })
-    .map_err(|err| ConvertError::S3(err.to_string()))?;
+    let config = S3Config::from_env(object.bucket.clone(), String::new()).map_err(|err| {
+        if err.to_string().contains("TETRATION_S3_ENDPOINT") {
+            ConvertError::S3ConfigMissing("TETRATION_S3_ENDPOINT")
+        } else {
+            ConvertError::S3(err.to_string())
+        }
+    })?;
+    let store = S3Store::connect(config).map_err(|err| ConvertError::S3(err.to_string()))?;
     let bytes = store
         .read_all(&object.key)
         .map_err(|err| ConvertError::S3(err.to_string()))?;

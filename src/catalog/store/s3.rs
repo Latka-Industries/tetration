@@ -41,6 +41,36 @@ pub struct S3Config {
     pub secret_access_key: String,
 }
 
+impl S3Config {
+    /// Endpoint, region, and keys from `TETRATION_S3_*`. `bucket` and `prefix` are arguments.
+    ///
+    /// `TETRATION_S3_ENDPOINT` is required. Access key defaults to `tetration`, secret to
+    /// `tetration-secret`, region to `us-east-1` (the MinIO test defaults).
+    ///
+    /// # Errors
+    ///
+    /// [`CatalogError::Package`] when `TETRATION_S3_ENDPOINT` is unset.
+    pub fn from_env(
+        bucket: impl Into<String>,
+        prefix: impl Into<String>,
+    ) -> Result<Self, CatalogError> {
+        let endpoint = std::env::var("TETRATION_S3_ENDPOINT").unwrap_or_default();
+        if endpoint.is_empty() {
+            return Err(CatalogError::Package("TETRATION_S3_ENDPOINT is unset"));
+        }
+        Ok(Self {
+            endpoint,
+            bucket: bucket.into(),
+            prefix: prefix.into(),
+            region: std::env::var("TETRATION_S3_REGION").unwrap_or_else(|_| "us-east-1".into()),
+            access_key_id: std::env::var("TETRATION_S3_ACCESS_KEY")
+                .unwrap_or_else(|_| "tetration".into()),
+            secret_access_key: std::env::var("TETRATION_S3_SECRET_KEY")
+                .unwrap_or_else(|_| "tetration-secret".into()),
+        })
+    }
+}
+
 impl fmt::Debug for S3Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("S3Config")

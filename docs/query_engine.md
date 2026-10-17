@@ -74,7 +74,7 @@ Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-q
 
 ## Store-backed reads (0.3.0 / Phase 12 foundation)
 
-**Status:** foundation shipped in **0.3.0** (THI-469 / THI-470 / THI-498). **0.3.1** adds `S3Store` (feature `tetration-s3`) and `stage_part` / `publish_staged_parts`. **0.3.2** adds cross-host `publishing/<G>` claims (`PublishOptions`: heartbeat, stale window, force-only takeover). Local mmap via `TetFile` is unchanged. `s3://` is recognized in URI parse. `tet query` still opens a local path or `.tet.d`; pass a connected `S3Store` to the store execute functions.
+**Status:** foundation shipped in **0.3.0** (THI-469 / THI-470 / THI-498). **0.3.1** adds `S3Store` (feature `tetration-s3`) and `stage_part` / `publish_staged_parts`. **0.3.2** adds cross-host `publishing/<G>` claims (`PublishOptions`: heartbeat, stale window, force-only takeover). **0.3.3** adds optional [`CachingStore`](../src/catalog/store/cache.rs) for packed range reads. Local mmap via `TetFile` is unchanged. `s3://` is recognized in URI parse. `tet query` still opens a local path or `.tet.d`; pass a connected `S3Store` to the store execute functions. `tet convert` can download a single-file `s3://` object (`convert_s3_object_to_tet`); that path is not a query.
 
 Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
 
