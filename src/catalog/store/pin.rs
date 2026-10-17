@@ -1,4 +1,7 @@
 //! Pin a sealed generation's `packed.tet` object key (reader protocol).
+//!
+//! [`pin_packed_tet`] reads `CURRENT` at most once (or takes an explicit id) and returns
+//! a [`PinnedPackedTet`] that query handles should keep for their lifetime (THI-498).
 
 use crate::catalog::package::{GenerationManifest, format_generation_id};
 use crate::catalog::{CatalogError, PackageStore, ReadAt};

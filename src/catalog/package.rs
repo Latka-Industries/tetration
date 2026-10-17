@@ -466,7 +466,8 @@ impl TetPackage {
 /// A reader pin: one sealed generation for the life of a query handle (THI-498).
 ///
 /// Created by [`TetPackage::pin_current`] or [`TetPackage::pin_generation`]. Does not
-/// re-read `CURRENT` when opening.
+/// re-read `CURRENT` when opening — advancing `CURRENT` after the pin is created leaves
+/// [`Self::open`] on the original generation's `packed.tet`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TetPackagePin {
     package_root: PathBuf,

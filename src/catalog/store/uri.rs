@@ -1,4 +1,7 @@
 //! Parse tetration open targets (paths, `file://`, `memory://`, recognize `s3://`).
+//!
+//! Local suffixes `.tet` / `.tet.d` are matched case-insensitively so labels like
+//! `ds@./Foo.TET` still split correctly.
 
 use std::path::PathBuf;
 
@@ -20,15 +23,23 @@ pub enum TetOpenTarget {
     LocalTet(PathBuf),
     /// `.tet.d` package root for [`crate::catalog::LocalStore`].
     LocalPackage {
+        /// Package directory (usually ends with `.tet.d`).
         root: PathBuf,
+        /// Which generation to pin when opening.
         generation: GenerationPin,
     },
     /// Object key inside a caller-supplied [`crate::catalog::PackageStore`] (tests / embedders).
-    StorePackage { generation: GenerationPin },
+    StorePackage {
+        /// Which generation to pin when opening.
+        generation: GenerationPin,
+    },
     /// Recognized shape; backend is 0.3.1 ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
     S3 {
+        /// Bucket name from `s3://bucket/…`.
         bucket: String,
+        /// Object key prefix / path after the bucket.
         key: String,
+        /// Which generation to pin when opening.
         generation: GenerationPin,
     },
 }
@@ -38,6 +49,7 @@ pub enum TetOpenTarget {
 pub struct ParsedTetUri {
     /// Text before `@` when present (dataset hint; unused for I/O).
     pub label: Option<String>,
+    /// Resolved open target (local file, package, memory, or S3 shape).
     pub target: TetOpenTarget,
 }
 
@@ -94,8 +106,12 @@ fn looks_like_scheme_or_path(s: &str) -> bool {
     s.contains("://")
         || s.starts_with('/')
         || s.starts_with('.')
-        || s.ends_with(".tet")
-        || s.ends_with(".tet.d")
+        || has_ascii_suffix_ignore_case(s, ".tet")
+        || has_ascii_suffix_ignore_case(s, ".tet.d")
+}
+
+fn has_ascii_suffix_ignore_case(s: &str, suffix: &str) -> bool {
+    s.len() >= suffix.len() && s[s.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
 }
 
 fn parse_s3(rest: &str) -> Result<TetOpenTarget, TetUriError> {
@@ -139,8 +155,8 @@ fn parse_file_url(rest: &str) -> Result<TetOpenTarget, TetUriError> {
 fn parse_local_path(path: &str) -> Result<TetOpenTarget, TetUriError> {
     let (path, generation) = split_generation_query(path)?;
     let pb = PathBuf::from(path);
-    let is_package = path.ends_with(".tet.d") || path.ends_with(".tet.d/");
-    if is_package {
+    let trimmed = path.trim_end_matches('/');
+    if has_ascii_suffix_ignore_case(trimmed, ".tet.d") {
         Ok(TetOpenTarget::LocalPackage {
             root: pb,
             generation,

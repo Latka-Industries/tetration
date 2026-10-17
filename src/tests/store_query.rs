@@ -133,6 +133,17 @@ fn parse_uri_shapes() {
         p.target,
         crate::catalog::TetOpenTarget::LocalPackage { .. }
     ));
+    let p = parse_tet_uri("ds@./Foo.TET").unwrap();
+    assert_eq!(p.label.as_deref(), Some("ds"));
+    assert!(matches!(
+        p.target,
+        crate::catalog::TetOpenTarget::LocalTet(_)
+    ));
+    let p = parse_tet_uri("/tmp/Pkg.TET.D").unwrap();
+    assert!(matches!(
+        p.target,
+        crate::catalog::TetOpenTarget::LocalPackage { .. }
+    ));
     let p = parse_tet_uri("memory://current").unwrap();
     assert!(matches!(
         p.target,
