@@ -4,6 +4,9 @@
 //! committer merges them and flips `CURRENT` with a conditional put (THI-471). A rejected
 //! CAS leaves the previous `CURRENT` and its `packed.tet` untouched. Readers who already
 //! pinned that generation keep its object key.
+//!
+//! Cross-host election (THI-500): exclusive `publishing/<G>` claim with heartbeat; a second
+//! host that loses the claim does not write `CURRENT`. Stale takeover requires `force`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,6 +18,7 @@ use crate::catalog::package::{self, GenerationManifest, PACKAGE_PROTOCOL_VERSION
 use crate::catalog::shard::{PartMeta, find_claim_overlap};
 use crate::catalog::{CatalogError, DatasetClaim, read_tet_summary_v1};
 
+use super::publish_lock::{self, PublishOptions};
 use super::{PackageStore, ReadAt, WritePart};
 
 /// Upload one sealed layout-v1 part under `staging/<session>/`. Does not touch `CURRENT`.
@@ -72,6 +76,8 @@ pub fn stage_part(
 
 /// Merge `part_ids` into `generations/<G>/` without flipping `CURRENT`.
 ///
+/// Uses default [`PublishOptions`] (no force takeover).
+///
 /// # Errors
 ///
 /// Missing parts, claim overlap, publish lock held, merge failure, or store I/O.
@@ -79,6 +85,20 @@ pub fn seal_staged_generation(
     store: &impl PackageStore,
     generation: u64,
     part_ids: &[String],
+) -> Result<GenerationManifest, CatalogError> {
+    seal_staged_generation_with_options(store, generation, part_ids, &PublishOptions::default())
+}
+
+/// [`seal_staged_generation`] with explicit publish-lock options (THI-500).
+///
+/// # Errors
+///
+/// Missing parts, claim overlap, publish lock held, merge failure, or store I/O.
+pub fn seal_staged_generation_with_options(
+    store: &impl PackageStore,
+    generation: u64,
+    part_ids: &[String],
+    options: &PublishOptions,
 ) -> Result<GenerationManifest, CatalogError> {
     if part_ids.is_empty() {
         return Err(CatalogError::Package(
@@ -120,14 +140,8 @@ pub fn seal_staged_generation(
     merge_tet_files(&packed_path, &refs)?;
     let packed = fs::read(&packed_path)?;
 
-    let g = package::format_generation_id(generation);
-    let lock = format!("publishing/{g}");
-    if let Err(err) = store.create_dir_exclusive(&lock) {
-        return Err(match err {
-            CatalogError::PackagePathExists(_) => CatalogError::PublishLockHeld(generation),
-            other => other,
-        });
-    }
+    publish_lock::begin_publish_store(store, generation, options)?;
+    let lock = publish_lock::publishing_lock_key(generation);
     let manifest = GenerationManifest {
         generation,
         protocol_version: PACKAGE_PROTOCOL_VERSION,
@@ -139,7 +153,9 @@ pub fn seal_staged_generation(
         .map_err(|e| CatalogError::InvalidPackageProtocol(e.to_string()))?;
     store.write_part(&format!("{lock}/packed.tet"), &packed)?;
     store.write_part(&format!("{lock}/MANIFEST.json"), &manifest_bytes)?;
-    let dest = format!("generations/{g}");
+    let _ = publish_lock::touch_publish_heartbeat(store, generation);
+    let _ = store.remove_object(&publish_lock::heartbeat_key(generation));
+    let dest = format!("generations/{}", package::format_generation_id(generation));
     if let Err(err) = store.rename_prefix(&lock, &dest) {
         let _ = store.remove_prefix(&lock);
         return Err(err);
@@ -160,7 +176,21 @@ pub fn publish_staged_parts(
     generation: u64,
     part_ids: &[String],
 ) -> Result<GenerationManifest, CatalogError> {
-    let manifest = seal_staged_generation(store, generation, part_ids)?;
+    publish_staged_parts_with_options(store, generation, part_ids, &PublishOptions::default())
+}
+
+/// [`publish_staged_parts`] with explicit publish-lock options (THI-500).
+///
+/// # Errors
+///
+/// Same as [`seal_staged_generation_with_options`], plus a lost conditional put.
+pub fn publish_staged_parts_with_options(
+    store: &impl PackageStore,
+    generation: u64,
+    part_ids: &[String],
+    options: &PublishOptions,
+) -> Result<GenerationManifest, CatalogError> {
+    let manifest = seal_staged_generation_with_options(store, generation, part_ids, options)?;
     let expected = store.current_generation()?;
     store.publish_generation(generation, expected)?;
     Ok(manifest)

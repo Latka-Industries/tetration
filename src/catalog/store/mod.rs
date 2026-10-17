@@ -11,6 +11,7 @@ mod ingest;
 mod local;
 mod memory;
 mod pin;
+mod publish_lock;
 #[cfg(feature = "tetration-s3")]
 mod s3;
 mod uri;
@@ -23,12 +24,19 @@ pub use fetch::{
     ByteRange, MAX_ASSEMBLE_OBJECT_MIB, ObjectFetchPlan, assemble_object_from_ranges, fetch_ranges,
     merge_byte_ranges, plan_catalog_fetch, read_superblock_at, read_tet_summary_at_store,
 };
-pub use ingest::{publish_staged_parts, seal_staged_generation, stage_part};
+pub use ingest::{
+    publish_staged_parts, publish_staged_parts_with_options, seal_staged_generation,
+    seal_staged_generation_with_options, stage_part,
+};
 pub use local::LocalStore;
 pub use memory::MemoryStore;
 pub use pin::{
     PinnedPackedTet, generation_manifest_key, packed_tet_key, pin_packed_tet,
     read_generation_manifest,
+};
+pub use publish_lock::{
+    PublishOptions, begin_publish_store, heartbeat_key, publish_lock_exists, publish_lock_is_stale,
+    publishing_lock_key, quarantine_publish_lock, touch_publish_heartbeat,
 };
 #[cfg(feature = "tetration-s3")]
 pub use s3::{S3Config, S3Store};
