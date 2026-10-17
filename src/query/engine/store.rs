@@ -51,8 +51,9 @@ pub fn execute_query_with_store(
 
 /// Pin `CURRENT` (or an explicit generation) once and execute `doc` against that object.
 ///
-/// Does not re-read `CURRENT` if a publish lands during the call. Does not open an `s3://`
-/// URI; pass a store you already connected (`S3Store` needs feature `tetration-s3`).
+/// Does not re-read `CURRENT` if a publish lands during the call. Does not parse an `s3://`
+/// URI; pass a store you already connected. Feature `tetration-s3` adds `open_s3_package`
+/// for `s3://bucket/prefix`.
 ///
 /// # Errors
 ///
@@ -80,4 +81,32 @@ fn materialize_catalog_image(
         .map_err(|e| TetError::Validation(e.to_string()))?;
     assemble_object_from_ranges(store, &pin.object_key, pin.object_len, &plan.ranges)
         .map_err(|e| TetError::Validation(e.to_string()))
+}
+
+/// Plan or execute `doc` against a package opened with [`crate::catalog::open_s3_package`].
+///
+/// Execute fetches the catalog and the chunks the plan touches. It does not download the rest
+/// of `packed.tet`. `tet_label` is echoed as `tet_file` (the `s3://` URI).
+///
+/// # Errors
+///
+/// Store I/O, planning, or execution failures.
+#[cfg(feature = "tetration-s3")]
+pub fn query_opened_s3_package(
+    doc: &QueryDocument,
+    opened: &crate::catalog::OpenedS3Package,
+    execute: bool,
+    options: ExecuteQueryOptions,
+    spill_allowlist: Option<&SpillPathAllowlist>,
+    tet_label: Option<&str>,
+) -> Result<QueryResponse, TetError> {
+    let mut response = if execute {
+        execute_query_with_store(doc, opened.store(), opened.pin(), options, spill_allowlist)?
+    } else {
+        plan_query_with_store(doc, opened.store(), opened.pin(), tet_label)?
+    };
+    if response.tet_file.is_none() {
+        response.tet_file = tet_label.map(str::to_string);
+    }
+    Ok(response)
 }

@@ -48,6 +48,8 @@ pub use embed_materialize::{
 };
 #[doc(hidden)]
 pub use engine::TempSpillFile;
+#[cfg(feature = "tetration-s3")]
+pub use engine::store::query_opened_s3_package;
 pub use engine::store::{
     execute_query_on_store_pin, execute_query_with_store, plan_query_with_store,
 };

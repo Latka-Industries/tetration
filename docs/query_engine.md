@@ -74,7 +74,7 @@ Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-q
 
 ## Store-backed reads (0.3.0 / Phase 12 foundation)
 
-**Status:** foundation shipped in **0.3.0** (THI-469 / THI-470 / THI-498). **0.3.1** adds `S3Store` (feature `tetration-s3`) and `stage_part` / `publish_staged_parts`. **0.3.2** adds cross-host `publishing/<G>` claims (`PublishOptions`: heartbeat, stale window, force-only takeover). **0.3.3** adds optional [`CachingStore`](../src/catalog/store/cache.rs) for packed range reads. Local mmap via `TetFile` is unchanged. `s3://` is recognized in URI parse. `tet query` still opens a local path or `.tet.d`; pass a connected `S3Store` to the store execute functions. `tet convert` can download a single-file `s3://` object (`convert_s3_object_to_tet`); that path is not a query.
+**Status:** foundation shipped in **0.3.0** (THI-469 / THI-470 / THI-498). **0.3.1** adds `S3Store` (feature `tetration-s3`) and `stage_part` / `publish_staged_parts`. **0.3.2** adds cross-host `publishing/<G>` claims (`PublishOptions`: heartbeat, stale window, force-only takeover). **0.3.3** adds optional [`CachingStore`](../src/catalog/store/cache.rs) for packed range reads. **0.3.4** opens a pinned `s3://bucket/prefix` package (`open_s3_package`, `tet query -t`) through that same planner: catalog, then the chunks the query touches. `?generation=N` pins an explicit generation; otherwise `CURRENT` is read once. Credentials are `TETRATION_S3_*`, not the URI. Local mmap via `TetFile` is unchanged. `tet convert` can still download a single-file `s3://` object (`convert_s3_object_to_tet`); that path is not a query. Zarr-on-S3 chunked reads are 0.3.5.
 
 Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
 
@@ -86,7 +86,7 @@ parse_tet_uri → pin_packed_tet (CURRENT once or explicit G)
   → assemble_object_from_ranges → existing mmap query engine
 ```
 
-Entry points: `pin_packed_tet`, `execute_query_with_store`, `execute_query_on_store_pin`, `parse_tet_uri` (`file://`, paths, `memory://`, `s3://` shape only).
+Entry points: `pin_packed_tet`, `execute_query_with_store`, `execute_query_on_store_pin`, `parse_tet_uri` (`file://`, paths, `memory://`, `s3://`), `parse_s3_package_uri`, and `open_s3_package` / `query_opened_s3_package` (feature `tetration-s3`).
 
 ### Pin / consistency
 

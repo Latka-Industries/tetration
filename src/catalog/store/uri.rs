@@ -33,8 +33,8 @@ pub enum TetOpenTarget {
         /// Which generation to pin when opening.
         generation: GenerationPin,
     },
-    /// Recognized shape. `S3Store` (feature `tetration-s3`) speaks the store trait;
-    /// the query engine does not open this variant yet.
+    /// `s3://bucket/prefix` package root. [`parse_s3_package_uri`] turns this into a
+    /// store prefix; `open_s3_package` (feature `tetration-s3`) pins and range-reads it.
     S3 {
         /// Bucket name from `s3://bucket/…`.
         bucket: String,
@@ -67,6 +67,58 @@ pub enum TetUriError {
     InvalidMemory(String),
     #[error("invalid generation id: {0}")]
     InvalidGeneration(String),
+    #[error("not an s3 package URI (need s3://bucket/prefix): {0}")]
+    NotS3Package(String),
+}
+
+/// Package root inside an S3 bucket, parsed from `s3://` with no I/O.
+///
+/// `prefix` is the package root passed to `S3Config` (empty means the bucket root).
+/// `?generation=N` pins that generation; otherwise the reader pins `CURRENT` once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct S3PackageLocation {
+    /// Text before `@` when the URI is `label@s3://…`.
+    pub label: Option<String>,
+    /// Bucket name.
+    pub bucket: String,
+    /// Package root inside the bucket. Empty is the bucket root.
+    pub prefix: String,
+    /// Which generation to pin when opening.
+    pub generation: GenerationPin,
+}
+
+/// Parse `s3://bucket/prefix` or `label@s3://bucket/prefix?generation=N`.
+///
+/// The prefix is the package root (`CURRENT`, `generations/…`), not a single object key.
+/// A trailing slash is stripped. Credentials are not in the URI.
+///
+/// # Errors
+///
+/// The input is not an `s3://` URI, or the prefix has an empty, `.`, or `..` segment.
+pub fn parse_s3_package_uri(input: &str) -> Result<S3PackageLocation, TetUriError> {
+    let parsed = parse_tet_uri(input)?;
+    let TetOpenTarget::S3 {
+        bucket,
+        key,
+        generation,
+    } = parsed.target
+    else {
+        return Err(TetUriError::NotS3Package(input.trim().to_string()));
+    };
+    let prefix = key.trim_matches('/');
+    if !prefix.is_empty()
+        && prefix
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err(TetUriError::InvalidS3(input.trim().to_string()));
+    }
+    Ok(S3PackageLocation {
+        label: parsed.label,
+        bucket,
+        prefix: prefix.to_string(),
+        generation,
+    })
 }
 
 /// Parse a path or URI into a [`ParsedTetUri`]. Does not touch the network or filesystem.
@@ -117,10 +169,16 @@ fn has_ascii_suffix_ignore_case(s: &str, suffix: &str) -> bool {
 
 fn parse_s3(rest: &str) -> Result<TetOpenTarget, TetUriError> {
     let (path, generation) = split_generation_query(rest)?;
-    let (bucket, key) = path
-        .split_once('/')
-        .filter(|(b, k)| !b.is_empty() && !k.is_empty())
-        .ok_or_else(|| TetUriError::InvalidS3(rest.to_string()))?;
+    if path.is_empty() || path.starts_with('/') {
+        return Err(TetUriError::InvalidS3(rest.to_string()));
+    }
+    let (bucket, key) = match path.split_once('/') {
+        Some((bucket, key)) => (bucket, key),
+        None => (path, ""),
+    };
+    if bucket.is_empty() {
+        return Err(TetUriError::InvalidS3(rest.to_string()));
+    }
     Ok(TetOpenTarget::S3 {
         bucket: bucket.to_string(),
         key: key.to_string(),

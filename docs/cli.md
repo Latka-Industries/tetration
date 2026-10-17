@@ -83,7 +83,7 @@ Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`
 
 | Flag                | Effect                                                                                                                                                           |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet` or `.tet.d`. A package pins the generation it opened and does not follow a newer publish ([pin](query_engine.md#pin--consistency)) |
+| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet`, `.tet.d`, or `s3://bucket/prefix` (`?generation=N`). A package pins the generation it opened and does not follow a newer publish ([pin](query_engine.md#pin--consistency)). `s3://` needs `--features tetration-s3` and `TETRATION_S3_ENDPOINT` |
 | `-x`, `--execute`   | Decode tiles, run `operation`, attach `execution`                                                                                                                |
 | `--format`          | `full` (default), `json`, `stats`, `plan`, `quiet`, `table`                                                                                                      |
 | `-q`, `--quiet`     | Shorthand for `--format quiet` (one-line stdout)                                                                                                                 |

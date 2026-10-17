@@ -157,6 +157,24 @@ fn parse_uri_shapes() {
 }
 
 #[test]
+fn parse_s3_package_uri_prefix_and_generation() {
+    use crate::catalog::parse_s3_package_uri;
+
+    let loc = parse_s3_package_uri("ds@s3://bucket/a/pkg/?generation=4").unwrap();
+    assert_eq!(loc.label.as_deref(), Some("ds"));
+    assert_eq!(loc.bucket, "bucket");
+    assert_eq!(loc.prefix, "a/pkg");
+    assert_eq!(loc.generation, GenerationPin::Explicit(4));
+
+    let root = parse_s3_package_uri("s3://bucket").unwrap();
+    assert_eq!(root.prefix, "");
+    assert_eq!(root.generation, GenerationPin::Current);
+
+    assert!(parse_s3_package_uri("s3://bucket/a/../b").is_err());
+    assert!(parse_s3_package_uri("/tmp/x.tet").is_err());
+}
+
+#[test]
 fn merge_ranges_coalesces() {
     let m = merge_byte_ranges([
         ByteRange::new(0, 10),
@@ -300,4 +318,90 @@ fn query_fetch_plan_covers_touched_chunks() {
         .map(|r| r.len)
         .sum();
     assert!(fetched_payload >= payload_bytes || fetch.ranges.len() == 1);
+}
+
+#[cfg(feature = "tetration-s3")]
+struct ClearMinio(crate::catalog::S3Store);
+
+#[cfg(feature = "tetration-s3")]
+impl Drop for ClearMinio {
+    fn drop(&mut self) {
+        let _ = self.0.clear();
+    }
+}
+
+#[cfg(feature = "tetration-s3")]
+#[test]
+fn query_s3_package_uri_sum_matches_mmap() {
+    use super::store_s3::minio_store;
+    use crate::catalog::{PublishGeneration, WritePart, open_s3_package, packed_tet_key};
+    use crate::query::query_opened_s3_package;
+
+    let prefix = format!(
+        "tests/query-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let Some(store) = minio_store(&prefix) else {
+        return;
+    };
+    let store = ClearMinio(store);
+    let packed = multi_chunk_tet();
+    store.0.write_part(&packed_tet_key(1), &packed).unwrap();
+    store
+        .0
+        .write_part(
+            "generations/00000001/MANIFEST.json",
+            format!(
+                r#"{{"generation":1,"protocol_version":2,"part_ids":["a"],"packed_byte_len":{}}}"#,
+                packed.len()
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    store.0.publish_generation(1, None).unwrap();
+
+    let bucket = std::env::var("TETRATION_S3_BUCKET").unwrap_or_else(|_| "tetration-test".into());
+    let uri = format!("s3://{bucket}/{prefix}?generation=1");
+    let opened = open_s3_package(&uri).unwrap();
+    assert_eq!(opened.pin().generation, 1);
+
+    let current = open_s3_package(&format!("s3://{bucket}/{prefix}")).unwrap();
+    assert_eq!(current.pin().generation, 1);
+    assert_eq!(current.pin().object_key, opened.pin().object_key);
+
+    let doc = parse_query_json(r#"{"dataset":"a","sum":[]}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let via = query_opened_s3_package(
+        &doc,
+        &opened,
+        true,
+        ExecuteQueryOptions::execute_no_preview(),
+        None,
+        Some(&uri),
+    )
+    .unwrap();
+    let mmap = plan_query_with_tet_mmap_ex(&doc, None, &packed, Some(0), None).unwrap();
+    assert_eq!(via.tet_file.as_deref(), Some(uri.as_str()));
+    assert_eq!(
+        via.execution.as_ref().and_then(|e| e.operation_sum),
+        mmap.execution.as_ref().and_then(|e| e.operation_sum)
+    );
+
+    let plan_doc = parse_query_json(r#"{"dataset":"a"}"#).unwrap();
+    validate_query(&plan_doc).unwrap();
+    let planned = query_opened_s3_package(
+        &plan_doc,
+        &opened,
+        false,
+        ExecuteQueryOptions::plan_only(),
+        None,
+        Some(&uri),
+    )
+    .unwrap();
+    assert!(planned.execution.is_none());
+    assert!(planned.read_plan.is_some());
+    assert_eq!(planned.tet_file.as_deref(), Some(uri.as_str()));
 }

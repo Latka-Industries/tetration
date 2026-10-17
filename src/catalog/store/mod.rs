@@ -6,7 +6,8 @@
 //! [`stage_part`] / [`publish_staged_parts`] upload parts and CAS-publish one generation.
 //! Publish takes an exclusive `publishing/<G>` claim ([`PublishOptions`]); a second host that
 //! loses the claim does not write `CURRENT`. A query pins `packed.tet` once and does not follow
-//! a newer `CURRENT`. Optional [`CachingStore`] remembers packed ranges by `(generation, offset)`.
+//! a newer `CURRENT`. `open_s3_package` (feature `tetration-s3`) opens `s3://bucket/prefix` onto that pin.
+//! Optional [`CachingStore`] remembers packed ranges by `(generation, offset)`.
 
 mod cache;
 mod fetch;
@@ -43,8 +44,11 @@ pub use publish_lock::{
     publishing_lock_key, quarantine_publish_lock, touch_publish_heartbeat,
 };
 #[cfg(feature = "tetration-s3")]
-pub use s3::{S3Config, S3Store};
-pub use uri::{GenerationPin, ParsedTetUri, TetOpenTarget, TetUriError, parse_tet_uri};
+pub use s3::{OpenedS3Package, S3Config, S3OpenError, S3Store, open_s3_package};
+pub use uri::{
+    GenerationPin, ParsedTetUri, S3PackageLocation, TetOpenTarget, TetUriError,
+    parse_s3_package_uri, parse_tet_uri,
+};
 
 /// Metadata for one store object (file-like key).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
