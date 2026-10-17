@@ -1,11 +1,17 @@
 //! Parallel store ingest, one CAS publish, range query, lost publish (THI-471).
+//! Cross-host publish claim / force stale takeover (THI-500).
 
+use std::sync::Barrier;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
+use std::time::Duration;
 
 use crate::catalog::store::read_generation_manifest;
 use crate::catalog::{
-    CatalogError, GenerationPin, MemoryStore, PackageStore, TetDatasetWrite, TetWriterSession,
-    packed_tet_key, publish_staged_parts, seal_staged_generation, stage_part,
+    CatalogError, GenerationPin, MemoryStore, PackageStore, PublishGeneration, PublishOptions,
+    TetDatasetWrite, TetWriterSession, WritePart, begin_publish_store, heartbeat_key,
+    packed_tet_key, publish_lock_exists, publish_lock_is_stale, publish_staged_parts,
+    publishing_lock_key, seal_staged_generation, stage_part,
 };
 use crate::query::{
     ExecuteQueryOptions, execute_query_on_store_pin, parse_query_json, validate_query,
@@ -106,6 +112,102 @@ fn memory_parallel_ingest_publish_and_lost_cas() {
     parallel_ingest_then_lost_publish(&MemoryStore::new());
 }
 
+/// Two committers race one generation; exactly one claim wins and `CURRENT` flips once.
+fn two_publishers_one_wins<S: PackageStore + Sync>(store: &S) {
+    let a = tiny_tet("a", &[1.0, 2.0]);
+    let b = tiny_tet("b", &[3.0, 4.0]);
+    stage_part(store, "sa", "pa", &a).unwrap();
+    stage_part(store, "sb", "pb", &b).unwrap();
+    let ids = vec!["pa".to_string(), "pb".to_string()];
+
+    let barrier = Barrier::new(2);
+    let wins = AtomicUsize::new(0);
+    let losses = AtomicUsize::new(0);
+    thread::scope(|scope| {
+        for _ in 0..2 {
+            scope.spawn(|| {
+                barrier.wait();
+                match publish_staged_parts(store, 1, &ids) {
+                    Ok(_) => {
+                        wins.fetch_add(1, Ordering::SeqCst);
+                    }
+                    Err(
+                        CatalogError::PublishLockHeld(1)
+                        | CatalogError::PackagePathExists(_)
+                        | CatalogError::Package(_),
+                    ) => {
+                        // Lost exclusive claim, or lost rename into `generations/<G>` after the
+                        // winner already sealed.
+                        losses.fetch_add(1, Ordering::SeqCst);
+                    }
+                    Err(err) => panic!("unexpected publish error: {err:?}"),
+                }
+            });
+        }
+    });
+
+    assert_eq!(
+        wins.load(Ordering::SeqCst),
+        1,
+        "exactly one publisher must win"
+    );
+    assert_eq!(
+        losses.load(Ordering::SeqCst),
+        1,
+        "loser must not flip CURRENT"
+    );
+    assert_eq!(store.current_generation().unwrap(), Some(1));
+    assert_generation(store, 1, &["pa", "pb"]);
+    assert!(!publish_lock_exists(store, 1).unwrap());
+}
+
+#[test]
+fn memory_two_publishers_one_wins() {
+    two_publishers_one_wins(&MemoryStore::new());
+}
+
+#[test]
+fn memory_stale_force_takeover_live_force_held() {
+    let store = MemoryStore::new();
+    let bytes = tiny_tet("x", &[9.0, 8.0]);
+    stage_part(&store, "sx", "px", &bytes).unwrap();
+
+    begin_publish_store(&store, 7, &PublishOptions::default()).unwrap();
+    // Live lock: force must not steal.
+    let err = begin_publish_store(
+        &store,
+        7,
+        &PublishOptions {
+            force: true,
+            stale_after: Duration::from_secs(3600),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, CatalogError::PublishLockHeld(7)));
+
+    // Age the heartbeat into the past.
+    store.write_part(&heartbeat_key(7), b"1\n").unwrap();
+    assert!(publish_lock_is_stale(&store, 7, Duration::from_secs(60)).unwrap());
+
+    begin_publish_store(
+        &store,
+        7,
+        &PublishOptions {
+            force: true,
+            stale_after: Duration::from_secs(60),
+        },
+    )
+    .unwrap();
+    assert!(publish_lock_exists(&store, 7).unwrap());
+    // Drop the test claim so a normal publish can take generation 7.
+    store.remove_prefix(&publishing_lock_key(7)).unwrap();
+
+    let ids = vec!["px".to_string()];
+    let manifest = publish_staged_parts(&store, 7, &ids).unwrap();
+    assert_eq!(manifest.generation, 7);
+    assert_eq!(store.current_generation().unwrap(), Some(7));
+}
+
 #[cfg(feature = "tetration-s3")]
 #[test]
 fn minio_parallel_ingest_publish_and_lost_cas() {
@@ -116,6 +218,18 @@ fn minio_parallel_ingest_publish_and_lost_cas() {
     };
     let store = ClearOnDrop(store);
     parallel_ingest_then_lost_publish(&store.0);
+}
+
+#[cfg(feature = "tetration-s3")]
+#[test]
+fn minio_two_publishers_one_wins() {
+    use super::store_s3::minio_store;
+
+    let Some(store) = minio_store(&unique_prefix()) else {
+        return;
+    };
+    let store = ClearOnDrop(store);
+    two_publishers_one_wins(&store.0);
 }
 
 #[cfg(feature = "tetration-s3")]

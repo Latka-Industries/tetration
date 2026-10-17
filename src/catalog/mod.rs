@@ -62,10 +62,13 @@ pub use shard::{
 };
 pub use store::{
     ByteRange, GenerationPin, LocalStore, MemoryStore, ObjectFetchPlan, ObjectMeta, PackageStore,
-    ParsedTetUri, PinnedPackedTet, PublishGeneration, ReadAt, TetOpenTarget, TetUriError,
-    WritePart, assemble_object_from_ranges, fetch_ranges, merge_byte_ranges, packed_tet_key,
-    parse_tet_uri, pin_packed_tet, plan_catalog_fetch, publish_staged_parts, read_superblock_at,
-    read_tet_summary_at_store, seal_staged_generation, stage_part,
+    ParsedTetUri, PinnedPackedTet, PublishGeneration, PublishOptions, ReadAt, TetOpenTarget,
+    TetUriError, WritePart, assemble_object_from_ranges, begin_publish_store, fetch_ranges,
+    heartbeat_key, merge_byte_ranges, packed_tet_key, parse_tet_uri, pin_packed_tet,
+    plan_catalog_fetch, publish_lock_exists, publish_lock_is_stale, publish_staged_parts,
+    publish_staged_parts_with_options, publishing_lock_key, quarantine_publish_lock,
+    read_superblock_at, read_tet_summary_at_store, seal_staged_generation,
+    seal_staged_generation_with_options, stage_part, touch_publish_heartbeat,
 };
 #[cfg(feature = "tetration-s3")]
 pub use store::{S3Config, S3Store};

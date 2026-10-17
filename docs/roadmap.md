@@ -30,9 +30,11 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.1:** optional `S3Store` (feature `tetration-s3`, MinIO in tests) and store-level `stage_part` / `publish_staged_parts` (one CAS publish; a lost precondition keeps the previous generation).
 
+**Shipped in 0.3.2:** cross-host exclusive claim on `publishing/<G>` (heartbeat + stale window; takeover only with explicit `force`). A second host that loses the claim does not write `CURRENT`.
+
 **Reader rule (normative):** a query keeps the generation it opened. A publish that moves `CURRENT` is invisible until the next open. Replacing the pinned `packed.tet` is not a new generation — see [Pin / consistency](query_engine.md#pin--consistency) and [`layout_v1.md` — package readers](layout_v1.md#package-readers).
 
-**Still open:** `tet query` does not open `s3://` yet (`S3Store` is the optional `tetration-s3` feature). Multi-host publish is 0.3.2. Local block cache and convert-from-URI are 0.3.3. Example target:
+**Still open:** `tet query` does not open `s3://` yet (`S3Store` is the optional `tetration-s3` feature). Local block cache and convert-from-URI are 0.3.3. Example target:
 
 ```text
 tet query climate.tet@s3://bucket/path/climate.tet …

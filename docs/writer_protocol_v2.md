@@ -45,7 +45,7 @@ Same *logical* model locally and on object stores: cloud is transport for parts 
 - **Part files:** `part-<id>.tet` (layout-v1 mini-`.tet`), not a separate `.shard` codec
 - **Heartbeat:** `publishing/<G>/HEARTBEAT` with unix timestamp text; stale = mtime age > N
 - Retain window beyond `current` / `current-1` — still open
-- Cross-host committer election — 0.3
+- Cross-host committer election — **0.3.2** (`begin_publish_store` / `PublishOptions::force` on `PackageStore`)
 
 ---
 
