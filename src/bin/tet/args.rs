@@ -139,9 +139,12 @@ pub enum Commands {
         output: PathBuf,
     },
     /// Convert HDF5, `NetCDF`, `Zarr`, `NumPy`, CSV, or Parquet into `.tet`.
+    ///
+    /// A single-file `s3://bucket/key` downloads the whole object, then uses the same importer
+    /// (`tetration-s3`, `TETRATION_S3_ENDPOINT`). Zarr on S3 is not supported.
     Convert {
-        /// Source array file or Zarr directory (extension or file signature).
-        input: PathBuf,
+        /// Source array file, Zarr directory, or `s3://bucket/object.ext`.
+        input: String,
         /// Destination `.tet` file.
         output: PathBuf,
         /// Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64).

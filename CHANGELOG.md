@@ -5,6 +5,7 @@
 ### Added
 
 - Optional `BlockCache` / `CachingStore`: remember packed.tet range reads by `(generation_id, offset)`; cache is off unless wrapped; a new pin does not reuse another generation’s blocks (THI-501)
+- `tet convert s3://bucket/object.ext` downloads one foreign file and runs the existing importer (`tetration-s3`, `TETRATION_S3_ENDPOINT`). Zarr prefixes are rejected (THI-502)
 
 ## [0.3.2] - 2026-10-17
 

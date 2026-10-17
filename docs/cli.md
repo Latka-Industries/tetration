@@ -120,6 +120,7 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | NumPy   | `.npy`, `.npz` (one dataset per member), or `\x93NUMPY` magic |
 | CSV     | `.csv` (comma) or `.tsv` (tab). One 1-D dataset per numeric column. Text labels become `i64` codes plus a `tetration_categories` footer attr when the map fits in 1024 bytes |
 | Parquet | `.parquet`, `.pq`, or `PAR1`. Same column mapping as CSV. Requires `--features tetration-parquet` |
+| `s3://` | Single file with one of the extensions above (not Zarr). Downloads the whole object, then the same importer. Requires `--features tetration-s3` and `TETRATION_S3_ENDPOINT` (`TETRATION_S3_ACCESS_KEY`, `TETRATION_S3_SECRET_KEY`, `TETRATION_S3_REGION`) |
 
 | Flag            | Effect                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------- |

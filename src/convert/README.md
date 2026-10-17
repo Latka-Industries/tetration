@@ -18,6 +18,7 @@ Build with `--no-default-features` for Zarr/NumPy/CSV + query (no system HDF5/Ne
 ## Public API
 
 - `convert_to_tet` / `convert_to_tet_with_progress` / `convert_to_tet_with_options` — auto-detect format, stream chunks (`ConvertOptions.strict` / `chunk_mib`)
+- `convert_s3_object_to_tet` — single-file `s3://` download, then the same importer (`tetration-s3`)
 - `detect_convert_format` — extension + magic sniff
 - `default_parallel_jobs` / `resolve_parallel_jobs` — `--jobs` semantics
 - Per-format: `convert_h5_to_tet_*`, `convert_netcdf_to_tet_*`, `convert_zarr_to_tet_*`, `convert_npy_to_tet_*`, `convert_npz_to_tet_*`, `convert_csv_to_tet_*`, `convert_parquet_to_tet_*`
