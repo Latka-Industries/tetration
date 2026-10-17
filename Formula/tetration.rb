@@ -2,8 +2,8 @@
 class Tetration < Formula
   desc "Mmap-oriented chunked tensor format and tet CLI (query, convert, export, info)"
   homepage "https://docs.tetration.sh"
-  url "https://github.com/Latka-Industries/tetration/archive/refs/tags/v0.3.0.tar.gz"
-  sha256 "3b19e7337b7a8861d2665006d906f782fc14e300fb083e3133dad8c59a8e608b"
+  url "https://github.com/Latka-Industries/tetration/archive/refs/tags/v0.3.1.tar.gz"
+  sha256 "d9026575703f34fd06e9f2992fb28e45f9f3d983ae1c242f12a4ed07386f7c5b"
   license any_of: ["MIT", "Apache-2.0"]
 
   depends_on "pkgconf" => :build
