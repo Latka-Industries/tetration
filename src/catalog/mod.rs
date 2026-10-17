@@ -64,8 +64,8 @@ pub use store::{
     ByteRange, GenerationPin, LocalStore, MemoryStore, ObjectFetchPlan, ObjectMeta, PackageStore,
     ParsedTetUri, PinnedPackedTet, PublishGeneration, ReadAt, TetOpenTarget, TetUriError,
     WritePart, assemble_object_from_ranges, fetch_ranges, merge_byte_ranges, packed_tet_key,
-    parse_tet_uri, pin_packed_tet, plan_catalog_fetch, read_superblock_at,
-    read_tet_summary_at_store,
+    parse_tet_uri, pin_packed_tet, plan_catalog_fetch, publish_staged_parts, read_superblock_at,
+    read_tet_summary_at_store, seal_staged_generation, stage_part,
 };
 #[cfg(feature = "tetration-s3")]
 pub use store::{S3Config, S3Store};

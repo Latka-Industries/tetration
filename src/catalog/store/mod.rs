@@ -6,6 +6,7 @@
 //! ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
 
 mod fetch;
+mod ingest;
 mod local;
 mod memory;
 mod pin;
@@ -21,6 +22,7 @@ pub use fetch::{
     ByteRange, MAX_ASSEMBLE_OBJECT_MIB, ObjectFetchPlan, assemble_object_from_ranges, fetch_ranges,
     merge_byte_ranges, plan_catalog_fetch, read_superblock_at, read_tet_summary_at_store,
 };
+pub use ingest::{publish_staged_parts, seal_staged_generation, stage_part};
 pub use local::LocalStore;
 pub use memory::MemoryStore;
 pub use pin::{
