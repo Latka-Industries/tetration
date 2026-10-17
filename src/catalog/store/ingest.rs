@@ -5,8 +5,8 @@
 //! CAS leaves the previous `CURRENT` and its `packed.tet` untouched. Readers who already
 //! pinned that generation keep its object key.
 //!
-//! Cross-host election (THI-500): exclusive `publishing/<G>` claim with heartbeat; a second
-//! host that loses the claim does not write `CURRENT`. Stale takeover requires `force`.
+//! Cross-host election: exclusive `publishing/<G>` claim with heartbeat; a second host that
+//! loses the claim does not write `CURRENT`. Stale takeover requires [`PublishOptions::force`].
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -89,7 +89,7 @@ pub fn seal_staged_generation(
     seal_staged_generation_with_options(store, generation, part_ids, &PublishOptions::default())
 }
 
-/// [`seal_staged_generation`] with explicit publish-lock options (THI-500).
+/// [`seal_staged_generation`] with explicit [`PublishOptions`] (force / stale window).
 ///
 /// # Errors
 ///
@@ -179,7 +179,7 @@ pub fn publish_staged_parts(
     publish_staged_parts_with_options(store, generation, part_ids, &PublishOptions::default())
 }
 
-/// [`publish_staged_parts`] with explicit publish-lock options (THI-500).
+/// [`publish_staged_parts`] with explicit [`PublishOptions`] (force / stale window).
 ///
 /// # Errors
 ///
