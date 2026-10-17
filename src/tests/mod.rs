@@ -35,6 +35,7 @@ mod session;
 mod shard;
 mod small_tet_fixtures;
 mod store;
+mod store_ingest;
 mod store_query;
 #[cfg(feature = "tetration-s3")]
 mod store_s3;

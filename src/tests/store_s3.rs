@@ -5,7 +5,7 @@ use crate::catalog::{CatalogError, PublishGeneration, ReadAt, S3Config, S3Store,
 
 use super::store::assert_store_roundtrip;
 
-fn minio_store(prefix: &str) -> Option<S3Store> {
+pub(crate) fn minio_store(prefix: &str) -> Option<S3Store> {
     let endpoint = std::env::var("TETRATION_S3_ENDPOINT").unwrap_or_default();
     if endpoint.is_empty() {
         if std::env::var("TETRATION_S3_REQUIRED").ok().as_deref() == Some("1") {
