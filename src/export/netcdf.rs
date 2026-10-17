@@ -1,4 +1,4 @@
-//! Export a `.tet` file to NetCDF-4 (dense numeric variables).
+//! Export a `.tet` file to `NetCDF`-4 (dense numeric variables).
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,16 +13,16 @@ use super::common::{
     ensure_missing_file, finish_report, open_summary, shape_as_usize,
 };
 
-/// Export a mapped `.tet` to a NetCDF-4 file (dense numeric variables).
+/// Export a mapped `.tet` to a `NetCDF`-4 file (dense numeric variables).
 ///
 /// Slash-separated catalog names become nested groups. Footer `dim_names` become
-/// NetCDF dimensions when present; otherwise synthetic per-dataset dim names are used.
+/// `NetCDF` dimensions when present; otherwise synthetic per-dataset dim names are used.
 /// Basic string attrs are copied onto each variable.
 ///
 /// # Errors
 ///
 /// Returns [`ExportError`] when the file cannot be read, `output` exists, or a dtype
-/// is unsupported for NetCDF (`f16`, `u32`, `u64`).
+/// is unsupported for `NetCDF` (`f16`, `u32`, `u64`).
 pub fn export_tet_to_netcdf(input: &Path, output: &Path) -> Result<ExportReport, ExportError> {
     export_tet_to_netcdf_with_progress(input, output, None::<fn(ExportProgress)>)
 }

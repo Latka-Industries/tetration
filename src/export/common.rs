@@ -189,7 +189,7 @@ pub(crate) fn dataset_footer_attrs(
         .unwrap_or_default()
 }
 
-/// Footer attrs suitable for HDF5 / NetCDF string attributes.
+/// Footer attrs suitable for HDF5 / `NetCDF` string attributes.
 pub(crate) fn dataset_basic_export_attrs(
     summary: &TetFileSummaryV1,
     name: &str,

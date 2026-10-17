@@ -1,6 +1,6 @@
-//! `.tet` → foreign interchange export (Zarr v3, HDF5, NetCDF).
+//! `.tet` → foreign interchange export (Zarr v3, HDF5, `NetCDF`).
 //!
-//! HDF5 / NetCDF writers are feature-gated (`tetration-hdf5` / `tetration-netcdf`),
+//! HDF5 / `NetCDF` writers are feature-gated (`tetration-hdf5` / `tetration-netcdf`),
 //! matching the convert importers.
 
 mod common;
@@ -26,7 +26,7 @@ use common::ExportError as E;
 ///
 /// - Directory / `.zarr` → Zarr v3 directory store
 /// - `.h5` / `.hdf5` / … → HDF5 (`tetration-hdf5`)
-/// - `.nc` / `.netcdf` / … → NetCDF (`tetration-netcdf`)
+/// - `.nc` / `.netcdf` / … → `NetCDF` (`tetration-netcdf`)
 ///
 /// # Errors
 ///
