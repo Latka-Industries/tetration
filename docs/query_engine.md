@@ -103,7 +103,7 @@ Public package API: [`TetPackage::pin_current`](../src/catalog/package.rs) / `pi
 ### Latency assumptions
 
 - Catalog bootstrap is typically **one or two** `read_at` calls (header through TIDX; optional EOF footer probe when the history flag is set).
-- Each planned chunk is one `read_at` unless ranges merge. There is **no** local block cache yet (0.3.3).
+- Each planned chunk is one `read_at` unless ranges merge. Optional [`CachingStore`](../src/catalog/store/cache.rs) / [`BlockCache`](../src/catalog/store/cache.rs) remember packed ranges by `(generation_id, offset)` so a repeat on the same pin does not refetch; a new pin never reuses another generation’s entries (THI-501). Omit the wrapper to leave caching off.
 - `assemble_object_from_ranges` builds a sparse in-memory image (zero-filled gaps) capped at 64 MiB so the existing mmap engine can run. Larger objects need a non-assembling execute path later.
 
 See also [`docs/roadmap.md`](roadmap.md) Phase 12 and [`docs/writer_protocol_v2.md`](writer_protocol_v2.md) (decision **K**, reader pin).
