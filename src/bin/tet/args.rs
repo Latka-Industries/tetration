@@ -129,7 +129,7 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Export a `.tet` file to Zarr v3, HDF5, or NetCDF (format from output path).
+    /// Export a `.tet` file to Zarr v3, HDF5, or `NetCDF` (format from output path).
     Export {
         /// Source `.tet` file.
         input: PathBuf,

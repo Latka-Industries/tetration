@@ -1,6 +1,6 @@
 # Documentation: https://docs.brew.sh/Formula-Cookbook
 class Tetration < Formula
-  desc "Mmap-oriented chunked tensor format and tet CLI (query, convert, info)"
+  desc "Mmap-oriented chunked tensor format and tet CLI (query, convert, export, info)"
   homepage "https://docs.tetration.sh"
   url "https://github.com/Latka-Industries/tetration/archive/refs/tags/v0.2.2.tar.gz"
   sha256 "304d94cd1ccd44d77436b8759d0e5b8c0f3a59c8669dd9221b09c3ece897ca92"

@@ -1,4 +1,4 @@
-//! `tet export` (`.tet` → Zarr v3 / HDF5 / NetCDF).
+//! `tet export` (`.tet` → Zarr v3 / HDF5 / `NetCDF`).
 
 use std::path::Path;
 

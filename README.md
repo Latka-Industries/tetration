@@ -29,7 +29,7 @@ brew tap Latka-Industries/tetration https://github.com/Latka-Industries/tetratio
 brew install tetration
 ```
 
-**Cargo** (default features need system HDF5 + NetCDF for `tet convert`; omit with `--no-default-features`):
+**Cargo** (default features need system HDF5 + NetCDF for `tet convert` / `tet export`; omit with `--no-default-features`):
 
 ```bash
 cargo install tetration
@@ -49,6 +49,7 @@ tet convert volume.h5 volume.tet
 tet info volume.tet
 tet verify volume.tet
 tet query fixtures/queries/mean_temperature.toml -t volume.tet -x -q
+tet export volume.tet volume.zarr/   # or volume.h5 / volume.nc
 ```
 
 Packages (multi-writer): `tet ingest` → `tet publish` → query the `.tet.d` (or `tet pack` to a single `.tet`). See [CLI — packages](https://docs.tetration.sh/cli/package).
