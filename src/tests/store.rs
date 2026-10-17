@@ -22,7 +22,7 @@ fn tiny_tet_bytes() -> Vec<u8> {
     std::fs::read(&path).unwrap()
 }
 
-fn assert_store_roundtrip<S: PackageStore>(store: &S) {
+pub(crate) fn assert_store_roundtrip<S: PackageStore>(store: &S) {
     store
         .create_dir_exclusive("staging/w1")
         .expect("staging session");

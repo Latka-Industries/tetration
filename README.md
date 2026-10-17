@@ -42,6 +42,8 @@ cargo install tetration
 tetration = "0.3"
 ```
 
+S3-compatible package stores are optional and off by default: `features = ["tetration-s3"]`.
+
 ## First commands
 
 ```bash

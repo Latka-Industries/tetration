@@ -2,12 +2,15 @@
 //!
 //! Keys are package-relative POSIX paths (`CURRENT`, `staging/…`, `generations/00000001/packed.tet`).
 //! Local `.tet.d` uses [`LocalStore`]; tests and future planners use [`MemoryStore`].
-//! S3-compatible backends are 0.3.1 ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
+//! S3-compatible backends are `S3Store` behind the `tetration-s3` feature
+//! ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
 
 mod fetch;
 mod local;
 mod memory;
 mod pin;
+#[cfg(feature = "tetration-s3")]
+mod s3;
 mod uri;
 
 use std::fmt;
@@ -24,6 +27,8 @@ pub use pin::{
     PinnedPackedTet, generation_manifest_key, packed_tet_key, pin_packed_tet,
     read_generation_manifest,
 };
+#[cfg(feature = "tetration-s3")]
+pub use s3::{S3Config, S3Store};
 pub use uri::{GenerationPin, ParsedTetUri, TetOpenTarget, TetUriError, parse_tet_uri};
 
 /// Metadata for one store object (file-like key).

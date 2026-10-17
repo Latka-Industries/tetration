@@ -67,6 +67,8 @@ pub use store::{
     parse_tet_uri, pin_packed_tet, plan_catalog_fetch, read_superblock_at,
     read_tet_summary_at_store,
 };
+#[cfg(feature = "tetration-s3")]
+pub use store::{S3Config, S3Store};
 pub use stream_write::{
     ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,
     validate_array_write_meta, write_multi_raw_array_streaming,

@@ -20,7 +20,7 @@ crate-type = ["rlib", "cdylib"]
 # rustdoc on docs.rs: build with default features off (avoid native NetCDF/HDF5; gate optional imports).
 [package.metadata.docs.rs]
 no-default-features = true
-features = ["tetration-ffi", "tetration-parquet"]
+features = ["tetration-ffi", "tetration-parquet", "tetration-s3"]
 
 [features]
 default = ["tetration-netcdf", "tetration-hdf5"]
@@ -36,6 +36,8 @@ tetration-rocm = ["dep:cudarc"]
 tetration-metal = ["dep:metal"]
 # Parquet import. Off by default: the Arrow reader is a large dependency.
 tetration-parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]
+# S3-compatible PackageStore (MinIO and AWS). Off by default; needs a C toolchain (aws-lc).
+tetration-s3 = ["dep:object_store", "dep:tokio", "dep:futures"]
 
 [[bin]]
 name = "tet"
@@ -91,6 +93,9 @@ csv = { version = "1.4.0", default-features = false }
 parquet = { version = "60.0.0", default-features = false, features = ["arrow", "snap", "flate2", "flate2-zlib-rs", "zstd"], optional = true }
 arrow-array = { version = "60.0.0", optional = true }
 arrow-schema = { version = "60.0.0", optional = true }
+object_store = { version = "0.14", default-features = false, features = ["aws"], optional = true }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "time"], optional = true }
+futures = { version = "0.3", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.102"
