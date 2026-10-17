@@ -236,7 +236,18 @@ The `write_one_chunk_raw_file` helper in `tetration::catalog` writes exactly **o
 | **Read while another process writes** | No (undefined) | Readers may see torn index rows or short payloads.                                                                                   |
 | **Many queries, one file**            | Yes            | Independent plans; per-query temp spills are unique; user export `spill` paths must not collide.                                     |
 
-**Multi-writer (0.2+):** concurrent ingest is specified as **immutable shards → single publish → sealed generation**, not as parallel updates to one live TIDX. See the draft RFC [`writer_protocol_v2.md`](writer_protocol_v2.md). A published generation may expose a packed layout-v1 `.tet` for the same mmap reader contract as above.
+**Multi-writer (0.2+):** concurrent ingest is specified as **immutable shards → single publish → sealed generation**, not as parallel updates to one live TIDX. See [`writer_protocol_v2.md`](writer_protocol_v2.md). A published generation exposes a packed layout-v1 `.tet` for the same mmap reader contract as above.
+
+### Package readers
+
+Normative when the bytes live in a package (local `.tet.d` or a store key), not in a standalone `.tet` (THI-472).
+
+| Event | What the open query does |
+| ----- | ------------------------ |
+| `CURRENT` moves from `G` to `G+1` | Keeps reading `generations/<G>/packed.tet`. The next open follows `G+1`. |
+| Someone replaces the bytes at the pinned `packed.tet` key | Does **not** treat that as a new generation and does **not** re-read `CURRENT`. Local mmap stays on the inode from open. An object-store overwrite can show up on a later range GET; that is a verify failure on `G`. |
+
+Writers publish a new generation under a new key. They do not rewrite a sealed `packed.tet`. Detail: [`query_engine.md` — Pin / consistency](query_engine.md#pin--consistency).
 
 **Inside one query**, the engine already parallelizes chunk I/O on CPU when in-core (Rayon) or uses a sequential linear scan when out-of-core ([query engine — adaptive fold I/O](query_engine.md#adaptive-fold-io)).
 

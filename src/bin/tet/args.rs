@@ -70,13 +70,15 @@ pub enum Commands {
         visible_alias = "q",
         after_help = "QUERY: path to .json / .toml, inline JSON or TOML, or `-` for stdin; omit QUERY to read stdin. \
                       Leading `{` selects JSON; otherwise TOML. Extension `.json` / `.toml` overrides. \
-                      -x decodes chunks (requires -t). -q is --format quiet; else default full."
+                      -x decodes chunks (requires -t). -q is --format quiet; else default full. \
+                      A package query pins the generation it opened and does not follow a newer publish \
+                      (docs/query_engine.md#pin--consistency)."
     )]
     Query {
         /// Query document: `.json` / `.toml` path, inline JSON/TOML, or `-` for stdin.
         #[arg(value_name = "QUERY")]
         query: Option<String>,
-        /// `.tet` file or `.tet.d` package (catalog + optional execute; package uses CURRENT).
+        /// `.tet` file or `.tet.d` package. A package pins CURRENT for the whole query and does not follow a newer publish.
         #[arg(short = 't', long, value_name = "PATH")]
         tet: Option<PathBuf>,
         /// Decode planned chunks and attach `execution` (requires `-t`).

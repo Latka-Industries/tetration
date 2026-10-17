@@ -28,13 +28,15 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.0:** [`PackageStore`](../src/catalog/store/mod.rs) (`LocalStore` / `MemoryStore`), URI parse (`file://`, paths, `memory://`, `s3://` shape), range-read planner (catalog then chunk payloads), and [`TetPackagePin`](../src/catalog/package.rs) so a handle keeps one generation when `CURRENT` advances. See [`query_engine.md` — store-backed reads](query_engine.md#store-backed-reads-030--phase-12-foundation).
 
-**Still open:** open real object-store backends (`s3://` publish/read in 0.3.1+), multi-host publish (THI-500), local block cache + convert-from-URI (0.3.3). Example target:
+**Reader rule (normative):** a query keeps the generation it opened. A publish that moves `CURRENT` is invisible until the next open. Replacing the pinned `packed.tet` is not a new generation — see [Pin / consistency](query_engine.md#pin--consistency) and [`layout_v1.md` — package readers](layout_v1.md#package-readers).
+
+**Still open:** `tet query` does not open `s3://` yet (`S3Store` is the optional `tetration-s3` feature). Multi-host publish is 0.3.2. Local block cache and convert-from-URI are 0.3.3. Example target:
 
 ```text
 tet query climate.tet@s3://bucket/path/climate.tet …
 ```
 
-**Why the rest is hard:** object stores are not POSIX. Latency, partial reads, caching, and consistency differ from mmap. 0.3.0 lands the planner and pin semantics; cache policy and CAS publish remain.
+**Why the rest is hard:** object stores are not POSIX. Latency, partial reads, and caching differ from mmap. Conditional publish of `CURRENT` is the store CAS; the block cache is still open. The pin rule above does not change with the transport.
 
 **Relation to v1:** chunk index + fixed payload offsets are unchanged; transport and cache policy are the remaining gap.
 
