@@ -131,12 +131,13 @@ fn two_publishers_one_wins<S: PackageStore + Sync>(store: &S) {
                     Ok(_) => {
                         wins.fetch_add(1, Ordering::SeqCst);
                     }
-                    Err(CatalogError::PublishLockHeld(1) | CatalogError::PackagePathExists(_)) => {
-                        // Lost exclusive claim, or lost the race after the winner renamed
-                        // `publishing/<G>` → `generations/<G>`.
-                        losses.fetch_add(1, Ordering::SeqCst);
-                    }
-                    Err(CatalogError::Package(_)) => {
+                    Err(
+                        CatalogError::PublishLockHeld(1)
+                        | CatalogError::PackagePathExists(_)
+                        | CatalogError::Package(_),
+                    ) => {
+                        // Lost exclusive claim, or lost rename into `generations/<G>` after the
+                        // winner already sealed.
                         losses.fetch_add(1, Ordering::SeqCst);
                     }
                     Err(err) => panic!("unexpected publish error: {err:?}"),

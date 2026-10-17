@@ -235,13 +235,15 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new(generation: u64) -> Result<Self, CatalogError> {
+        // Include thread id so two committers racing the same G never share a scratch dir.
         let path = std::env::temp_dir().join(format!(
-            "tetration-publish-{}-{}-{}",
+            "tetration-publish-{}-{}-{}-{:?}",
             std::process::id(),
             package::format_generation_id(generation),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_nanos())
+                .map_or(0, |d| d.as_nanos()),
+            std::thread::current().id()
         ));
         fs::create_dir_all(&path)?;
         Ok(Self(path))
