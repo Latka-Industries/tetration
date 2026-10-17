@@ -5,15 +5,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use serde::Serialize;
 use serde_json::json;
 
 use crate::catalog::{
     CHUNK_PAYLOAD_CODEC_V1, CatalogError, ChunkIndexEntryV1, DatasetRecordV1, TetFileSummaryV1,
-    read_tet_summary_v1, usize_from_u64,
 };
-use crate::layout::{self, mmap_file_read};
 use crate::utils::dtype::ElementDtype;
+
+use super::common::{
+    ExportError, ExportProgress, ExportReport, chunks_for_dataset, dataset_footer_attrs,
+    element_dtype, element_dtype_wire_label, finish_report, open_summary,
+};
 
 /// Export a mapped `.tet` to a Zarr v3 directory store.
 ///
@@ -37,32 +39,19 @@ pub fn export_tet_to_zarr_with_progress(
 ) -> Result<ExportReport, ExportError> {
     let started = Instant::now();
     ensure_empty_output_dir(output)?;
-    let mmap = mmap_file_read(input).map_err(|e| ExportError::Zarr(e.to_string()))?;
-    let summary = read_tet_summary_v1(&mmap).map_err(ExportError::Catalog)?;
-    if summary.datasets.is_empty() {
-        return Err(ExportError::NoDatasets {
-            path: input.display().to_string(),
-        });
-    }
-
+    let (mmap, summary) = open_summary(input)?;
     write_root_group(output)?;
     let chunks_total = summary.chunks.len() as u64;
 
     let mut chunks_done = 0u64;
-    let mut dataset_names = Vec::with_capacity(summary.datasets.len());
     for (ds_id, ds) in summary.datasets.iter().enumerate() {
-        dataset_names.push(ds.name.clone());
         let wire_id = u64::try_from(ds_id).map_err(|_| {
             ExportError::Catalog(CatalogError::TooLargeForPlatform {
                 field: "dataset_id",
                 value: ds_id as u64,
             })
         })?;
-        let chunks: Vec<&ChunkIndexEntryV1> = summary
-            .chunks
-            .iter()
-            .filter(|c| c.dataset_id == wire_id)
-            .collect();
+        let chunks = chunks_for_dataset(&summary, wire_id);
         export_dataset(&mmap, output, ds, &chunks, &summary)?;
         for _ in &chunks {
             chunks_done += 1;
@@ -76,52 +65,7 @@ pub fn export_tet_to_zarr_with_progress(
         }
     }
 
-    Ok(ExportReport {
-        input: input.display().to_string(),
-        output: output.display().to_string(),
-        dataset_count: summary.datasets.len(),
-        dataset_names,
-        chunks_written: chunks_done,
-        elapsed_secs: started.elapsed().as_secs_f64(),
-    })
-}
-
-/// Progress event emitted while writing chunk files.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ExportProgress {
-    pub chunks_done: u64,
-    pub chunks_total: u64,
-    pub dataset: String,
-}
-
-/// Summary returned after a successful export.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ExportReport {
-    pub input: String,
-    pub output: String,
-    pub dataset_count: usize,
-    pub dataset_names: Vec<String>,
-    pub chunks_written: u64,
-    pub elapsed_secs: f64,
-}
-
-/// Export pipeline failures.
-#[derive(Debug, thiserror::Error)]
-pub enum ExportError {
-    #[error(transparent)]
-    Layout(#[from] layout::LayoutError),
-    #[error(transparent)]
-    Catalog(#[from] CatalogError),
-    #[error("no datasets in {path}")]
-    NoDatasets { path: String },
-    #[error("export output `{path}` exists and is not empty")]
-    OutputNotEmpty { path: String },
-    #[error("Zarr export failed: {0}")]
-    Zarr(String),
-    #[error("unsupported dataset `{name}` dtype for Zarr export: {detail}")]
-    UnsupportedDtype { name: String, detail: String },
+    Ok(finish_report(input, output, &summary, chunks_done, started))
 }
 
 fn ensure_empty_output_dir(path: &Path) -> Result<(), ExportError> {
@@ -156,11 +100,7 @@ fn export_dataset(
     chunks: &[&ChunkIndexEntryV1],
     summary: &TetFileSummaryV1,
 ) -> Result<(), ExportError> {
-    let elem =
-        ElementDtype::try_from_wire_tag(ds.dtype).ok_or_else(|| ExportError::UnsupportedDtype {
-            name: ds.name.clone(),
-            detail: format!("unsupported wire dtype tag {:#x}", ds.dtype),
-        })?;
+    let elem = element_dtype(ds)?;
     let ndim = ds.shape.len();
     ensure_group_chain(store, &ds.name)?;
     let array_dir = array_dir_for_name(store, &ds.name);
@@ -199,27 +139,10 @@ fn dataset_export_attrs(
         "tetration_dtype".into(),
         json!(element_dtype_wire_label(elem)),
     );
-    if let Some(ds_meta) = summary.metadata.datasets.get(name) {
-        for (k, v) in &ds_meta.attrs {
-            attrs.insert(k.clone(), json!(v));
-        }
+    for (k, v) in dataset_footer_attrs(summary, name) {
+        attrs.insert(k, json!(v));
     }
     attrs
-}
-
-fn element_dtype_wire_label(elem: ElementDtype) -> &'static str {
-    match elem {
-        ElementDtype::F32 => "f32",
-        ElementDtype::F64 => "f64",
-        ElementDtype::I32 => "i32",
-        ElementDtype::I64 => "i64",
-        ElementDtype::U8 => "u8",
-        ElementDtype::U16 => "u16",
-        ElementDtype::I16 => "i16",
-        ElementDtype::U32 => "u32",
-        ElementDtype::F16 => "f16",
-        ElementDtype::U64 => "u64",
-    }
 }
 
 fn element_dtype_zarr_name(elem: ElementDtype) -> &'static str {
@@ -346,4 +269,9 @@ fn array_dir_for_name(store: &Path, catalog_name: &str) -> PathBuf {
 fn write_json_file(path: &Path, value: &serde_json::Value) -> Result<(), ExportError> {
     let raw = serde_json::to_string_pretty(value).map_err(|e| ExportError::Zarr(e.to_string()))?;
     fs::write(path, raw).map_err(|e| ExportError::Zarr(e.to_string()))
+}
+
+fn usize_from_u64(field: &'static str, v: u64) -> Result<usize, ExportError> {
+    usize::try_from(v)
+        .map_err(|_| ExportError::Catalog(CatalogError::TooLargeForPlatform { field, value: v }))
 }

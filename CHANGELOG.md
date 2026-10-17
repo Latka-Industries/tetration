@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `tet export` writes HDF5 and NetCDF-4 beside Zarr v3 (`export_tet`, feature-gated like convert; THI-491)
+
 ## [0.2.2] - 2026-10-16
 
 ### Added
