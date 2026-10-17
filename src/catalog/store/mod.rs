@@ -6,8 +6,9 @@
 //! [`stage_part`] / [`publish_staged_parts`] upload parts and CAS-publish one generation.
 //! Publish takes an exclusive `publishing/<G>` claim ([`PublishOptions`]); a second host that
 //! loses the claim does not write `CURRENT`. A query pins `packed.tet` once and does not follow
-//! a newer `CURRENT`.
+//! a newer `CURRENT`. Optional [`CachingStore`] remembers packed ranges by `(generation, offset)`.
 
+mod cache;
 mod fetch;
 mod ingest;
 mod local;
@@ -22,6 +23,7 @@ use std::fmt;
 
 use super::CatalogError;
 
+pub use cache::{BlockCache, CachingStore};
 pub use fetch::{
     ByteRange, MAX_ASSEMBLE_OBJECT_MIB, ObjectFetchPlan, assemble_object_from_ranges, fetch_ranges,
     merge_byte_ranges, plan_catalog_fetch, read_superblock_at, read_tet_summary_at_store,

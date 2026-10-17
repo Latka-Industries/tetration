@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Optional `BlockCache` / `CachingStore`: remember packed.tet range reads by `(generation_id, offset)`; cache is off unless wrapped; a new pin does not reuse another generation’s blocks (THI-501)
+
 ## [0.3.2] - 2026-10-17
 
 ### Added
