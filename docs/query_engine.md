@@ -74,7 +74,7 @@ Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-q
 
 ## Store-backed reads (0.3.0 / Phase 12 foundation)
 
-**Status:** shipped in **0.3.0** (THI-469 / THI-470 / THI-498). Local mmap via `TetFile` is unchanged. Object-store backends (`s3://`) are recognized in URI parse but not opened until 0.3.1.
+**Status:** shipped in **0.3.0** (THI-469 / THI-470 / THI-498). Local mmap via `TetFile` is unchanged. `s3://` is recognized in URI parse. `S3Store` (feature `tetration-s3`) can serve a pinned object; `tet query` still opens a local path or `.tet.d`.
 
 Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
 
@@ -90,9 +90,15 @@ Entry points: `pin_packed_tet`, `execute_query_with_store`, `execute_query_on_st
 
 ### Pin / consistency
 
-- Resolve `CURRENT` **once** (or take an explicit generation id). The handle keeps `generations/{G}/packed.tet` for the life of the query.
-- Public package API: [`TetPackage::pin_current`](../src/catalog/package.rs) / `pin_generation` → [`TetPackagePin`](../src/catalog/package.rs). Advancing `CURRENT` under an open pin does **not** change which `packed.tet` the pin opens (THI-498). `open_current` pins then opens once; keep the pin for multi-query loops.
-- Sealed `packed.tet` for a generation is immutable. If bytes under that key change, treat as verify failure — the planner does not re-resolve mid-query.
+Normative for every package query, local or store-backed (THI-498 / THI-472).
+
+1. **The query keeps the version it opened.** Resolve `CURRENT` once, or take an explicit generation id, and pin `generations/{G}/packed.tet` for the life of that handle. Do not read `CURRENT` again until the caller opens a new handle.
+2. **A newer publish is invisible mid-query.** If `CURRENT` advances to `G+1` while the query runs, the open handle still reads `G`. The next open is what follows the new pointer.
+3. **Replacing the pinned object is not a new generation.** `packed.tet` for `G` is immutable. Writers publish `G+1` as a different key; they do not rewrite `G`. If the bytes under the pinned key change anyway:
+   - Local mmap keeps the inode opened at pin time. A same-directory rename of a new file into that path does not retarget the open map.
+   - A later range read on an object store can observe the replacement, because each `read_at` is a new GET. That is a verify failure on `G`, not a follow of `CURRENT`. The planner does not switch keys mid-query.
+
+Public package API: [`TetPackage::pin_current`](../src/catalog/package.rs) / `pin_generation` → [`TetPackagePin`](../src/catalog/package.rs). `open_current` pins then opens once; keep the pin for multi-query loops. Store entry point: `pin_packed_tet`.
 
 ### Latency assumptions
 
