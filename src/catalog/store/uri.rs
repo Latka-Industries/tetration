@@ -1,0 +1,175 @@
+//! Parse tetration open targets (paths, `file://`, `memory://`, recognize `s3://`).
+
+use std::path::PathBuf;
+
+use thiserror::Error;
+
+/// Which sealed generation a package reader should pin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenerationPin {
+    /// Read `CURRENT` once and pin that generation.
+    Current,
+    /// Pin an explicit generation id.
+    Explicit(u64),
+}
+
+/// Parsed open target (no I/O).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TetOpenTarget {
+    /// Standalone layout-v1 `.tet` (mmap path).
+    LocalTet(PathBuf),
+    /// `.tet.d` package root for [`crate::catalog::LocalStore`].
+    LocalPackage {
+        root: PathBuf,
+        generation: GenerationPin,
+    },
+    /// Object key inside a caller-supplied [`crate::catalog::PackageStore`] (tests / embedders).
+    StorePackage { generation: GenerationPin },
+    /// Recognized shape; backend is 0.3.1 ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
+    S3 {
+        bucket: String,
+        key: String,
+        generation: GenerationPin,
+    },
+}
+
+/// Optional CLI-style label (`dataset@uri`) plus target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedTetUri {
+    /// Text before `@` when present (dataset hint; unused for I/O).
+    pub label: Option<String>,
+    pub target: TetOpenTarget,
+}
+
+/// URI / path parse failures.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum TetUriError {
+    #[error("empty tet URI")]
+    Empty,
+    #[error("unsupported URI scheme: {0}")]
+    UnsupportedScheme(String),
+    #[error("invalid s3 URI (need s3://bucket/key): {0}")]
+    InvalidS3(String),
+    #[error("invalid memory URI (use memory://current or memory://g/<id>): {0}")]
+    InvalidMemory(String),
+    #[error("invalid generation id: {0}")]
+    InvalidGeneration(String),
+}
+
+/// Parse a path or URI into a [`ParsedTetUri`]. Does not touch the network or filesystem.
+///
+/// # Errors
+///
+/// Returns [`TetUriError`] for empty input or malformed schemes.
+pub fn parse_tet_uri(input: &str) -> Result<ParsedTetUri, TetUriError> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(TetUriError::Empty);
+    }
+
+    let (label, rest) = match trimmed.split_once('@') {
+        Some((before, after)) if !before.is_empty() && looks_like_scheme_or_path(after) => {
+            (Some(before.to_string()), after)
+        }
+        _ => (None, trimmed),
+    };
+
+    let target = if let Some(rest) = rest.strip_prefix("s3://") {
+        parse_s3(rest)?
+    } else if let Some(rest) = rest.strip_prefix("memory://") {
+        parse_memory(rest)?
+    } else if let Some(rest) = rest.strip_prefix("file://") {
+        parse_file_url(rest)?
+    } else if rest.contains("://") {
+        let scheme = rest.split("://").next().unwrap_or("").to_string();
+        return Err(TetUriError::UnsupportedScheme(scheme));
+    } else {
+        parse_local_path(rest)?
+    };
+
+    Ok(ParsedTetUri { label, target })
+}
+
+fn looks_like_scheme_or_path(s: &str) -> bool {
+    s.contains("://")
+        || s.starts_with('/')
+        || s.starts_with('.')
+        || s.ends_with(".tet")
+        || s.ends_with(".tet.d")
+}
+
+fn parse_s3(rest: &str) -> Result<TetOpenTarget, TetUriError> {
+    let (path, generation) = split_generation_query(rest)?;
+    let (bucket, key) = path
+        .split_once('/')
+        .filter(|(b, k)| !b.is_empty() && !k.is_empty())
+        .ok_or_else(|| TetUriError::InvalidS3(rest.to_string()))?;
+    Ok(TetOpenTarget::S3 {
+        bucket: bucket.to_string(),
+        key: key.to_string(),
+        generation,
+    })
+}
+
+fn parse_memory(rest: &str) -> Result<TetOpenTarget, TetUriError> {
+    let (path, generation) = split_generation_query(rest)?;
+    let generation = if path.is_empty() || path == "current" {
+        GenerationPin::Current
+    } else if let Some(id) = path.strip_prefix("g/") {
+        GenerationPin::Explicit(parse_generation_id(id)?)
+    } else if matches!(generation, GenerationPin::Explicit(_)) {
+        generation
+    } else {
+        return Err(TetUriError::InvalidMemory(rest.to_string()));
+    };
+    Ok(TetOpenTarget::StorePackage { generation })
+}
+
+fn parse_file_url(rest: &str) -> Result<TetOpenTarget, TetUriError> {
+    // file:///abs/path or file://localhost/abs/path — keep it simple: strip optional host.
+    let path = if let Some(after) = rest.strip_prefix("localhost") {
+        after
+    } else {
+        rest
+    };
+    let path = percent_decode_light(path);
+    parse_local_path(&path)
+}
+
+fn parse_local_path(path: &str) -> Result<TetOpenTarget, TetUriError> {
+    let (path, generation) = split_generation_query(path)?;
+    let pb = PathBuf::from(path);
+    let is_package = path.ends_with(".tet.d") || path.ends_with(".tet.d/");
+    if is_package {
+        Ok(TetOpenTarget::LocalPackage {
+            root: pb,
+            generation,
+        })
+    } else {
+        Ok(TetOpenTarget::LocalTet(pb))
+    }
+}
+
+fn split_generation_query(s: &str) -> Result<(&str, GenerationPin), TetUriError> {
+    if let Some((path, query)) = s.split_once('?') {
+        for part in query.split('&') {
+            if let Some(v) = part.strip_prefix("generation=") {
+                return Ok((path, GenerationPin::Explicit(parse_generation_id(v)?)));
+            }
+        }
+        Ok((path, GenerationPin::Current))
+    } else {
+        Ok((s, GenerationPin::Current))
+    }
+}
+
+fn parse_generation_id(s: &str) -> Result<u64, TetUriError> {
+    s.trim()
+        .parse::<u64>()
+        .map_err(|_| TetUriError::InvalidGeneration(s.to_string()))
+}
+
+fn percent_decode_light(s: &str) -> String {
+    // Enough for spaces in paths; full URL decode is not required for this PR.
+    s.replace("%20", " ")
+}
