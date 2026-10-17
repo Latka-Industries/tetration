@@ -96,6 +96,38 @@ fn quarantine_requires_stale() {
 }
 
 #[test]
+fn pin_survives_current_advance() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("pin.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+
+    let g1 = dir.path().join("g1.tet");
+    let g2 = dir.path().join("g2.tet");
+    tiny_tet(&g1);
+    tiny_tet(&g2);
+
+    pkg.begin_publish(1).unwrap();
+    pkg.seal_generation(1, &g1, vec!["a".into()]).unwrap();
+    let pin = pkg.pin_current().unwrap();
+    assert_eq!(pin.generation(), 1);
+
+    pkg.begin_publish(2).unwrap();
+    pkg.seal_generation(2, &g2, vec!["b".into()]).unwrap();
+    assert_eq!(pkg.current().unwrap(), Some(2));
+
+    // Pin still maps generation 1 even though CURRENT advanced.
+    assert_eq!(pin.generation(), 1);
+    assert_eq!(pin.packed_tet_path(), pkg.packed_tet_path(1));
+    let file = pin.open().unwrap();
+    assert_eq!(file.path(), pkg.packed_tet_path(1));
+    let summary = file.summary().unwrap();
+    assert_eq!(summary.datasets[0].name, "a");
+
+    // Fresh open_current follows CURRENT.
+    assert_eq!(pkg.open_current().unwrap().path(), pkg.packed_tet_path(2));
+}
+
+#[test]
 fn staging_session_collision() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("st.tet.d")).unwrap();

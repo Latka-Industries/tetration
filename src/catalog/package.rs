@@ -340,24 +340,52 @@ impl TetPackage {
     /// Returns [`CatalogError::GenerationNotSealed`] when `packed.tet` is missing, or I/O from
     /// [`TetFile::open`].
     pub fn open_generation(&self, generation: u64) -> Result<TetFile, CatalogError> {
+        self.pin_generation(generation)?.open()
+    }
+
+    /// Capture `CURRENT` once into a [`TetPackagePin`] (THI-498).
+    ///
+    /// The pin keeps that generation for the life of the handle even if `CURRENT` advances.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CatalogError::Package`] when `CURRENT` is absent, or
+    /// [`CatalogError::GenerationNotSealed`] when `packed.tet` is missing.
+    pub fn pin_current(&self) -> Result<TetPackagePin, CatalogError> {
+        let Some(g) = self.current()? else {
+            return Err(CatalogError::Package("package has no CURRENT generation"));
+        };
+        self.pin_generation(g)
+    }
+
+    /// Pin an explicit generation id (does not read `CURRENT`).
+    ///
+    /// # Errors
+    ///
+    /// [`CatalogError::GenerationNotSealed`] when `packed.tet` is missing.
+    pub fn pin_generation(&self, generation: u64) -> Result<TetPackagePin, CatalogError> {
         let packed = self.packed_tet_path(generation);
         if !packed.is_file() {
             return Err(CatalogError::GenerationNotSealed(generation));
         }
-        Ok(TetFile::open(packed)?)
+        Ok(TetPackagePin {
+            package_root: self.root().to_path_buf(),
+            generation,
+            packed_tet: packed,
+        })
     }
 
-    /// Pin the generation named by `CURRENT` and open its `packed.tet`.
+    /// Resolve `CURRENT` once, pin it, and open `packed.tet` (THI-498).
+    ///
+    /// For a long-lived reader that must survive later publishes, call [`Self::pin_current`]
+    /// and keep the [`TetPackagePin`] instead of calling this repeatedly.
     ///
     /// # Errors
     ///
     /// Returns [`CatalogError::Package`] when `CURRENT` is absent, or errors from
     /// [`Self::open_generation`].
     pub fn open_current(&self) -> Result<TetFile, CatalogError> {
-        let Some(g) = self.current()? else {
-            return Err(CatalogError::Package("package has no CURRENT generation"));
-        };
-        self.open_generation(g)
+        self.pin_current()?.open()
     }
 
     /// Next generation id after `CURRENT` (`1` when no generation is sealed yet).
@@ -432,6 +460,46 @@ impl TetPackage {
 
     fn publishing_scratch(&self, generation: u64) -> PathBuf {
         self.publishing_dir().join(format_generation_id(generation))
+    }
+}
+
+/// A reader pin: one sealed generation for the life of a query handle (THI-498).
+///
+/// Created by [`TetPackage::pin_current`] or [`TetPackage::pin_generation`]. Does not
+/// re-read `CURRENT` when opening.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TetPackagePin {
+    package_root: PathBuf,
+    generation: u64,
+    packed_tet: PathBuf,
+}
+
+impl TetPackagePin {
+    /// Pinned generation id.
+    #[must_use]
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Package root that produced this pin.
+    #[must_use]
+    pub fn package_root(&self) -> &Path {
+        &self.package_root
+    }
+
+    /// Path to the sealed `packed.tet` for this pin.
+    #[must_use]
+    pub fn packed_tet_path(&self) -> &Path {
+        &self.packed_tet
+    }
+
+    /// Memory-map the pinned `packed.tet`.
+    ///
+    /// # Errors
+    ///
+    /// I/O from [`TetFile::open`].
+    pub fn open(&self) -> Result<TetFile, CatalogError> {
+        Ok(TetFile::open(&self.packed_tet)?)
     }
 }
 

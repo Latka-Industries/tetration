@@ -91,7 +91,7 @@ Entry points: `pin_packed_tet`, `execute_query_with_store`, `execute_query_on_st
 ### Pin / consistency
 
 - Resolve `CURRENT` **once** (or take an explicit generation id). The handle keeps `generations/{G}/packed.tet` for the life of the query.
-- Advancing `CURRENT` under an open pin does **not** change which object the pin reads (writer protocol reader rules; THI-498 hardens the public package API).
+- Public package API: [`TetPackage::pin_current`](../src/catalog/package.rs) / `pin_generation` → [`TetPackagePin`](../src/catalog/package.rs). Advancing `CURRENT` under an open pin does **not** change which `packed.tet` the pin opens (THI-498). `open_current` pins then opens once; keep the pin for multi-query loops.
 - Sealed `packed.tet` for a generation is immutable. If bytes under that key change, treat as verify failure — the planner does not re-resolve mid-query.
 
 ### Latency assumptions
