@@ -91,17 +91,8 @@ fn minio_s3_npy_convert_matches_local_path() {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
     let key = format!("convert-s3/{nanos}/pair.npy");
-    let store = S3Store::connect(S3Config {
-        endpoint,
-        bucket: bucket.clone(),
-        prefix: String::new(),
-        region: std::env::var("TETRATION_S3_REGION").unwrap_or_else(|_| "us-east-1".into()),
-        access_key_id: std::env::var("TETRATION_S3_ACCESS_KEY")
-            .unwrap_or_else(|_| "tetration".into()),
-        secret_access_key: std::env::var("TETRATION_S3_SECRET_KEY")
-            .unwrap_or_else(|_| "tetration-secret".into()),
-    })
-    .unwrap();
+    let store =
+        S3Store::connect(S3Config::from_env(bucket.clone(), String::new()).unwrap()).unwrap();
     let npy = npy_f32_pair(1.5, 2.5);
     store.write_part(&key, &npy).unwrap();
 

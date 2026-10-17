@@ -34,8 +34,6 @@ pub(crate) fn run_convert(
     strict: bool,
     chunk_mib: Option<u32>,
 ) -> Result<(), String> {
-    use indicatif::{ProgressBar, ProgressStyle};
-
     if is_s3_convert_uri(input) {
         return run_s3_convert(input, output, jobs, strict, chunk_mib);
     }
@@ -60,34 +58,15 @@ pub(crate) fn run_convert(
         tetration::convert::ConvertInputFormat::Parquet => "Parquet → .tet",
     };
 
-    let pb = ProgressBar::new(0);
-    pb.set_style(
-        ProgressStyle::with_template("{msg} [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
-            .map_err(cli_error)?
-            .progress_chars("=>-"),
-    );
-    pb.set_message(progress_prefix.to_owned());
-
-    let progress = Some(|p: ConvertProgress| {
-        if pb.length().unwrap_or(0) != p.chunks_total {
-            pb.set_length(p.chunks_total);
-        }
-        pb.set_position(p.chunks_done);
-        pb.set_message(format!("{progress_prefix} ({})", p.dataset));
-    });
-
-    let report = convert_to_tet_with_options(
-        Path::new(input),
-        output,
-        ConvertOptions {
-            parallel_jobs: jobs,
-            strict,
-            chunk_mib,
-        },
-        progress,
-    )
-    .map_err(cli_error)?;
-    finish_convert_report(&pb, label, &report)
+    run_convert_with_bar(progress_prefix, label, |bar| {
+        let prefix = progress_prefix.to_owned();
+        convert_to_tet_with_options(
+            Path::new(input),
+            output,
+            convert_options(jobs, strict, chunk_mib),
+            Some(move |p| tick_bar(&bar, &prefix, &p)),
+        )
+    })
 }
 
 fn run_s3_convert(
@@ -97,6 +76,31 @@ fn run_s3_convert(
     strict: bool,
     chunk_mib: Option<u32>,
 ) -> Result<(), String> {
+    run_convert_with_bar("s3 → .tet", "s3 convert", |bar| {
+        convert_s3_object_to_tet(
+            input,
+            output,
+            convert_options(jobs, strict, chunk_mib),
+            Some(move |p| tick_bar(&bar, "s3 → .tet", &p)),
+        )
+    })
+}
+
+fn convert_options(jobs: usize, strict: bool, chunk_mib: Option<u32>) -> ConvertOptions {
+    ConvertOptions {
+        parallel_jobs: jobs,
+        strict,
+        chunk_mib,
+    }
+}
+
+fn run_convert_with_bar(
+    progress_prefix: &str,
+    label: &str,
+    convert: impl FnOnce(
+        indicatif::ProgressBar,
+    ) -> Result<ConvertReport, tetration::convert::ConvertError>,
+) -> Result<(), String> {
     use indicatif::{ProgressBar, ProgressStyle};
 
     let pb = ProgressBar::new(0);
@@ -105,24 +109,15 @@ fn run_s3_convert(
             .map_err(cli_error)?
             .progress_chars("=>-"),
     );
-    pb.set_message("s3 → .tet");
-    let progress = Some(|p: ConvertProgress| {
-        if pb.length().unwrap_or(0) != p.chunks_total {
-            pb.set_length(p.chunks_total);
-        }
-        pb.set_position(p.chunks_done);
-        pb.set_message(format!("s3 → .tet ({})", p.dataset));
-    });
-    let report = convert_s3_object_to_tet(
-        input,
-        output,
-        ConvertOptions {
-            parallel_jobs: jobs,
-            strict,
-            chunk_mib,
-        },
-        progress,
-    )
-    .map_err(cli_error)?;
-    finish_convert_report(&pb, "s3 convert", &report)
+    pb.set_message(progress_prefix.to_owned());
+    let report = convert(pb.clone()).map_err(cli_error)?;
+    finish_convert_report(&pb, label, &report)
+}
+
+fn tick_bar(pb: &indicatif::ProgressBar, prefix: &str, p: &ConvertProgress) {
+    if pb.length().unwrap_or(0) != p.chunks_total {
+        pb.set_length(p.chunks_total);
+    }
+    pb.set_position(p.chunks_done);
+    pb.set_message(format!("{prefix} ({})", p.dataset));
 }

@@ -34,9 +34,9 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Reader rule (normative):** a query keeps the generation it opened. A publish that moves `CURRENT` is invisible until the next open. Replacing the pinned `packed.tet` is not a new generation — see [Pin / consistency](query_engine.md#pin--consistency) and [`layout_v1.md` — package readers](layout_v1.md#package-readers).
 
-**Landing for 0.3.3:** optional in-memory [`BlockCache`](../src/catalog/store/cache.rs) / [`CachingStore`](../src/catalog/store/cache.rs) — packed ranges keyed by `(generation, offset)`; cache off unless wrapped (THI-501). `tet convert s3://bucket/file.ext` downloads that single object, then the existing importer (`tetration-s3`; THI-502). Zarr-on-S3 chunked reads and wiring `tet query` to `s3://` remain.
+**Shipped in 0.3.3:** optional in-memory [`BlockCache`](../src/catalog/store/cache.rs) / [`CachingStore`](../src/catalog/store/cache.rs) — packed ranges keyed by `(generation, offset)`; cache off unless wrapped. `tet convert s3://bucket/file.ext` downloads that single object, then the existing importer (`tetration-s3`).
 
-**Still open:** `tet query` does not open `s3://` yet (`S3Store` is the optional `tetration-s3` feature). Example target:
+**Still open:** `tet query` does not open `s3://` yet. Zarr-on-S3 chunked reads are later. Example target:
 
 ```text
 tet query climate.tet@s3://bucket/path/climate.tet …
