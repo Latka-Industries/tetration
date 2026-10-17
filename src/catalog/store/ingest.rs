@@ -2,7 +2,8 @@
 //!
 //! Same roles as local `tet ingest` / `tet publish`: N writers PUT immutable parts, one
 //! committer merges them and flips `CURRENT` with a conditional put (THI-471). A rejected
-//! CAS leaves the previous `CURRENT` and its `packed.tet` untouched.
+//! CAS leaves the previous `CURRENT` and its `packed.tet` untouched. Readers who already
+//! pinned that generation keep its object key.
 
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -74,7 +74,7 @@ Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-q
 
 ## Store-backed reads (0.3.0 / Phase 12 foundation)
 
-**Status:** shipped in **0.3.0** (THI-469 / THI-470 / THI-498). Local mmap via `TetFile` is unchanged. `s3://` is recognized in URI parse. `S3Store` (feature `tetration-s3`) can serve a pinned object; `tet query` still opens a local path or `.tet.d`.
+**Status:** foundation shipped in **0.3.0** (THI-469 / THI-470 / THI-498). **0.3.1** adds `S3Store` (feature `tetration-s3`) and `stage_part` / `publish_staged_parts`. Local mmap via `TetFile` is unchanged. `s3://` is recognized in URI parse. `tet query` still opens a local path or `.tet.d`; pass a connected `S3Store` to the store execute functions.
 
 Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
 

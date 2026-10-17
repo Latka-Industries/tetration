@@ -83,7 +83,7 @@ Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`
 
 | Flag                | Effect                                                                                                                                                           |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet` or `.tet.d` (pins `CURRENT` once for the process)                                                           |
+| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet` or `.tet.d`. A package pins the generation it opened and does not follow a newer publish ([pin](query_engine.md#pin--consistency)) |
 | `-x`, `--execute`   | Decode tiles, run `operation`, attach `execution`                                                                                                                |
 | `--format`          | `full` (default), `json`, `stats`, `plan`, `quiet`, `table`                                                                                                      |
 | `-q`, `--quiet`     | Shorthand for `--format quiet` (one-line stdout)                                                                                                                 |

@@ -1,9 +1,10 @@
 //! Package blob store (THI-469): filesystem vs object-store backends behind one protocol.
 //!
 //! Keys are package-relative POSIX paths (`CURRENT`, `staging/…`, `generations/00000001/packed.tet`).
-//! Local `.tet.d` uses [`LocalStore`]; tests and future planners use [`MemoryStore`].
-//! S3-compatible backends are `S3Store` behind the `tetration-s3` feature
-//! ([THI-499](https://linear.app/thicclatka/issue/THI-499)).
+//! Local `.tet.d` uses [`LocalStore`]; tests use [`MemoryStore`].
+//! S3-compatible backends are `S3Store` behind the `tetration-s3` feature.
+//! [`stage_part`] / [`publish_staged_parts`] upload parts and CAS-publish one generation.
+//! A query pins `packed.tet` once and does not follow a newer `CURRENT`.
 
 mod fetch;
 mod ingest;

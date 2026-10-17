@@ -15,7 +15,7 @@ N writers → immutable parts/shards → single publish → sealed generation G
 Readers only open sealed G (via packed.tet)
 ```
 
-Same *logical* model locally and later on object stores (0.3): cloud is transport for parts + the generation pointer, not a different concurrency story. **0.2 atomicity is POSIX rename; 0.3 replaces the pointer update with CAS / conditional write** (decision **K**).
+Same *logical* model locally and on object stores: cloud is transport for parts + the generation pointer, not a different concurrency story. **0.2 atomicity is POSIX rename; 0.3.1 object stores use CAS / conditional write** (`S3Store`, decision **K**).
 
 ### Explicit non-goal
 

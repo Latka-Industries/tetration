@@ -2,6 +2,9 @@
 //!
 //! [`pin_packed_tet`] reads `CURRENT` at most once (or takes an explicit id) and returns
 //! a [`PinnedPackedTet`] that query handles should keep for their lifetime (THI-498).
+//! A newer `CURRENT` is invisible until the next pin. Replacing the bytes at the pinned
+//! key is not a new generation: the handle does not switch keys. A later object-store
+//! `read_at` can observe that overwrite; treat it as a verify failure on this generation.
 
 use crate::catalog::package::{GenerationManifest, format_generation_id};
 use crate::catalog::{CatalogError, PackageStore, ReadAt};
@@ -40,7 +43,9 @@ pub fn generation_manifest_key(generation: u64) -> String {
 /// Resolve [`GenerationPin`] against `store` and return a pinned packed object.
 ///
 /// Reads `CURRENT` at most once when pin is [`GenerationPin::Current`]. Callers keep
-/// [`PinnedPackedTet`] for the life of the query handle (THI-498 / writer protocol reader rules).
+/// [`PinnedPackedTet`] for the life of the query handle and do not re-resolve `CURRENT`
+/// (THI-498 / THI-472). Replacing the object at [`PinnedPackedTet::object_key`] does not
+/// move the pin to another generation.
 ///
 /// # Errors
 ///

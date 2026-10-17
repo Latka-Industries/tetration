@@ -5,6 +5,9 @@
 //! Parquet into one `.tet`. [`export`] writes Zarr v3, HDF5, and `NetCDF` from an existing `.tet`.
 //! The companion CLI is **`tet`** (`src/bin/tet.rs`, `src/bin/tet/`).
 //!
+//! Package reads pin one sealed generation and do not follow a newer `CURRENT` mid-query.
+//! `S3Store` (feature `tetration-s3`) is an optional S3-compatible backend for that same store.
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
