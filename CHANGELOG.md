@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-17
+
+### Added
+
+- Cross-host exclusive claim on `publishing/<G>` for `PackageStore`: heartbeat, stale window, and force-only takeover so a second host cannot flip `CURRENT` (THI-500)
+
 ## [0.3.1] - 2026-10-17
 
 ### Added
