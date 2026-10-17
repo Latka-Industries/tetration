@@ -36,13 +36,15 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.3:** optional in-memory [`BlockCache`](../src/catalog/store/cache.rs) / [`CachingStore`](../src/catalog/store/cache.rs) — packed ranges keyed by `(generation, offset)`; cache off unless wrapped. `tet convert s3://bucket/file.ext` downloads that single object, then the existing importer (`tetration-s3`).
 
-**Still open:** `tet query` does not open `s3://` yet. Zarr-on-S3 chunked reads are later. Example target:
+**0.3.4:** `tet query -t s3://bucket/prefix` and `open_s3_package` pin that package (`CURRENT`, or `?generation=N`) and read through the existing range planner. Credentials stay in `TETRATION_S3_*`.
+
+**Still open:** Zarr-on-S3 chunked reads (0.3.5). Example query:
 
 ```text
-tet query climate.tet@s3://bucket/path/climate.tet …
+tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation=3' -x
 ```
 
-**Why the rest is hard:** object stores are not POSIX. Latency and partial reads differ from mmap. Conditional publish of `CURRENT` is the store CAS. Wiring `tet query` to `s3://` and chunked Zarr reads remain. The pin rule above does not change with the transport.
+**Why the rest is hard:** object stores are not POSIX. Latency and partial reads differ from mmap. Conditional publish of `CURRENT` is the store CAS. Chunked Zarr reads remain. The pin rule above does not change with the transport.
 
 **Relation to v1:** chunk index + fixed payload offsets are unchanged; query transport is the remaining gap.
 

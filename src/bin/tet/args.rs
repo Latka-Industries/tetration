@@ -72,13 +72,16 @@ pub enum Commands {
                       Leading `{` selects JSON; otherwise TOML. Extension `.json` / `.toml` overrides. \
                       -x decodes chunks (requires -t). -q is --format quiet; else default full. \
                       A package query pins the generation it opened and does not follow a newer publish \
-                      (docs/query_engine.md#pin--consistency)."
+                      (docs/query_engine.md#pin--consistency). \
+                      -t also accepts s3://bucket/prefix (feature tetration-s3; TETRATION_S3_ENDPOINT)."
     )]
     Query {
         /// Query document: `.json` / `.toml` path, inline JSON/TOML, or `-` for stdin.
         #[arg(value_name = "QUERY")]
         query: Option<String>,
-        /// `.tet` file or `.tet.d` package. A package pins CURRENT for the whole query and does not follow a newer publish.
+        /// `.tet` file, `.tet.d` package, or `s3://bucket/prefix` package (`?generation=N` pins that generation).
+        /// An `s3://` package needs `--features tetration-s3` and `TETRATION_S3_ENDPOINT`.
+        /// A package pins the generation it opened and does not follow a newer publish.
         #[arg(short = 't', long, value_name = "PATH")]
         tet: Option<PathBuf>,
         /// Decode planned chunks and attach `execution` (requires `-t`).

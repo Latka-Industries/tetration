@@ -10,6 +10,7 @@
 //! Cross-host publish uses an exclusive `publishing/<G>` claim ([`PublishOptions`](catalog::PublishOptions)).
 //! Optional [`CachingStore`](catalog::CachingStore) remembers packed ranges by generation + offset.
 //! [`convert_s3_object_to_tet`](convert::convert_s3_object_to_tet) downloads one `s3://` file and runs the existing importer (`tetration-s3`).
+//! `open_s3_package` (feature `tetration-s3`) pins an `s3://bucket/prefix` package and queries it with range reads.
 //!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).

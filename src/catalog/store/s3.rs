@@ -12,6 +12,10 @@ use object_store::aws::{AmazonS3, AmazonS3Builder, S3ConditionalPut};
 use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt, PutMode, PutOptions, UpdateVersion};
 
+use thiserror::Error;
+
+use super::pin::{PinnedPackedTet, pin_packed_tet};
+use super::uri::parse_s3_package_uri;
 use super::{
     CatalogError, ObjectMeta, PublishGeneration, ReadAt, WritePart, parse_current_bytes,
     validate_store_key,
@@ -475,6 +479,55 @@ impl S3Store {
 
 fn store_io(err: object_store::Error) -> CatalogError {
     CatalogError::Io(std::io::Error::other(err))
+}
+
+/// A pinned `s3://` package. The generation is fixed at open and is not re-read from `CURRENT`.
+#[derive(Debug)]
+pub struct OpenedS3Package {
+    store: S3Store,
+    pin: PinnedPackedTet,
+}
+
+impl OpenedS3Package {
+    /// Connected store. Keys are package-relative.
+    #[must_use]
+    pub fn store(&self) -> &S3Store {
+        &self.store
+    }
+
+    /// Packed object pinned for this handle.
+    #[must_use]
+    pub fn pin(&self) -> &PinnedPackedTet {
+        &self.pin
+    }
+}
+
+/// Failure opening an `s3://` package URI.
+#[derive(Debug, Error)]
+pub enum S3OpenError {
+    /// The URI is not `s3://bucket/prefix`.
+    #[error(transparent)]
+    Uri(#[from] super::uri::TetUriError),
+    /// Connect, pin, or object-store I/O failed.
+    #[error(transparent)]
+    Store(#[from] CatalogError),
+}
+
+/// Connect to `s3://bucket/prefix` and pin one generation.
+///
+/// Credentials come from `TETRATION_S3_*` (`TETRATION_S3_ENDPOINT` is required). The URI may be
+/// `label@s3://bucket/prefix` or end with `?generation=N`. This reads `CURRENT` at most once
+/// when no generation is given, then range-reads through [`PinnedPackedTet`].
+///
+/// # Errors
+///
+/// Malformed URI, missing `TETRATION_S3_ENDPOINT`, connect failure, or a generation that is
+/// not sealed.
+pub fn open_s3_package(uri: &str) -> Result<OpenedS3Package, S3OpenError> {
+    let location = parse_s3_package_uri(uri)?;
+    let store = S3Store::connect(S3Config::from_env(location.bucket, location.prefix)?)?;
+    let pin = pin_packed_tet(&store, location.generation)?;
+    Ok(OpenedS3Package { store, pin })
 }
 
 fn normalize_prefix(prefix: &str) -> Result<String, CatalogError> {
