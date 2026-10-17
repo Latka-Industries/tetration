@@ -72,9 +72,9 @@ Success stdout is formatted by [`format_query_response`](../src/query/cli/output
 
 Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-query-output).
 
-## Store-backed reads (0.3.0 / Phase 12 preview)
+## Store-backed reads (0.3.0 / Phase 12 foundation)
 
-**Status:** library API on `main` (THI-470). Local mmap via `TetFile` is unchanged. Object-store backends (`s3://`) are recognized in URI parse but not opened until 0.3.1.
+**Status:** shipped in **0.3.0** (THI-469 / THI-470 / THI-498). Local mmap via `TetFile` is unchanged. Object-store backends (`s3://`) are recognized in URI parse but not opened until 0.3.1.
 
 Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
 

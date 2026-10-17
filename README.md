@@ -39,7 +39,7 @@ cargo install tetration
 
 ```toml
 [dependencies]
-tetration = "0.2"
+tetration = "0.3"
 ```
 
 ## First commands

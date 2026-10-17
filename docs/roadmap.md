@@ -24,19 +24,19 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 ## Five strategic directions
 
-### 1. Cloud-native operation (prospective Phase 12)
+### 1. Cloud-native operation (Phase 12)
 
-**Today:** queries assume a **local** `.tet` path; the engine mmap’s a sealed byte image on a normal filesystem.
+**Shipped in 0.3.0:** [`PackageStore`](../src/catalog/store/mod.rs) (`LocalStore` / `MemoryStore`), URI parse (`file://`, paths, `memory://`, `s3://` shape), range-read planner (catalog then chunk payloads), and [`TetPackagePin`](../src/catalog/package.rs) so a handle keeps one generation when `CURRENT` advances. See [`query_engine.md` — store-backed reads](query_engine.md#store-backed-reads-030--phase-12-foundation).
 
-**Direction:** treat object stores (S3, GCS, Azure Blob) as first-class without downloading whole files — e.g. a URI-shaped target and range reads aligned to chunk boundaries:
+**Still open:** open real object-store backends (`s3://` publish/read in 0.3.1+), multi-host publish (THI-500), local block cache + convert-from-URI (0.3.3). Example target:
 
 ```text
 tet query climate.tet@s3://bucket/path/climate.tet …
 ```
 
-**Why it is hard:** object stores are not POSIX filesystems. Latency, partial reads, caching, and consistency differ from mmap. A serious design needs a **read planner** that minimizes round trips (index + footer first, then payload ranges), optional local block cache, and clear semantics when the object is replaced mid-read.
+**Why the rest is hard:** object stores are not POSIX. Latency, partial reads, caching, and consistency differ from mmap. 0.3.0 lands the planner and pin semantics; cache policy and CAS publish remain.
 
-**Relation to v1:** chunk index + fixed payload offsets are a good foundation; the gap is transport and cache policy, not on-disk layout.
+**Relation to v1:** chunk index + fixed payload offsets are unchanged; transport and cache policy are the remaining gap.
 
 ---
 

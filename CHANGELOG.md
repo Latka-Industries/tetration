@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
+### Added
+
+- `PackageStore` trait (`ReadAt` / `WritePart` / `PublishGeneration`) with `LocalStore` (`.tet.d`) and `MemoryStore` (THI-469)
+- URI parse + range-read planner: `parse_tet_uri`, `pin_packed_tet`, catalog/chunk `read_at` plans, store-backed query execute (THI-470)
+- `TetPackagePin` / `pin_current` / `pin_generation` so readers keep one sealed generation for the life of a handle (THI-498)
+
+### Changed
+
+- Pedantic clippy: `NetCDF` doc backticks; case-insensitive `.tet` / `.tet.d` URI suffixes (left `cast_*` alone)
+
 ## [0.2.3] - 2026-10-16
 
 ### Added
