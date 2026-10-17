@@ -10,6 +10,7 @@ mod cli_output;
 mod cli_package;
 mod concurrent_query;
 mod convert;
+mod convert_s3;
 mod covariance;
 mod device;
 mod embed_materialize;

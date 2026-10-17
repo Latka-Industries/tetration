@@ -33,12 +33,16 @@ mod numpy;
 mod parallel;
 #[cfg(feature = "tetration-parquet")]
 mod parquet;
+mod s3;
 mod shared;
 mod sniff;
 mod tile_io;
 mod zarr;
 
 pub use parallel::{default_parallel_jobs, resolve_parallel_jobs};
+pub use s3::{
+    S3ConvertObject, convert_s3_object_to_tet, is_s3_convert_uri, parse_s3_convert_object,
+};
 
 #[cfg(test)]
 pub(crate) use csv::convert_csv_with_chunk_bytes;
@@ -405,6 +409,16 @@ pub enum ConvertError {
         format: ConvertInputFormat,
         feature: &'static str,
     },
+    #[error("s3 convert failed: {0}")]
+    S3(String),
+    #[error(
+        "s3:// convert does not read Zarr stores; pass a single file (.h5, .nc, .npy, .csv, .parquet). Chunked Zarr-on-S3 reads are later ({uri})"
+    )]
+    S3ZarrNotSupported { uri: String },
+    #[error("s3:// convert requires Cargo feature `tetration-s3`")]
+    S3FeatureDisabled,
+    #[error("s3:// convert requires environment variable `{0}`")]
+    S3ConfigMissing(&'static str),
 }
 
 fn report(

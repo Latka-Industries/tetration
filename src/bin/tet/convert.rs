@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use tetration::convert::{
-    ConvertOptions, ConvertProgress, ConvertReport, convert_to_tet_with_options,
-    detect_convert_format,
+    ConvertOptions, ConvertProgress, ConvertReport, convert_s3_object_to_tet,
+    convert_to_tet_with_options, detect_convert_format, is_s3_convert_uri,
 };
 
 use crate::util::cli_error;
@@ -28,7 +28,7 @@ fn finish_convert_report(
 }
 
 pub(crate) fn run_convert(
-    input: &Path,
+    input: &str,
     output: &Path,
     jobs: usize,
     strict: bool,
@@ -36,7 +36,11 @@ pub(crate) fn run_convert(
 ) -> Result<(), String> {
     use indicatif::{ProgressBar, ProgressStyle};
 
-    let format = detect_convert_format(input).map_err(cli_error)?;
+    if is_s3_convert_uri(input) {
+        return run_s3_convert(input, output, jobs, strict, chunk_mib);
+    }
+
+    let format = detect_convert_format(Path::new(input)).map_err(cli_error)?;
     let label = match format {
         tetration::convert::ConvertInputFormat::H5 => "HDF5 convert",
         tetration::convert::ConvertInputFormat::Netcdf => "NetCDF convert",
@@ -73,7 +77,7 @@ pub(crate) fn run_convert(
     });
 
     let report = convert_to_tet_with_options(
-        input,
+        Path::new(input),
         output,
         ConvertOptions {
             parallel_jobs: jobs,
@@ -84,4 +88,41 @@ pub(crate) fn run_convert(
     )
     .map_err(cli_error)?;
     finish_convert_report(&pb, label, &report)
+}
+
+fn run_s3_convert(
+    input: &str,
+    output: &Path,
+    jobs: usize,
+    strict: bool,
+    chunk_mib: Option<u32>,
+) -> Result<(), String> {
+    use indicatif::{ProgressBar, ProgressStyle};
+
+    let pb = ProgressBar::new(0);
+    pb.set_style(
+        ProgressStyle::with_template("{msg} [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
+            .map_err(cli_error)?
+            .progress_chars("=>-"),
+    );
+    pb.set_message("s3 → .tet");
+    let progress = Some(|p: ConvertProgress| {
+        if pb.length().unwrap_or(0) != p.chunks_total {
+            pb.set_length(p.chunks_total);
+        }
+        pb.set_position(p.chunks_done);
+        pb.set_message(format!("s3 → .tet ({})", p.dataset));
+    });
+    let report = convert_s3_object_to_tet(
+        input,
+        output,
+        ConvertOptions {
+            parallel_jobs: jobs,
+            strict,
+            chunk_mib,
+        },
+        progress,
+    )
+    .map_err(cli_error)?;
+    finish_convert_report(&pb, "s3 convert", &report)
 }

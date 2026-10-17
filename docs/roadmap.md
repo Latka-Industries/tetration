@@ -34,7 +34,7 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Reader rule (normative):** a query keeps the generation it opened. A publish that moves `CURRENT` is invisible until the next open. Replacing the pinned `packed.tet` is not a new generation — see [Pin / consistency](query_engine.md#pin--consistency) and [`layout_v1.md` — package readers](layout_v1.md#package-readers).
 
-**Landing for 0.3.3:** optional in-memory [`BlockCache`](../src/catalog/store/cache.rs) / [`CachingStore`](../src/catalog/store/cache.rs) — packed ranges keyed by `(generation, offset)`; cache off unless wrapped (THI-501). Convert-from-URI and wiring `tet query` to `s3://` remain.
+**Landing for 0.3.3:** optional in-memory [`BlockCache`](../src/catalog/store/cache.rs) / [`CachingStore`](../src/catalog/store/cache.rs) — packed ranges keyed by `(generation, offset)`; cache off unless wrapped (THI-501). `tet convert s3://bucket/file.ext` downloads that single object, then the existing importer (`tetration-s3`; THI-502). Zarr-on-S3 chunked reads and wiring `tet query` to `s3://` remain.
 
 **Still open:** `tet query` does not open `s3://` yet (`S3Store` is the optional `tetration-s3` feature). Example target:
 
@@ -42,9 +42,9 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 tet query climate.tet@s3://bucket/path/climate.tet …
 ```
 
-**Why the rest is hard:** object stores are not POSIX. Latency and partial reads differ from mmap. Conditional publish of `CURRENT` is the store CAS; convert-from-URI and wiring `tet query` to `s3://` remain. The pin rule above does not change with the transport.
+**Why the rest is hard:** object stores are not POSIX. Latency and partial reads differ from mmap. Conditional publish of `CURRENT` is the store CAS. Wiring `tet query` to `s3://` and chunked Zarr reads remain. The pin rule above does not change with the transport.
 
-**Relation to v1:** chunk index + fixed payload offsets are unchanged; transport for convert/query URIs is the remaining gap.
+**Relation to v1:** chunk index + fixed payload offsets are unchanged; query transport is the remaining gap.
 
 ---
 
