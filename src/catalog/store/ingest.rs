@@ -35,14 +35,14 @@ pub fn stage_part(
     tet_bytes: &[u8],
 ) -> Result<PartMeta, CatalogError> {
     if !package::is_safe_path_segment(session_id) {
-        return Err(CatalogError::Package("invalid staging session id"));
+        return Err(CatalogError::InvalidStagingSessionId);
     }
     if !package::is_safe_path_segment(part_id) {
-        return Err(CatalogError::Package("invalid part id"));
+        return Err(CatalogError::InvalidPartId);
     }
     let summary = read_tet_summary_v1(tet_bytes)?;
     if summary.datasets.is_empty() {
-        return Err(CatalogError::Package("ingest source has no datasets"));
+        return Err(CatalogError::IngestSourceEmpty);
     }
     let claims: Vec<DatasetClaim> = summary
         .datasets

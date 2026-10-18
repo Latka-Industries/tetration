@@ -227,10 +227,10 @@ impl TetShardWriter {
         let session_id = session_id.into();
         let part_id = part_id.into();
         if !is_safe_path_segment(&session_id) {
-            return Err(CatalogError::Package("invalid staging session id"));
+            return Err(CatalogError::InvalidStagingSessionId);
         }
         if !is_safe_path_segment(&part_id) {
-            return Err(CatalogError::Package("invalid part id"));
+            return Err(CatalogError::InvalidPartId);
         }
 
         let session_dir = package.create_staging_session(&session_id)?;
@@ -370,7 +370,7 @@ impl TetShardWriter {
 pub fn read_part_meta(session_dir: &Path) -> Result<PartMeta, CatalogError> {
     let path = session_dir.join(PART_META_FILE);
     if !path.is_file() {
-        return Err(CatalogError::Package("PART_META.json missing"));
+        return Err(CatalogError::PartMetaMissing);
     }
     read_json(&path)
 }
@@ -382,7 +382,7 @@ pub fn read_part_meta(session_dir: &Path) -> Result<PartMeta, CatalogError> {
 /// Missing part file, hash mismatch, or I/O.
 pub fn verify_part_meta(session_dir: &Path, meta: &PartMeta) -> Result<(), CatalogError> {
     if !meta.sealed {
-        return Err(CatalogError::Package("part is not sealed"));
+        return Err(CatalogError::PartNotSealed);
     }
     if meta.protocol_version != PACKAGE_PROTOCOL_VERSION {
         return Err(CatalogError::UnsupportedProtocolVersion(
@@ -391,15 +391,15 @@ pub fn verify_part_meta(session_dir: &Path, meta: &PartMeta) -> Result<(), Catal
     }
     let part_path = session_dir.join(meta.part_file_name());
     if !part_path.is_file() {
-        return Err(CatalogError::Package("sealed part file missing"));
+        return Err(CatalogError::SealedPartMissing);
     }
     let len = fs::metadata(&part_path)?.len();
     if len != meta.part_byte_len {
-        return Err(CatalogError::Package("part byte length mismatch"));
+        return Err(CatalogError::PartByteLengthMismatch);
     }
     let digest = sha256_file_hex(&part_path)?;
     if digest != meta.part_sha256 {
-        return Err(CatalogError::Package("part sha256 mismatch"));
+        return Err(CatalogError::PartSha256Mismatch);
     }
     Ok(())
 }
@@ -620,13 +620,13 @@ pub fn ingest_tet_file(
     let session_id = session_id.into();
     let part_id = part_id.into();
     if !is_safe_path_segment(&session_id) {
-        return Err(CatalogError::Package("invalid staging session id"));
+        return Err(CatalogError::InvalidStagingSessionId);
     }
     if !is_safe_path_segment(&part_id) {
-        return Err(CatalogError::Package("invalid part id"));
+        return Err(CatalogError::InvalidPartId);
     }
     if !source.is_file() {
-        return Err(CatalogError::Package("ingest source .tet missing"));
+        return Err(CatalogError::IngestSourceMissing);
     }
 
     let summary = {
@@ -634,7 +634,7 @@ pub fn ingest_tet_file(
         file.summary()?
     };
     if summary.datasets.is_empty() {
-        return Err(CatalogError::Package("ingest source has no datasets"));
+        return Err(CatalogError::IngestSourceEmpty);
     }
     let claims: Vec<DatasetClaim> = summary
         .datasets

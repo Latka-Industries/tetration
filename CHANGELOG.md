@@ -5,6 +5,7 @@
 ### Changed
 
 - `f16` and `f64` materialize, spill, fold, and preview share one macro. Behavior is unchanged (THI-537).
+- Matchable package failures (`CURRENT` missing, bad session or part id, unsealed part, ingest source missing or empty) are `CatalogError` variants. Display text is unchanged (THI-538).
 
 ## [0.3.7] - 2026-10-18
 

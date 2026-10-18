@@ -57,7 +57,7 @@ pub fn pin_packed_tet(
     let generation = match pin {
         GenerationPin::Current => store
             .current_generation()?
-            .ok_or(CatalogError::Package("package has no CURRENT generation"))?,
+            .ok_or(CatalogError::NoCurrentGeneration)?,
         GenerationPin::Explicit(g) => g,
     };
     let object_key = packed_tet_key(generation);
