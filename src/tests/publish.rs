@@ -128,9 +128,9 @@ fn overlapping_claims_reject_publish() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("overlap.tet.d")).unwrap();
 
-    for (session, part) in [("s0", "a"), ("s1", "b")] {
-        seal_named(&pkg, session, part, "same", &[1.0, 2.0]);
-    }
+    // Same claim ranges, different payload bytes → reject.
+    seal_named(&pkg, "s0", "a", "same", &[1.0, 2.0]);
+    seal_named(&pkg, "s1", "b", "same", &[3.0, 4.0]);
     assert_eq!(list_sealed_parts(&pkg).unwrap().len(), 2);
 
     let err = publish_parts(&pkg, 1, &["a".into(), "b".into()]).unwrap_err();
@@ -152,6 +152,57 @@ fn overlapping_claims_reject_publish() {
 }
 
 #[test]
+fn identical_bytes_overlap_allows_publish() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("idempotent.tet.d")).unwrap();
+
+    // Same claim + matching chunk bytes (part wrappers may differ; chunk compare allows).
+    seal_named(&pkg, "s0", "a", "same", &[1.0, 2.0]);
+    seal_named(&pkg, "s1", "b", "same", &[1.0, 2.0]);
+
+    let manifest = publish_parts(&pkg, 1, &["a".into(), "b".into()]).unwrap();
+    assert_eq!(manifest.generation, 1);
+    assert_eq!(pkg.current().unwrap(), Some(1));
+    let file = pkg.open_current().unwrap();
+    let summary = file.summary().unwrap();
+    assert_eq!(summary.datasets.len(), 1);
+    assert_eq!(summary.datasets[0].name, "same");
+}
+
+#[test]
+fn identical_file_reingest_overlap_allows_via_part_sha256() {
+    use crate::catalog::ingest_tet_file;
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src.tet");
+    {
+        let mut s = crate::catalog::TetWriterSession::create(&src);
+        s.push_dataset(
+            TetDatasetWrite::f32_row_major("temp", &[2], &[2], f32_le(&[1.0, 2.0])).unwrap(),
+        )
+        .unwrap();
+        s.commit().unwrap();
+    }
+    let pkg = TetPackage::create(dir.path().join("reingest.tet.d")).unwrap();
+    ingest_tet_file(&pkg, &src, "s0", "a").unwrap();
+    ingest_tet_file(&pkg, &src, "s1", "b").unwrap();
+    let sealed = list_sealed_parts(&pkg).unwrap();
+    assert_eq!(sealed[0].1.part_sha256, sealed[1].1.part_sha256);
+
+    let manifest = publish_parts(&pkg, 1, &["a".into(), "b".into()]).unwrap();
+    assert_eq!(manifest.generation, 1);
+    assert_eq!(
+        pkg.open_current()
+            .unwrap()
+            .summary()
+            .unwrap()
+            .datasets
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn dry_run_publish_ok_leaves_current_unset() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("dry-ok.tet.d")).unwrap();
@@ -170,9 +221,8 @@ fn dry_run_publish_ok_leaves_current_unset() {
 fn dry_run_publish_rejects_overlap_without_sealing() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("dry-overlap.tet.d")).unwrap();
-    for (session, part) in [("s0", "a"), ("s1", "b")] {
-        seal_named(&pkg, session, part, "same", &[1.0, 2.0]);
-    }
+    seal_named(&pkg, "s0", "a", "same", &[1.0, 2.0]);
+    seal_named(&pkg, "s1", "b", "same", &[9.0, 8.0]);
 
     let err = dry_run_publish_parts(&pkg, 1, &["a".into(), "b".into()]).unwrap_err();
     assert!(matches!(err, crate::catalog::CatalogError::ClaimOverlap(_)));
