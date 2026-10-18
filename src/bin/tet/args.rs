@@ -201,6 +201,9 @@ pub enum Commands {
         /// Claim / schema checks only; do not seal or flip `CURRENT`.
         #[arg(long = "dry-run")]
         dry_run: bool,
+        /// Allow dtype/shape change for this dataset name vs sealed CURRENT (repeatable; G+1 only).
+        #[arg(long = "replace", value_name = "DATASET")]
+        replace: Vec<String>,
         #[arg(short = 'q', long)]
         quiet: bool,
     },
@@ -212,6 +215,8 @@ pub enum Commands {
         generation: Option<u64>,
         #[arg(long, value_delimiter = ',', value_name = "ID")]
         parts: Option<Vec<String>>,
+        #[arg(long = "replace", value_name = "DATASET")]
+        replace: Vec<String>,
         #[arg(short = 'q', long)]
         quiet: bool,
     },

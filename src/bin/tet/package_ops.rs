@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rayon::prelude::*;
 use tetration::catalog::{
-    TetPackage, dry_run_publish_parts, ingest_tet_file, list_sealed_parts, part_id_from_path,
-    publish_parts,
+    PublishPartsOptions, TetPackage, dry_run_publish_parts_with_options, ingest_tet_file,
+    list_sealed_parts, part_id_from_path, publish_parts_with_options,
 };
 use tetration::verify::looks_like_tet_package;
 
@@ -113,6 +113,7 @@ pub(crate) struct PublishOpts {
     pub parts: Option<Vec<String>>,
     pub abort: bool,
     pub dry_run: bool,
+    pub replace: Vec<String>,
     pub quiet: bool,
 }
 
@@ -158,8 +159,12 @@ pub(crate) fn run_publish(opts: &PublishOpts) -> Result<(), String> {
         }
     };
 
+    let options = PublishPartsOptions {
+        replace: opts.replace.clone(),
+    };
     if opts.dry_run {
-        let validation = dry_run_publish_parts(&pkg, generation, &part_ids).map_err(cli_error)?;
+        let validation = dry_run_publish_parts_with_options(&pkg, generation, &part_ids, &options)
+            .map_err(cli_error)?;
         if !opts.quiet {
             println!(
                 "dry-run ok: generation={} parts={} → {} (CURRENT unchanged)",
@@ -171,7 +176,8 @@ pub(crate) fn run_publish(opts: &PublishOpts) -> Result<(), String> {
         return Ok(());
     }
 
-    let manifest = publish_parts(&pkg, generation, &part_ids).map_err(cli_error)?;
+    let manifest =
+        publish_parts_with_options(&pkg, generation, &part_ids, &options).map_err(cli_error)?;
     if !opts.quiet {
         println!(
             "published generation={} parts={} packed_byte_len={} → {}",

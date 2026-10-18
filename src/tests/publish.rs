@@ -4,8 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::catalog::{
-    TetDatasetWrite, TetPackage, TetShardWriter, dry_run_publish_parts, format_generation_id,
-    list_sealed_parts, publish_parts,
+    PublishPartsOptions, TetDatasetWrite, TetPackage, TetShardWriter, dry_run_publish_parts,
+    format_generation_id, list_sealed_parts, publish_parts, publish_parts_with_options,
 };
 use crate::verify::{VerifySeverity, verify_tet_package};
 
@@ -14,8 +14,20 @@ fn f32_le(vals: &[f32]) -> Vec<u8> {
 }
 
 fn seal_named(pkg: &TetPackage, session: &str, part: &str, name: &str, vals: &[f32]) {
+    seal_shaped(pkg, session, part, name, &[2], &[2], vals);
+}
+
+fn seal_shaped(
+    pkg: &TetPackage,
+    session: &str,
+    part: &str,
+    name: &str,
+    shape: &[u64],
+    chunk_shape: &[u64],
+    vals: &[f32],
+) {
     let mut w = TetShardWriter::create(pkg, session, part).unwrap();
-    w.push_dataset(TetDatasetWrite::f32_row_major(name, &[2], &[2], f32_le(vals)).unwrap())
+    w.push_dataset(TetDatasetWrite::f32_row_major(name, shape, chunk_shape, f32_le(vals)).unwrap())
         .unwrap();
     w.seal().unwrap();
 }
@@ -228,4 +240,51 @@ fn dry_run_publish_rejects_overlap_without_sealing() {
     assert!(matches!(err, crate::catalog::CatalogError::ClaimOverlap(_)));
     assert_eq!(pkg.current().unwrap(), None);
     assert!(!pkg.generation_dir(1).exists());
+}
+
+#[test]
+fn schema_change_vs_current_rejects_without_replace() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("schema.tet.d")).unwrap();
+    seal_named(&pkg, "s0", "p0", "temp", &[1.0, 2.0]);
+    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
+    assert_eq!(pkg.current().unwrap(), Some(1));
+
+    seal_shaped(&pkg, "s1", "p1", "temp", &[4], &[2], &[1.0, 2.0, 3.0, 4.0]);
+    let err = publish_parts(&pkg, 2, &["p1".into()]).unwrap_err();
+    match err {
+        crate::catalog::CatalogError::SchemaConflict(c) => {
+            assert_eq!(c.dataset, "temp");
+            assert_eq!(c.prior_shape, vec![2]);
+            assert_eq!(c.new_shape, vec![4]);
+            let msg = c.to_string();
+            assert!(msg.contains("--replace temp"), "{msg}");
+        }
+        other => panic!("expected SchemaConflict, got {other:?}"),
+    }
+    assert_eq!(pkg.current().unwrap(), Some(1));
+    assert!(!pkg.generation_dir(2).exists());
+}
+
+#[test]
+fn schema_change_with_replace_publishes_g_plus_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("replace.tet.d")).unwrap();
+    seal_named(&pkg, "s0", "p0", "temp", &[1.0, 2.0]);
+    publish_parts(&pkg, 1, &["p0".into()]).unwrap();
+    let g1 = pkg.open_current().unwrap().summary().unwrap();
+    assert_eq!(g1.datasets[0].shape, vec![2]);
+
+    seal_shaped(&pkg, "s1", "p1", "temp", &[4], &[2], &[1.0, 2.0, 3.0, 4.0]);
+    let opts = PublishPartsOptions {
+        replace: vec!["temp".into()],
+    };
+    let manifest = publish_parts_with_options(&pkg, 2, &["p1".into()], &opts).unwrap();
+    assert_eq!(manifest.generation, 2);
+    assert_eq!(pkg.current().unwrap(), Some(2));
+    // Sealed G=1 untouched.
+    let still_g1 = pkg.open_generation(1).unwrap().summary().unwrap();
+    assert_eq!(still_g1.datasets[0].shape, vec![2]);
+    let g2 = pkg.open_current().unwrap().summary().unwrap();
+    assert_eq!(g2.datasets[0].shape, vec![4]);
 }
