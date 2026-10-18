@@ -110,11 +110,30 @@ pub(crate) struct PublishOpts {
     pub package: PathBuf,
     pub generation: Option<u64>,
     pub parts: Option<Vec<String>>,
+    pub abort: bool,
     pub quiet: bool,
 }
 
 pub(crate) fn run_publish(opts: &PublishOpts) -> Result<(), String> {
     let pkg = TetPackage::open(&opts.package).map_err(cli_error)?;
+    if opts.abort {
+        let generation = opts
+            .generation
+            .ok_or_else(|| cli_error("tet publish --abort requires --generation G"))?;
+        let current_before = pkg.current().map_err(cli_error)?;
+        pkg.abort_publish(generation).map_err(cli_error)?;
+        if !opts.quiet {
+            println!(
+                "aborted publish generation={} → {} (CURRENT={})",
+                generation,
+                opts.package.display(),
+                current_before
+                    .map(|g| g.to_string())
+                    .unwrap_or_else(|| "none".into())
+            );
+        }
+        return Ok(());
+    }
     let generation = match opts.generation {
         Some(g) => g,
         None => pkg.next_generation().map_err(cli_error)?,

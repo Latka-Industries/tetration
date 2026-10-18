@@ -207,7 +207,7 @@ Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path
 | Command | Role |
 | ------- | ---- |
 | `tet ingest` | Shard writer → `staging/` |
-| `tet publish` | Freeze part list → build `packed.tet` → flip `CURRENT` |
+| `tet publish` | Freeze part list → build `packed.tet` → flip `CURRENT` (`--abort --generation G` drops a stuck lock) |
 | `tet compact` | Optional merge of parts **during** publish (not a separate visibility step) |
 | `tet pack` | Copy sealed `G`’s `packed.tet` → standalone `.tet` (optional `--remove-package` after verified copy) |
 | `tet gc` | Drop leftover `staging/` and sealed generations older than `CURRENT` / `CURRENT-1` (dry-run; `--apply`) |

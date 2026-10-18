@@ -77,6 +77,23 @@ fn publish_lock_exclusive() {
 }
 
 #[test]
+fn abort_publish_refuses_current() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("cur.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    let src = dir.path().join("src.tet");
+    tiny_tet(&src);
+    pkg.begin_publish(1).unwrap();
+    pkg.seal_generation(1, &src, vec!["a".into()]).unwrap();
+    assert_eq!(pkg.current().unwrap(), Some(1));
+    let err = pkg.abort_publish(1).unwrap_err();
+    assert!(
+        matches!(err, crate::catalog::CatalogError::Package(msg) if msg.contains("CURRENT")),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn quarantine_requires_stale() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("q.tet.d")).unwrap();

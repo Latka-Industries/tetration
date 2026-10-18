@@ -257,10 +257,17 @@ impl TetPackage {
 
     /// Remove `publishing/<G>/` after abandon or failed publish. Missing dir is OK.
     ///
+    /// Refuses when `generation` is the package `CURRENT` (sealed readers pin that image).
+    ///
     /// # Errors
     ///
-    /// I/O while removing the directory tree.
+    /// `CURRENT` match, or I/O while removing the directory tree.
     pub fn abort_publish(&self, generation: u64) -> Result<(), CatalogError> {
+        if self.current()? == Some(generation) {
+            return Err(CatalogError::Package(
+                "refusing to abort CURRENT generation",
+            ));
+        }
         let dir = self.publishing_scratch(generation);
         if dir.exists() {
             fs::remove_dir_all(&dir)?;

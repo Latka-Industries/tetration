@@ -123,6 +123,57 @@ fn cli_ingest_publish_query_pack_smoke() {
 }
 
 #[test]
+fn cli_publish_abort() {
+    use crate::catalog::{TetPackage, format_generation_id, ingest_tet_file, publish_parts};
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("one.tet");
+    write_one_tet(&src, "temp", 1.0, 2.0);
+    let pkg = TetPackage::create(dir.path().join("abort.tet.d")).unwrap();
+    ingest_tet_file(&pkg, &src, "s0", "only").unwrap();
+    publish_parts(&pkg, 1, &["only".into()]).unwrap();
+    assert_eq!(pkg.current().unwrap(), Some(1));
+
+    pkg.begin_publish(2).unwrap();
+    let lock = pkg.publishing_dir().join(format_generation_id(2));
+    assert!(lock.is_dir());
+
+    let abort = tet_cmd()
+        .args([
+            "publish",
+            pkg.root().to_str().unwrap(),
+            "--abort",
+            "--generation",
+            "2",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        abort.status.success(),
+        "publish --abort: {}",
+        String::from_utf8_lossy(&abort.stderr)
+    );
+    assert!(!lock.exists());
+    assert_eq!(pkg.current().unwrap(), Some(1));
+
+    let refuse = tet_cmd()
+        .args([
+            "publish",
+            pkg.root().to_str().unwrap(),
+            "--abort",
+            "--generation",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !refuse.status.success(),
+        "abort CURRENT should fail: {}",
+        String::from_utf8_lossy(&refuse.stdout)
+    );
+}
+
+#[test]
 fn cli_gc_apply() {
     use crate::catalog::{TetPackage, ingest_tet_file, publish_parts};
 
