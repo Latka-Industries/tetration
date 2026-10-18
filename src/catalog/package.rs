@@ -68,6 +68,30 @@ pub struct PackGenerationOptions {
     pub remove_package: bool,
 }
 
+/// Options for [`TetPackage::gc`] (decision D + J — `tet gc`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GcOptions {
+    /// When `false` (default), only report what would be removed. When `true`, delete.
+    pub apply: bool,
+}
+
+/// Paths / generation ids [`TetPackage::gc`] would remove (or did remove when applied).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GcPlan {
+    /// Staging session directories under `staging/` (whole trees).
+    pub staging_sessions: Vec<PathBuf>,
+    /// Sealed generation ids older than `CURRENT` and `CURRENT-1` (never those two).
+    pub generations: Vec<u64>,
+}
+
+impl GcPlan {
+    /// `true` when nothing would be removed.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.staging_sessions.is_empty() && self.generations.is_empty()
+    }
+}
+
 /// Open handle to a `.tet.d` package root.
 ///
 /// Cheap to clone (path + parsed [`PackageProtocol`]); does not hold file locks.
@@ -417,6 +441,122 @@ impl TetPackage {
     /// Missing generation, destination exists, or I/O.
     pub fn pack_generation(&self, generation: u64, dest: &Path) -> Result<(), CatalogError> {
         self.pack_generation_with(generation, dest, &PackGenerationOptions::default())
+    }
+
+    /// Plan optional GC: leftover `staging/` sessions and sealed generations older than
+    /// `CURRENT` / `CURRENT-1` (decisions D + J). Never lists `CURRENT` or `CURRENT-1`.
+    ///
+    /// # Errors
+    ///
+    /// Missing / invalid `CURRENT`, or I/O listing directories.
+    pub fn plan_gc(&self) -> Result<GcPlan, CatalogError> {
+        let current = self
+            .current()?
+            .ok_or(CatalogError::Package("package has no CURRENT generation"))?;
+
+        let mut staging_sessions = Vec::new();
+        let staging = self.staging_dir();
+        if staging.is_dir() {
+            for entry in fs::read_dir(&staging)? {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    staging_sessions.push(entry.path());
+                }
+            }
+            staging_sessions.sort();
+        }
+
+        // Retain CURRENT and CURRENT-1 (decision J). Drop older sealed generations only.
+        let mut generations: Vec<u64> = self
+            .list_sealed_generations()?
+            .into_iter()
+            .filter(|&g| {
+                if g == current {
+                    return false;
+                }
+                if current > 1 && g == current - 1 {
+                    return false;
+                }
+                g < current
+            })
+            .collect();
+        generations.sort_unstable();
+        generations.dedup();
+
+        Ok(GcPlan {
+            staging_sessions,
+            generations,
+        })
+    }
+
+    /// Garbage-collect leftover staging and old sealed generations (decision D + J).
+    ///
+    /// Dry-run by default ([`GcOptions::apply`] = `false`): returns the plan without deleting.
+    /// Never deletes `CURRENT` or `CURRENT-1`. Local `.tet.d` only.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::plan_gc`], or I/O while removing trees when `apply` is set.
+    pub fn gc(&self, opts: &GcOptions) -> Result<GcPlan, CatalogError> {
+        let plan = self.plan_gc()?;
+        if !opts.apply || plan.is_empty() {
+            return Ok(plan);
+        }
+
+        let current = self
+            .current()?
+            .ok_or(CatalogError::Package("package has no CURRENT generation"))?;
+        for &g in &plan.generations {
+            if g == current || (current > 1 && g == current - 1) {
+                return Err(CatalogError::Package(
+                    "refusing to delete CURRENT or CURRENT-1",
+                ));
+            }
+            let dir = self.generation_dir(g);
+            if dir.is_dir() {
+                fs::remove_dir_all(&dir)?;
+            }
+        }
+        for session in &plan.staging_sessions {
+            if session.is_dir() {
+                fs::remove_dir_all(session)?;
+            }
+        }
+        Ok(plan)
+    }
+
+    /// Sealed generation ids under `generations/` (numeric dirs with `packed.tet`).
+    ///
+    /// # Errors
+    ///
+    /// I/O listing `generations/`.
+    pub fn list_sealed_generations(&self) -> Result<Vec<u64>, CatalogError> {
+        let root = self.generations_dir();
+        if !root.is_dir() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        for entry in fs::read_dir(&root)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name_s) = name.to_str() else {
+                continue;
+            };
+            if name_s.contains("quarantine") {
+                continue;
+            }
+            let Ok(g) = name_s.parse::<u64>() else {
+                continue;
+            };
+            if self.packed_tet_path(g).is_file() {
+                out.push(g);
+            }
+        }
+        out.sort_unstable();
+        Ok(out)
     }
 
     /// Pack a sealed generation, optionally deleting the `.tet.d` package after a verified copy.
