@@ -1,9 +1,10 @@
 //! Shard writer staging parts (THI-463).
 
 use crate::catalog::{
-    DatasetClaim, TetDatasetWrite, TetPackage, TetShardWriter, find_claim_overlap,
-    list_sealed_parts, open_sealed_part,
+    ClaimOverlap, DatasetClaim, PartMeta, TetDatasetWrite, TetPackage, TetShardWriter,
+    find_claim_overlap, list_sealed_parts, open_sealed_part,
 };
+use std::path::PathBuf;
 
 fn f32_pair() -> Vec<u8> {
     let mut buf = vec![0u8; 8];
@@ -55,6 +56,73 @@ fn overlapping_full_grid_claims_detected() {
     let c = DatasetClaim::full_grid("y", 1, &[4], &[2]);
     assert!(a.overlaps(&b));
     assert!(!a.overlaps(&c));
+    assert_eq!(a.ranges_display(), "full_grid");
+}
+
+#[test]
+fn find_claim_overlap_reports_part_ids_and_ranges() {
+    let left = DatasetClaim {
+        name: "temp".into(),
+        dtype: 1,
+        shape: vec![8],
+        chunk_shape: vec![2],
+        full_grid: false,
+        chunk_ranges: vec![[0, 3]],
+    };
+    let right = DatasetClaim {
+        name: "temp".into(),
+        dtype: 1,
+        shape: vec![8],
+        chunk_shape: vec![2],
+        full_grid: false,
+        chunk_ranges: vec![[2, 4]],
+    };
+    assert!(left.overlaps(&right));
+    assert_eq!(left.ranges_display(), "chunk_ranges=[[0,3)]");
+    assert_eq!(right.ranges_display(), "chunk_ranges=[[2,4)]");
+
+    let parts = vec![
+        (
+            PathBuf::from("staging/s0"),
+            PartMeta {
+                part_id: "p0".into(),
+                writer_session_id: "s0".into(),
+                protocol_version: 2,
+                sealed: true,
+                part_byte_len: 1,
+                part_sha256: "aa".into(),
+                claims: vec![left],
+            },
+        ),
+        (
+            PathBuf::from("staging/s1"),
+            PartMeta {
+                part_id: "p1".into(),
+                writer_session_id: "s1".into(),
+                protocol_version: 2,
+                sealed: true,
+                part_byte_len: 1,
+                part_sha256: "bb".into(),
+                claims: vec![right],
+            },
+        ),
+    ];
+    let overlap = find_claim_overlap(&parts).expect("overlap");
+    assert_eq!(
+        overlap,
+        ClaimOverlap {
+            part_a: "p0".into(),
+            part_b: "p1".into(),
+            dataset: "temp".into(),
+            ranges_a: "chunk_ranges=[[0,3)]".into(),
+            ranges_b: "chunk_ranges=[[2,4)]".into(),
+        }
+    );
+    let msg = overlap.to_string();
+    assert!(
+        msg.contains("dataset=temp") && msg.contains("parts=p0 + p1") && msg.contains("[0,3)"),
+        "{msg}"
+    );
 }
 
 #[test]

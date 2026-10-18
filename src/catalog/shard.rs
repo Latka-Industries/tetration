@@ -9,6 +9,7 @@
 //!
 //! Spec: [`docs/writer_protocol_v2.md`](../../docs/writer_protocol_v2.md).
 
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -75,10 +76,44 @@ impl DatasetClaim {
             .zip(other.chunk_ranges.iter())
             .all(|(a, b)| ranges_overlap(a[0], a[1], b[0], b[1]))
     }
+
+    /// Human-readable chunk ownership for overlap rejects (`full_grid` or `chunk_ranges=[…]`).
+    #[must_use]
+    pub fn ranges_display(&self) -> String {
+        if self.full_grid {
+            return "full_grid".to_owned();
+        }
+        let axes: Vec<String> = self
+            .chunk_ranges
+            .iter()
+            .map(|r| format!("[{},{})", r[0], r[1]))
+            .collect();
+        format!("chunk_ranges=[{}]", axes.join(","))
+    }
 }
 
 fn ranges_overlap(a0: u64, a1: u64, b0: u64, b1: u64) -> bool {
     a0 < b1 && b0 < a1
+}
+
+/// Structured overlap between two parts in a publish set (decision E).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimOverlap {
+    pub part_a: String,
+    pub part_b: String,
+    pub dataset: String,
+    pub ranges_a: String,
+    pub ranges_b: String,
+}
+
+impl fmt::Display for ClaimOverlap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "overlapping dataset claims in publish set: dataset={} parts={} + {} ({} vs {})",
+            self.dataset, self.part_a, self.part_b, self.ranges_a, self.ranges_b
+        )
+    }
 }
 
 /// Staging `PART_META.json` written last when a shard seals.
@@ -325,18 +360,22 @@ pub fn list_sealed_parts(package: &TetPackage) -> Result<Vec<(PathBuf, PartMeta)
 }
 
 /// Detect overlapping dataset claims across a frozen publish set (decision E).
+///
+/// Returns the first conflicting pair with part ids, dataset name, and range displays.
 #[must_use]
-pub fn find_claim_overlap(parts: &[(PathBuf, PartMeta)]) -> Option<(String, String, String)> {
+pub fn find_claim_overlap(parts: &[(PathBuf, PartMeta)]) -> Option<ClaimOverlap> {
     for i in 0..parts.len() {
         for j in (i + 1)..parts.len() {
             for ca in &parts[i].1.claims {
                 for cb in &parts[j].1.claims {
                     if ca.overlaps(cb) {
-                        return Some((
-                            parts[i].1.part_id.clone(),
-                            parts[j].1.part_id.clone(),
-                            ca.name.clone(),
-                        ));
+                        return Some(ClaimOverlap {
+                            part_a: parts[i].1.part_id.clone(),
+                            part_b: parts[j].1.part_id.clone(),
+                            dataset: ca.name.clone(),
+                            ranges_a: ca.ranges_display(),
+                            ranges_b: cb.ranges_display(),
+                        });
                     }
                 }
             }
@@ -466,11 +505,8 @@ pub fn publish_parts(
     part_ids: &[String],
 ) -> Result<GenerationManifest, CatalogError> {
     let frozen = resolve_part_ids(package, part_ids)?;
-    if let Some((a, b, name)) = find_claim_overlap(&frozen) {
-        let _ = (a, b, name);
-        return Err(CatalogError::Package(
-            "overlapping dataset claims in publish set",
-        ));
+    if let Some(overlap) = find_claim_overlap(&frozen) {
+        return Err(CatalogError::ClaimOverlap(overlap));
     }
 
     let part_paths: Vec<PathBuf> = frozen

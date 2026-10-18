@@ -122,10 +122,8 @@ pub fn seal_staged_generation_with_options(
         .iter()
         .map(|(path, meta, _)| (path.clone(), meta.clone()))
         .collect();
-    if find_claim_overlap(&overlap_input).is_some() {
-        return Err(CatalogError::Package(
-            "overlapping dataset claims in publish set",
-        ));
+    if let Some(overlap) = find_claim_overlap(&overlap_input) {
+        return Err(CatalogError::ClaimOverlap(overlap));
     }
 
     let tmp = TempDir::new(generation)?;

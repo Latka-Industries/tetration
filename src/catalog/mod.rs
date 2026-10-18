@@ -56,9 +56,9 @@ pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
 };
 pub use shard::{
-    DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, ingest_tet_file, list_sealed_parts,
-    open_sealed_part, part_id_from_path, publish_parts, read_part_meta, resolve_part_ids,
-    verify_part_meta,
+    ClaimOverlap, DatasetClaim, PartMeta, TetShardWriter, find_claim_overlap, ingest_tet_file,
+    list_sealed_parts, open_sealed_part, part_id_from_path, publish_parts, read_part_meta,
+    resolve_part_ids, verify_part_meta,
 };
 pub use store::{
     BlockCache, ByteRange, CachingStore, GenerationPin, LocalStore, MemoryStore, ObjectFetchPlan,
@@ -429,6 +429,9 @@ pub enum CatalogError {
     TooLargeForPlatform { field: &'static str, value: u64 },
     #[error("tet package: {0}")]
     Package(&'static str),
+    /// Overlapping chunk claims in a publish set (decision E); includes part ids and ranges.
+    #[error("{0}")]
+    ClaimOverlap(crate::catalog::shard::ClaimOverlap),
     #[error("not a tetration package (missing PROTOCOL): {0}")]
     NotAPackage(std::path::PathBuf),
     #[error("package path already exists: {0}")]
