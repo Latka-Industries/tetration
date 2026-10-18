@@ -38,6 +38,7 @@ mod shared;
 mod sniff;
 mod tile_io;
 mod zarr;
+mod zarr_io;
 
 pub use parallel::{default_parallel_jobs, resolve_parallel_jobs};
 pub use s3::{
@@ -411,10 +412,6 @@ pub enum ConvertError {
     },
     #[error("s3 convert failed: {0}")]
     S3(String),
-    #[error(
-        "s3:// convert does not read Zarr stores; pass a single file (.h5, .nc, .npy, .csv, .parquet). Chunked Zarr-on-S3 reads are later ({uri})"
-    )]
-    S3ZarrNotSupported { uri: String },
     #[error("s3:// convert requires Cargo feature `tetration-s3`")]
     S3FeatureDisabled,
     #[error("s3:// convert requires environment variable `{0}`")]

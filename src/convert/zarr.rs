@@ -4,10 +4,13 @@
 //! uses history source `zarr2`. Chunk files are raw or zstd; other codecs are skips.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Deserialize;
+
+use super::zarr_io::{LocalZarrDir, ZarrObjects, join_rel, zarr_chunk_key, zarr_objects_v2};
 
 use crate::utils::dtype::ElementDtype;
 
@@ -53,19 +56,53 @@ pub(crate) fn convert_zarr_inner(
     parallel_jobs: usize,
     strict: bool,
     chunk_bytes: Option<u64>,
-    mut progress: Option<impl FnMut(ConvertProgress)>,
+    progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
-    let started = Instant::now();
     let store = input
         .canonicalize()
         .map_err(|e| ConvertError::Zarr(e.to_string()))?;
-    let v2 = !is_zarr_v3_directory(&store) && is_zarr_v2_directory(&store);
+    convert_zarr_from_objects(
+        input,
+        Arc::new(LocalZarrDir::new(store)),
+        output,
+        parallel_jobs,
+        strict,
+        chunk_bytes,
+        progress,
+    )
+}
+
+pub(crate) fn convert_zarr_from_objects(
+    input: &Path,
+    objects: Arc<dyn ZarrObjects>,
+    output: &Path,
+    parallel_jobs: usize,
+    strict: bool,
+    chunk_bytes: Option<u64>,
+    mut progress: Option<impl FnMut(ConvertProgress)>,
+) -> Result<ConvertReport, ConvertError> {
+    let started = Instant::now();
+    let v2 = zarr_objects_v2(objects.as_ref());
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
     if v2 {
-        collect_zarr_v2_plans(&store, "", "", chunk_bytes, &mut plans, &mut skipped)?;
+        collect_zarr_v2_plans(
+            objects.as_ref(),
+            "",
+            "",
+            chunk_bytes,
+            &mut plans,
+            &mut skipped,
+        )?;
     } else {
-        collect_zarr_plans(&store, "", "", chunk_bytes, &mut plans, &mut skipped)?;
+        collect_zarr_plans(
+            objects.as_ref(),
+            "",
+            "",
+            chunk_bytes,
+            &mut plans,
+            &mut skipped,
+        )?;
     }
 
     ensure_non_empty(
@@ -85,7 +122,7 @@ pub(crate) fn convert_zarr_inner(
     };
 
     let parallel_jobs = super::parallel::resolve_parallel_jobs(parallel_jobs);
-    let source = ZarrParallelSource::new(store.clone(), plans.clone());
+    let source = ZarrParallelSource::new(objects, plans.clone());
     write_plans_streaming(
         output,
         &plans,
@@ -106,7 +143,7 @@ pub(crate) fn convert_zarr_inner(
 }
 
 pub(crate) fn read_zarr_tile_le_into(
-    store: &Path,
+    objects: &dyn ZarrObjects,
     array_rel: &str,
     zstd: bool,
     v2_sep: Option<u8>,
@@ -114,7 +151,15 @@ pub(crate) fn read_zarr_tile_le_into(
     buf: &mut [u8],
 ) -> Result<(), ConvertError> {
     if let Some(source_chunks) = spec.zarr_source_chunks {
-        return read_zarr_rechunked_tile(store, array_rel, zstd, v2_sep, spec, source_chunks, buf);
+        return read_zarr_rechunked_tile(
+            objects,
+            array_rel,
+            zstd,
+            v2_sep,
+            spec,
+            source_chunks,
+            buf,
+        );
     }
     let elem_size = spec.dtype.elem_size();
     let ranges = tile_axis_ranges(spec);
@@ -122,16 +167,18 @@ pub(crate) fn read_zarr_tile_le_into(
     let chunk_origin: Vec<u64> = (0..spec.ndim)
         .map(|d| spec.chunk_coord[d] * spec.chunk_shape[d])
         .collect();
-    let chunk_bytes = read_zarr_chunk_le(&ZarrChunkRead {
-        store,
-        array_rel,
-        zstd,
-        v2_sep,
-        chunk_coord: spec.chunk_coord,
-        ndim: spec.ndim,
-        chunk_shape: spec.chunk_shape,
-        elem_size,
-    })?;
+    let chunk_bytes = read_zarr_chunk_le(
+        objects,
+        &ZarrChunkRead {
+            array_rel,
+            zstd,
+            v2_sep,
+            chunk_coord: spec.chunk_coord,
+            ndim: spec.ndim,
+            chunk_shape: spec.chunk_shape,
+            elem_size,
+        },
+    )?;
     ChunkTileCopy {
         chunk: &chunk_bytes,
         chunk_shape: spec.chunk_shape,
@@ -146,7 +193,7 @@ pub(crate) fn read_zarr_tile_le_into(
 
 /// Assemble one `.tet` tile from Zarr chunk files whose grid is not the output grid.
 fn read_zarr_rechunked_tile(
-    store: &Path,
+    objects: &dyn ZarrObjects,
     array_rel: &str,
     zstd: bool,
     v2_sep: Option<u8>,
@@ -172,7 +219,7 @@ fn read_zarr_rechunked_tile(
         &lo,
         &hi,
         &SourceChunkVisit {
-            store,
+            objects,
             array_rel,
             zstd,
             v2_sep,
@@ -188,7 +235,7 @@ fn read_zarr_rechunked_tile(
 }
 
 struct SourceChunkVisit<'a> {
-    store: &'a Path,
+    objects: &'a dyn ZarrObjects,
     array_rel: &'a str,
     zstd: bool,
     v2_sep: Option<u8>,
@@ -263,14 +310,8 @@ fn load_zarr_source_chunk(
     coord: &[u64],
     visit: &SourceChunkVisit<'_>,
 ) -> Result<(Vec<u8>, Vec<u64>), ConvertError> {
-    let path = zarr_chunk_path(
-        visit.store,
-        visit.array_rel,
-        visit.v2_sep,
-        coord,
-        visit.ndim,
-    );
-    let on_disk = fs::read(&path).map_err(|err| ConvertError::Zarr(err.to_string()))?;
+    let key = zarr_chunk_key(visit.array_rel, visit.v2_sep, coord, visit.ndim);
+    let on_disk = visit.objects.read_bytes(&key)?;
     let decoded = if visit.zstd {
         zstd::decode_all(on_disk.as_slice()).map_err(|err| ConvertError::Zarr(err.to_string()))?
     } else {
@@ -295,7 +336,7 @@ fn load_zarr_source_chunk(
     }
     Err(ConvertError::Zarr(format!(
         "chunk {} byte length mismatch (got {})",
-        path.display(),
+        visit.objects.location(&key),
         decoded.len()
     )))
 }
@@ -363,20 +404,19 @@ fn linear_u64(
 }
 
 fn collect_zarr_plans(
-    store: &Path,
+    objects: &dyn ZarrObjects,
     rel: &str,
     catalog_prefix: &str,
     chunk_bytes: Option<u64>,
     plans: &mut Vec<ImportPlan>,
     skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
-    let dir = zarr_node_dir(store, rel);
-    let meta = read_zarr_meta(&dir)?;
+    let meta = read_zarr_meta(objects, rel)?;
     if meta.zarr_format != 3 {
         return Err(ConvertError::Zarr(format!(
             "unsupported zarr_format {} at {}",
             meta.zarr_format,
-            dir.display()
+            objects.location(rel)
         )));
     }
     match meta.node_type.as_str() {
@@ -386,11 +426,11 @@ fn collect_zarr_plans(
             skipped,
         )?,
         "group" => {
-            for child in zarr_child_names(&dir)? {
+            for child in objects.child_names(rel, true)? {
                 let child_rel = join_rel(rel, &child);
                 let child_catalog = join_catalog_path(catalog_prefix, &child);
                 collect_zarr_plans(
-                    store,
+                    objects,
                     &child_rel,
                     &child_catalog,
                     chunk_bytes,
@@ -402,7 +442,7 @@ fn collect_zarr_plans(
         other => {
             return Err(ConvertError::Zarr(format!(
                 "unsupported node_type `{other}` at {}",
-                dir.display()
+                objects.location(rel)
             )));
         }
     }
@@ -491,7 +531,6 @@ fn zarr_chunk_payload_zstd(meta: &ZarrNodeMeta) -> bool {
 }
 
 struct ZarrChunkRead<'a> {
-    store: &'a Path,
     array_rel: &'a str,
     zstd: bool,
     v2_sep: Option<u8>,
@@ -501,15 +540,12 @@ struct ZarrChunkRead<'a> {
     elem_size: usize,
 }
 
-fn read_zarr_chunk_le(read: &ZarrChunkRead<'_>) -> Result<Vec<u8>, ConvertError> {
-    let path = zarr_chunk_path(
-        read.store,
-        read.array_rel,
-        read.v2_sep,
-        read.chunk_coord,
-        read.ndim,
-    );
-    let on_disk = fs::read(&path).map_err(|e| ConvertError::Zarr(e.to_string()))?;
+fn read_zarr_chunk_le(
+    objects: &dyn ZarrObjects,
+    read: &ZarrChunkRead<'_>,
+) -> Result<Vec<u8>, ConvertError> {
+    let key = zarr_chunk_key(read.array_rel, read.v2_sep, read.chunk_coord, read.ndim);
+    let on_disk = objects.read_bytes(&key)?;
     let decoded = if read.zstd {
         zstd::decode_all(on_disk.as_slice()).map_err(|e| ConvertError::Zarr(e.to_string()))?
     } else {
@@ -525,7 +561,7 @@ fn read_zarr_chunk_le(read: &ZarrChunkRead<'_>) -> Result<Vec<u8>, ConvertError>
     if decoded.len() != expected {
         return Err(ConvertError::Zarr(format!(
             "chunk {} byte length mismatch (expected {expected}, got {})",
-            path.display(),
+            objects.location(&key),
             decoded.len()
         )));
     }
@@ -620,112 +656,44 @@ fn map_usize_err(_: TryFromIntError) -> ConvertError {
 
 use std::num::TryFromIntError;
 
-fn read_zarr_meta(dir: &Path) -> Result<ZarrNodeMeta, ConvertError> {
-    let path = dir.join("zarr.json");
-    let raw = fs::read_to_string(&path).map_err(|e| ConvertError::Zarr(e.to_string()))?;
-    serde_json::from_str(&raw).map_err(|e| ConvertError::Zarr(e.to_string()))
-}
-
-fn zarr_node_dir(store: &Path, rel: &str) -> PathBuf {
-    if rel.is_empty() {
-        store.to_path_buf()
-    } else {
-        store.join(rel)
-    }
-}
-
-fn join_rel(prefix: &str, child: &str) -> String {
-    if prefix.is_empty() {
-        child.to_owned()
-    } else {
-        format!("{prefix}/{child}")
-    }
-}
-
-fn zarr_child_names(dir: &Path) -> Result<Vec<String>, ConvertError> {
-    let mut out = Vec::new();
-    for entry in fs::read_dir(dir).map_err(|e| ConvertError::Zarr(e.to_string()))? {
-        let entry = entry.map_err(|e| ConvertError::Zarr(e.to_string()))?;
-        let path = entry.path();
-        if path.is_dir() && path.join("zarr.json").is_file() {
-            out.push(
-                entry
-                    .file_name()
-                    .into_string()
-                    .map_err(|_| ConvertError::Zarr("non-utf8 zarr child name".into()))?,
-            );
-        }
-    }
-    out.sort();
-    Ok(out)
-}
-
-fn zarr_chunk_path(
-    store: &Path,
-    array_rel: &str,
-    v2_sep: Option<u8>,
-    chunk_coord: &[u64],
-    ndim: usize,
-) -> PathBuf {
-    let coords: Vec<String> = chunk_coord
-        .iter()
-        .take(ndim)
-        .map(ToString::to_string)
-        .collect();
-    match v2_sep {
-        Some(b'/') => {
-            let mut path = store.join(array_rel);
-            for coord in coords {
-                path.push(coord);
-            }
-            path
-        }
-        Some(sep) => {
-            let key = coords.join(std::str::from_utf8(&[sep]).unwrap_or("."));
-            store.join(array_rel).join(key)
-        }
-        None => {
-            let mut path = store.join(array_rel).join("c");
-            for coord in coords {
-                path.push(coord);
-            }
-            path
-        }
-    }
+fn read_zarr_meta(objects: &dyn ZarrObjects, rel: &str) -> Result<ZarrNodeMeta, ConvertError> {
+    let key = join_rel(rel, "zarr.json");
+    let raw = objects.read_bytes(&key)?;
+    serde_json::from_slice(&raw)
+        .map_err(|err| ConvertError::Zarr(format!("{}: {err}", objects.location(&key))))
 }
 
 fn collect_zarr_v2_plans(
-    store: &Path,
+    objects: &dyn ZarrObjects,
     rel: &str,
     catalog_prefix: &str,
     chunk_bytes: Option<u64>,
     plans: &mut Vec<ImportPlan>,
     skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
-    let dir = zarr_node_dir(store, rel);
-    if dir.join(".zarray").is_file() {
+    if objects.is_file(&join_rel(rel, ".zarray"))? {
         let name = if catalog_prefix.is_empty() {
             "data".to_owned()
         } else {
             catalog_prefix.to_owned()
         };
         return note_plan(
-            plan_zarr_v2_array(&name, rel, &dir, chunk_bytes),
+            plan_zarr_v2_array(&name, rel, objects, chunk_bytes),
             plans,
             skipped,
         );
     }
-    if !dir.join(".zgroup").is_file() {
+    if !objects.is_file(&join_rel(rel, ".zgroup"))? {
         return Err(ConvertError::Zarr(format!(
             "zarr v2 node {} has neither .zarray nor .zgroup",
-            dir.display()
+            objects.location(rel)
         )));
     }
-    for child in zarr_v2_child_names(&dir)? {
+    for child in objects.child_names(rel, false)? {
         let child_rel = join_rel(rel, &child);
         let child_catalog = join_catalog_path(catalog_prefix, &child);
         collect_zarr_v2_plans(
-            store,
+            objects,
             &child_rel,
             &child_catalog,
             chunk_bytes,
@@ -739,13 +707,13 @@ fn collect_zarr_v2_plans(
 fn plan_zarr_v2_array(
     name: &str,
     array_rel: &str,
-    dir: &Path,
+    objects: &dyn ZarrObjects,
     chunk_bytes: Option<u64>,
 ) -> Result<ImportPlan, ConvertError> {
-    let raw = fs::read_to_string(dir.join(".zarray"))
-        .map_err(|err| ConvertError::Zarr(err.to_string()))?;
-    let meta: ZarrV2Array =
-        serde_json::from_str(&raw).map_err(|err| ConvertError::Zarr(err.to_string()))?;
+    let meta_key = join_rel(array_rel, ".zarray");
+    let raw = objects.read_bytes(&meta_key)?;
+    let meta: ZarrV2Array = serde_json::from_slice(&raw)
+        .map_err(|err| ConvertError::Zarr(format!("{}: {err}", objects.location(&meta_key))))?;
     if meta.zarr_format != 2 {
         return Err(ConvertError::Zarr(format!(
             "array `{name}` has zarr_format {}, expected 2",
@@ -782,7 +750,7 @@ fn plan_zarr_v2_array(
         .map(|dim| usize::try_from(*dim).unwrap_or(0))
         .collect();
     let source = chunk_shape_for_import(&meta.shape, Some(chunks));
-    let attrs = read_zarr_v2_attrs(dir);
+    let attrs = read_zarr_v2_attrs(objects, array_rel);
     Ok(finish_zarr_plan(ZarrPlanBuild {
         name,
         array_rel,
@@ -881,37 +849,25 @@ fn zarr_v2_zstd(name: &str, meta: &ZarrV2Array) -> Result<bool, ConvertError> {
     }
 }
 
-fn read_zarr_v2_attrs(dir: &Path) -> std::collections::BTreeMap<String, String> {
-    let path = dir.join(".zattrs");
-    let Ok(raw) = fs::read_to_string(path) else {
+fn read_zarr_v2_attrs(
+    objects: &dyn ZarrObjects,
+    array_rel: &str,
+) -> std::collections::BTreeMap<String, String> {
+    let key = join_rel(array_rel, ".zattrs");
+    if !objects.is_file(&key).unwrap_or(false) {
+        return std::collections::BTreeMap::new();
+    }
+    let Ok(raw) = objects.read_bytes(&key) else {
         return std::collections::BTreeMap::new();
     };
-    let Ok(value) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw) else {
+    let Ok(text) = String::from_utf8(raw) else {
+        return std::collections::BTreeMap::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&text)
+    else {
         return std::collections::BTreeMap::new();
     };
     zarr_array_attrs(&value)
-}
-
-fn zarr_v2_child_names(dir: &Path) -> Result<Vec<String>, ConvertError> {
-    let mut out = Vec::new();
-    for entry in fs::read_dir(dir).map_err(|err| ConvertError::Zarr(err.to_string()))? {
-        let entry = entry.map_err(|err| ConvertError::Zarr(err.to_string()))?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        if !(path.join(".zarray").is_file() || path.join(".zgroup").is_file()) {
-            continue;
-        }
-        out.push(
-            entry
-                .file_name()
-                .into_string()
-                .map_err(|_| ConvertError::Zarr("non-utf8 zarr child name".into()))?,
-        );
-    }
-    out.sort();
-    Ok(out)
 }
 
 /// Returns true when `path` is a directory containing Zarr v2 root metadata.
@@ -976,4 +932,119 @@ struct ZarrV2Array {
     filters: Option<serde_json::Value>,
     #[serde(default)]
     dimension_separator: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
+
+    use crate::convert::zarr_io::{ZarrObjects, zarr_child_names_from_keys};
+    use crate::convert::{ConvertError, convert_to_tet};
+    use crate::query::{ExecuteQueryOptions, execute_query_json};
+
+    struct MemZarr {
+        files: BTreeMap<String, Vec<u8>>,
+        reads: Mutex<Vec<String>>,
+    }
+
+    impl ZarrObjects for MemZarr {
+        fn read_bytes(&self, rel: &str) -> Result<Vec<u8>, ConvertError> {
+            self.reads.lock().expect("reads").push(rel.to_owned());
+            self.files
+                .get(rel)
+                .cloned()
+                .ok_or_else(|| ConvertError::Zarr(format!("missing {rel}")))
+        }
+
+        fn is_file(&self, rel: &str) -> Result<bool, ConvertError> {
+            Ok(self.files.contains_key(rel))
+        }
+
+        fn child_names(&self, rel: &str, v3: bool) -> Result<Vec<String>, ConvertError> {
+            let keys: Vec<String> = self.files.keys().cloned().collect();
+            Ok(zarr_child_names_from_keys(&keys, rel, v3))
+        }
+
+        fn location(&self, rel: &str) -> String {
+            rel.to_owned()
+        }
+    }
+
+    fn sum_of(path: &std::path::Path) -> f64 {
+        let bytes = std::fs::read(path).unwrap();
+        let summary = crate::catalog::read_tet_summary_v1(&bytes).unwrap();
+        let name = &summary.datasets[0].name;
+        let json = format!(r#"{{"dataset":"{name}","sum":[]}}"#);
+        let resp = execute_query_json(
+            &json,
+            path,
+            &bytes,
+            ExecuteQueryOptions::execute_no_preview(),
+            None,
+        )
+        .unwrap();
+        resp.execution.unwrap().operation_sum.unwrap()
+    }
+
+    #[test]
+    fn object_convert_reads_chunks_and_skips_unrelated_keys() {
+        let mut files = BTreeMap::new();
+        files.insert(
+            "zarr.json".into(),
+            br#"{"zarr_format":3,"node_type":"group"}"#.to_vec(),
+        );
+        files.insert(
+            "data/zarr.json".into(),
+            br#"{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"float32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2]}},"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"#.to_vec(),
+        );
+        let mut chunk0 = Vec::new();
+        chunk0.extend(1.0f32.to_le_bytes());
+        chunk0.extend(2.0f32.to_le_bytes());
+        let mut chunk1 = Vec::new();
+        chunk1.extend(3.0f32.to_le_bytes());
+        chunk1.extend(4.0f32.to_le_bytes());
+        files.insert("data/c/0".into(), chunk0);
+        files.insert("data/c/1".into(), chunk1);
+        files.insert("noise.bin".into(), b"do-not-download".to_vec());
+
+        let dir = tempfile::tempdir().unwrap();
+        let local = dir.path().join("store");
+        for (rel, bytes) in &files {
+            if rel == "noise.bin" {
+                continue;
+            }
+            let path = local.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+        let local_tet = dir.path().join("local.tet");
+        let remote_tet = dir.path().join("remote.tet");
+        let local_report = convert_to_tet(&local, &local_tet).unwrap();
+
+        let objects = Arc::new(MemZarr {
+            files,
+            reads: Mutex::new(Vec::new()),
+        });
+        let as_trait: Arc<dyn ZarrObjects> = objects.clone();
+        let report = super::convert_zarr_from_objects(
+            std::path::Path::new("mem://store"),
+            as_trait,
+            &remote_tet,
+            2,
+            false,
+            None,
+            None::<fn(_)>,
+        )
+        .unwrap();
+        assert_eq!(report.dataset_names, local_report.dataset_names);
+        assert_eq!(report.history[0].source, local_report.history[0].source);
+        assert!((sum_of(&local_tet) - sum_of(&remote_tet)).abs() < 1e-6);
+        assert!((sum_of(&remote_tet) - 10.0).abs() < 1e-6);
+
+        let reads = objects.reads.lock().expect("reads");
+        assert!(reads.iter().any(|key| key == "data/c/0"));
+        assert!(reads.iter().any(|key| key == "data/c/1"));
+        assert!(!reads.iter().any(|key| key == "noise.bin"));
+    }
 }

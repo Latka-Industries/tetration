@@ -4,6 +4,7 @@
 //! enabled (required for docs.rs `--no-default-features` builds).
 
 use std::cell::RefCell;
+#[cfg(any(feature = "tetration-hdf5", feature = "tetration-netcdf"))]
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -149,14 +150,17 @@ struct NetcdfThreadCtx {
 }
 
 pub(crate) struct ZarrParallelSource {
-    store: PathBuf,
+    objects: Arc<dyn super::zarr_io::ZarrObjects>,
     plans: Arc<[ImportPlan]>,
 }
 
 impl ZarrParallelSource {
-    pub(crate) fn new(store: PathBuf, plans: Vec<ImportPlan>) -> Self {
+    pub(crate) fn new(
+        objects: Arc<dyn super::zarr_io::ZarrObjects>,
+        plans: Vec<ImportPlan>,
+    ) -> Self {
         Self {
-            store,
+            objects,
             plans: plans.into(),
         }
     }
@@ -170,7 +174,7 @@ impl ZarrParallelSource {
         let array_rel = plan.zarr_array_rel.as_deref().unwrap_or(plan.name.as_str());
         let spec = plan.tile_read(job);
         super::zarr::read_zarr_tile_le_into(
-            &self.store,
+            self.objects.as_ref(),
             array_rel,
             plan.zarr_zstd,
             plan.zarr_v2_sep,
