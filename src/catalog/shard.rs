@@ -61,6 +61,28 @@ impl DatasetClaim {
         }
     }
 
+    /// Claim a half-open per-axis chunk-index box (disjoint tiling happy path).
+    ///
+    /// `chunk_ranges` length must match `shape` / `chunk_shape` rank. Full-file ingest should
+    /// use [`Self::full_grid`] (add whole datasets), not tile one array via `tet ingest`.
+    #[must_use]
+    pub fn ranges(
+        name: impl Into<String>,
+        dtype: u32,
+        shape: &[u64],
+        chunk_shape: &[u64],
+        chunk_ranges: Vec<[u64; 2]>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            dtype,
+            shape: shape.to_vec(),
+            chunk_shape: chunk_shape.to_vec(),
+            full_grid: false,
+            chunk_ranges,
+        }
+    }
+
     /// `true` when two claims name the same dataset and their chunk ownership overlaps.
     #[must_use]
     pub fn overlaps(&self, other: &Self) -> bool {
@@ -246,22 +268,56 @@ impl TetShardWriter {
         &self.part_id
     }
 
-    /// Queue an in-memory dataset (full-grid claim) onto the underlying session.
+    /// Queue an in-memory dataset with a **full-grid** claim onto the underlying session.
+    ///
+    /// For disjoint tiling of one logical array, use [`Self::push_dataset_with_claim`] with
+    /// [`DatasetClaim::ranges`]. Prefer full-grid (or `tet ingest`) when adding whole datasets.
     ///
     /// # Errors
     ///
     /// Returns [`CatalogError`] when the writer is already sealed or the dataset is invalid.
     pub fn push_dataset(&mut self, dataset: TetDatasetWrite) -> Result<(), CatalogError> {
-        let session = self
-            .session
-            .as_mut()
-            .ok_or(CatalogError::Package("TetShardWriter already sealed"))?;
         let claim = DatasetClaim::full_grid(
             dataset.name.clone(),
             dataset.dtype,
             &dataset.shape,
             &dataset.chunk_shape,
         );
+        self.push_dataset_with_claim(dataset, claim)
+    }
+
+    /// Queue an in-memory dataset with an explicit claim (full-grid or chunk ranges).
+    ///
+    /// The claim must name the same dataset and match dtype / shape / chunk_shape. The part
+    /// file still holds whatever tiles [`TetWriterSession`] writes; claims are publish-time
+    /// ownership metadata (decision E).
+    ///
+    /// # Errors
+    ///
+    /// Already sealed, claim/dataset mismatch, or invalid dataset.
+    pub fn push_dataset_with_claim(
+        &mut self,
+        dataset: TetDatasetWrite,
+        claim: DatasetClaim,
+    ) -> Result<(), CatalogError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or(CatalogError::Package("TetShardWriter already sealed"))?;
+        if claim.name != dataset.name
+            || claim.dtype != dataset.dtype
+            || claim.shape != dataset.shape
+            || claim.chunk_shape != dataset.chunk_shape
+        {
+            return Err(CatalogError::Package(
+                "dataset claim must match queued dataset name/dtype/shape/chunk_shape",
+            ));
+        }
+        if !claim.full_grid && claim.chunk_ranges.len() != dataset.shape.len() {
+            return Err(CatalogError::Package(
+                "chunk_ranges rank must match dataset shape rank",
+            ));
+        }
         session.push_dataset(dataset)?;
         self.claims.push(claim);
         Ok(())

@@ -1,10 +1,14 @@
 //! Shard writer staging parts (THI-463).
 
-use crate::catalog::{
-    ClaimOverlap, DatasetClaim, PartMeta, TetDatasetWrite, TetPackage, TetShardWriter,
-    find_claim_overlap, list_sealed_parts, open_sealed_part,
-};
+use std::fs;
 use std::path::PathBuf;
+
+use crate::catalog::package::{PACKAGE_PROTOCOL_VERSION, sha256_file_hex, write_json_atomic};
+use crate::catalog::{
+    ClaimOverlap, DATASET_DTYPE_TAG_V1, DatasetClaim, PartMeta, TetDatasetWrite, TetPackage,
+    TetShardWriter, find_claim_overlap, list_sealed_parts, open_sealed_part, publish_parts,
+    write_sparse_raw_array_file,
+};
 
 fn f32_pair() -> Vec<u8> {
     let mut buf = vec![0u8; 8];
@@ -147,4 +151,90 @@ fn incomplete_session_skipped_by_list() {
     // Drop without seal.
     drop(w);
     assert!(list_sealed_parts(&pkg).unwrap().is_empty());
+}
+
+fn f32_bytes(vals: &[f32]) -> Vec<u8> {
+    vals.iter().flat_map(|v| v.to_le_bytes()).collect()
+}
+
+fn stage_sparse_claim(
+    pkg: &TetPackage,
+    session: &str,
+    part: &str,
+    claim: DatasetClaim,
+    tiles: &[(u64, &[u8])],
+) {
+    let session_dir = pkg.create_staging_session(session).unwrap();
+    let part_path = session_dir.join(format!("part-{part}.tet"));
+    write_sparse_raw_array_file(
+        &part_path,
+        &claim.name,
+        claim.dtype,
+        &claim.shape,
+        &claim.chunk_shape,
+        tiles,
+    )
+    .unwrap();
+    let part_byte_len = fs::metadata(&part_path).unwrap().len();
+    let part_sha256 = sha256_file_hex(&part_path).unwrap();
+    let meta = PartMeta {
+        part_id: part.into(),
+        writer_session_id: session.into(),
+        protocol_version: PACKAGE_PROTOCOL_VERSION,
+        sealed: true,
+        part_byte_len,
+        part_sha256,
+        claims: vec![claim],
+    };
+    write_json_atomic(&session_dir.join("PART_META.json"), &meta).unwrap();
+}
+
+#[test]
+fn disjoint_chunk_range_claims_publish() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("tile.tet.d")).unwrap();
+
+    // Global shape [4] / chunk [2] → two chunks. Left owns [0,1), right owns [1,2).
+    let left = DatasetClaim::ranges("temp", DATASET_DTYPE_TAG_V1.f32, &[4], &[2], vec![[0, 1]]);
+    let right = DatasetClaim::ranges("temp", DATASET_DTYPE_TAG_V1.f32, &[4], &[2], vec![[1, 2]]);
+    assert!(!left.overlaps(&right));
+
+    let left_tile = f32_bytes(&[1.0, 2.0]);
+    let right_tile = f32_bytes(&[3.0, 4.0]);
+    stage_sparse_claim(&pkg, "s0", "left", left, &[(0, left_tile.as_slice())]);
+    stage_sparse_claim(&pkg, "s1", "right", right, &[(1, right_tile.as_slice())]);
+
+    let sealed = list_sealed_parts(&pkg).unwrap();
+    assert!(find_claim_overlap(&sealed).is_none());
+
+    let manifest = publish_parts(&pkg, 1, &["left".into(), "right".into()]).unwrap();
+    assert_eq!(manifest.generation, 1);
+    let summary = pkg.open_current().unwrap().summary().unwrap();
+    assert_eq!(summary.datasets.len(), 1);
+    assert_eq!(summary.datasets[0].name, "temp");
+    assert_eq!(summary.datasets[0].shape, vec![4]);
+    assert_eq!(summary.chunks.len(), 2);
+}
+
+#[test]
+fn push_dataset_with_claim_rejects_mismatch() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("claim-mismatch.tet.d")).unwrap();
+    let mut w = TetShardWriter::create(&pkg, "w", "p").unwrap();
+    let ds = TetDatasetWrite::f32_row_major("temp", &[2], &[2], f32_pair()).unwrap();
+    let bad = DatasetClaim::ranges("other", DATASET_DTYPE_TAG_V1.f32, &[2], &[2], vec![[0, 1]]);
+    let err = w.push_dataset_with_claim(ds, bad).unwrap_err();
+    assert!(matches!(
+        err,
+        crate::catalog::CatalogError::Package(
+            "dataset claim must match queued dataset name/dtype/shape/chunk_shape"
+        )
+    ));
+}
+
+#[test]
+fn ranges_display_and_constructor() {
+    let c = DatasetClaim::ranges("x", 1, &[8], &[2], vec![[0, 2]]);
+    assert!(!c.full_grid);
+    assert_eq!(c.ranges_display(), "chunk_ranges=[[0,2)]");
 }

@@ -129,3 +129,80 @@ pub fn write_one_chunk_raw_file(
         },
     )
 }
+
+/// Write one dataset with a **subset** of its chunk tiles (disjoint shard / tiling tests).
+///
+/// `tiles` is `(linear_chunk_index, raw_tile_bytes)`. Dataset catalog still records the full
+/// `shape` / `chunk_shape`; only listed tiles are stored.
+///
+/// # Errors
+///
+/// Invalid geometry, empty `tiles`, or I/O.
+#[cfg(test)]
+pub(crate) fn write_sparse_raw_array_file(
+    path: &Path,
+    name: &str,
+    dtype: u32,
+    shape: &[u64],
+    chunk_shape: &[u64],
+    tiles: &[(u64, &[u8])],
+) -> Result<(), CatalogError> {
+    if tiles.is_empty() {
+        return Err(CatalogError::InvalidWriteSpec(
+            "write_sparse_raw_array_file requires at least one tile",
+        ));
+    }
+    dataset::validate_tensor_geometry(shape, chunk_shape, dtype)?;
+    let grid = super::chunk_grid_plan(shape, chunk_shape, dtype)?;
+    let blob = dataset::encode_dataset_blob(name, dtype, shape, chunk_shape)?;
+    let dataset_blob_len = blob.len() as u64;
+    let n_chunks_total =
+        u64::try_from(tiles.len()).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "chunk_entry_count",
+            value: u64::MAX,
+        })?;
+    let (index_base, chunk_index_length, payload_start) =
+        super::file_layout::chunk_index_layout(dataset_blob_len, n_chunks_total)?;
+
+    let mut entries = Vec::new();
+    let mut payloads = Vec::new();
+    let mut cursor = payload_start;
+    for &(linear_k, tile_bytes) in tiles {
+        if linear_k >= grid.n_chunks {
+            return Err(CatalogError::InvalidWriteSpec(
+                "sparse tile chunk index out of range",
+            ));
+        }
+        let coord = super::tile::chunk_coord_from_linear(linear_k, &grid.counts, grid.ndim);
+        let raw_len = super::file_layout::u64_from_usize("chunk_payload_len", tile_bytes.len())?;
+        let stored = CHUNK_PAYLOAD_CODEC_V1
+            .encode_tile_payload(CHUNK_PAYLOAD_CODEC_V1.raw, tile_bytes.to_vec())?;
+        cursor = super::file_layout::EncodedChunkPush {
+            dataset_id: 0,
+            chunk_index: ChunkIndexEntryV1::padded_chunk_index(&coord[..grid.ndim], grid.ndim),
+            raw_byte_len: raw_len,
+            chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
+            stored,
+        }
+        .push(&mut entries, &mut payloads, cursor)?;
+    }
+
+    let sb = super::file_layout::layout_superblock(1, index_base, chunk_index_length)?;
+    let index_bytes = super::file_layout::build_chunk_index_bytes(
+        &entries,
+        n_chunks_total,
+        chunk_index_length,
+        FileExecutionSettingsV1::default_engine(),
+    )?;
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)?;
+    super::file_layout::write_file_preamble(&mut f, &sb, &blob, index_base, &index_bytes)?;
+    for p in payloads {
+        f.write_all(&p)?;
+    }
+    f.sync_all()?;
+    Ok(())
+}

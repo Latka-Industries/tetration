@@ -80,6 +80,8 @@ pub use stream_write::{
     validate_array_write_meta, write_multi_raw_array_streaming,
 };
 pub use tile::{chunk_coords_intersecting_global_box, chunk_coords_intersecting_strided};
+#[cfg(test)]
+pub(crate) use write::write_sparse_raw_array_file;
 pub use write::{write_multi_raw_array_file, write_one_chunk_raw_file, write_raw_array_file};
 
 /// Verify APIs moved to [`crate::verify`]; re-exported for compatibility.
