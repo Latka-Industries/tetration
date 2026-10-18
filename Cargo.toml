@@ -1,9 +1,9 @@
 [package]
 name = "tetration"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2024"
 rust-version = "1.95"
-authors = ["AHurowitz <thicclatka@users.noreply.github.com>"]
+authors = ["AHurowitz <tensor@tetration.sh>"]
 description = "Chunked tensor .tet format, tet CLI, and optional C ABI (tetration-ffi)"
 license = "MIT or Apache-2.0"
 repository = "https://github.com/Latka-Industries/tetration"

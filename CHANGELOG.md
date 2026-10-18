@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-10-18
+
+### Added
+
+- Clearer publish overlap rejects: `CatalogError::ClaimOverlap` reports part ids, dataset name, and chunk ranges (THI-526)
+- `tet publish --dry-run` / `dry_run_publish_parts`: claim and schema checks only; no seal or `CURRENT` flip (THI-527)
+- Identical-byte claim overlaps allowed at publish (idempotent retry via `part_sha256` or matching chunk bytes); differing bytes still reject (THI-528)
+- Opt-in `tet publish --replace DATASET` / `PublishPartsOptions::replace` for dtype/shape change vs sealed `CURRENT` on G+1; default remains reject; sealed G untouched (THI-529)
+- Disjoint shard claims: `DatasetClaim::ranges`, `TetShardWriter::push_dataset_with_claim`; merge unions complementary same-name tiles (THI-532)
+
+### Changed
+
+- Writer protocol decision E: identical-overlap OK; opt-in replace for schema change (never mutate sealed G)
+- Crate authors email → `tensor@tetration.sh`
+
 ## [0.3.6] - 2026-10-18
 
 ### Added
