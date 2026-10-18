@@ -9,6 +9,7 @@
 //!
 //! Spec: [`docs/writer_protocol_v2.md`](../../docs/writer_protocol_v2.md).
 
+use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,6 +116,38 @@ impl fmt::Display for ClaimOverlap {
             self.dataset, self.part_a, self.part_b, self.ranges_a, self.ranges_b
         )
     }
+}
+
+/// Dtype/shape conflict vs the sealed `CURRENT` catalog (decision E).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaConflict {
+    pub dataset: String,
+    pub prior_dtype: u32,
+    pub prior_shape: Vec<u64>,
+    pub new_dtype: u32,
+    pub new_shape: Vec<u64>,
+}
+
+impl fmt::Display for SchemaConflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "dataset schema conflict vs CURRENT: dataset={} prior=dtype:{} shape:{:?} new=dtype:{} shape:{:?} (pass --replace {} to allow in G+1)",
+            self.dataset,
+            self.prior_dtype,
+            self.prior_shape,
+            self.new_dtype,
+            self.new_shape,
+            self.dataset
+        )
+    }
+}
+
+/// Options for [`publish_parts_with_options`] / [`validate_publish_parts_with_options`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PublishPartsOptions {
+    /// Dataset names allowed to change dtype/shape relative to sealed `CURRENT` (opt-in replace).
+    pub replace: Vec<String>,
 }
 
 /// Staging `PART_META.json` written last when a shard seals.
@@ -605,21 +638,80 @@ pub struct PublishValidation {
     pub part_ids: Vec<String>,
 }
 
-/// Resolve `part_ids` and reject differing-byte overlaps (decision E). Does not seal or lock.
+/// Reject dtype/shape changes vs sealed `CURRENT` unless the dataset is listed in `replace`.
 ///
-/// Identical-byte overlaps are allowed (idempotent retry). Shared by [`dry_run_publish_parts`]
-/// and [`publish_parts`]. Future schema / replace checks belong here too.
+/// No `CURRENT` → nothing to compare (first publish). Never mutates sealed generations.
+fn reject_schema_conflicts(
+    package: &TetPackage,
+    frozen: &[(PathBuf, PartMeta)],
+    replace: &HashSet<String>,
+) -> Result<(), CatalogError> {
+    let Some(current) = package.current()? else {
+        return Ok(());
+    };
+    let prior = package.open_generation(current)?;
+    let summary = prior.summary()?;
+    for (_, meta) in frozen {
+        for claim in &meta.claims {
+            let Some(prior_ds) = summary.datasets.iter().find(|d| d.name == claim.name) else {
+                continue;
+            };
+            let shape_changed = prior_ds.dtype != claim.dtype
+                || prior_ds.shape != claim.shape
+                || prior_ds.chunk_shape != claim.chunk_shape;
+            if !shape_changed {
+                continue;
+            }
+            if replace.contains(&claim.name) {
+                continue;
+            }
+            return Err(CatalogError::SchemaConflict(SchemaConflict {
+                dataset: claim.name.clone(),
+                prior_dtype: prior_ds.dtype,
+                prior_shape: prior_ds.shape.clone(),
+                new_dtype: claim.dtype,
+                new_shape: claim.shape.clone(),
+            }));
+        }
+    }
+    Ok(())
+}
+
+/// Resolve `part_ids`, reject differing-byte overlaps, and check schema vs `CURRENT` (decision E).
+///
+/// Does not seal or lock. Identical-byte overlaps are allowed (idempotent retry).
 ///
 /// # Errors
 ///
-/// Missing parts, differing claim overlap, or I/O while reading staging meta / part bytes.
+/// Missing parts, differing claim overlap, schema conflict, or I/O.
 pub fn validate_publish_parts(
     package: &TetPackage,
     generation: u64,
     part_ids: &[String],
 ) -> Result<(PublishValidation, Vec<(PathBuf, PartMeta)>), CatalogError> {
+    validate_publish_parts_with_options(
+        package,
+        generation,
+        part_ids,
+        &PublishPartsOptions::default(),
+    )
+}
+
+/// [`validate_publish_parts`] with explicit [`PublishPartsOptions`] (opt-in replace).
+///
+/// # Errors
+///
+/// Same as [`validate_publish_parts`].
+pub fn validate_publish_parts_with_options(
+    package: &TetPackage,
+    generation: u64,
+    part_ids: &[String],
+    options: &PublishPartsOptions,
+) -> Result<(PublishValidation, Vec<(PathBuf, PartMeta)>), CatalogError> {
     let frozen = resolve_part_ids(package, part_ids)?;
     reject_differing_claim_overlaps(&frozen)?;
+    let replace: HashSet<String> = options.replace.iter().cloned().collect();
+    reject_schema_conflicts(package, &frozen, &replace)?;
     Ok((
         PublishValidation {
             generation,
@@ -639,24 +731,64 @@ pub fn dry_run_publish_parts(
     generation: u64,
     part_ids: &[String],
 ) -> Result<PublishValidation, CatalogError> {
-    let (validation, _) = validate_publish_parts(package, generation, part_ids)?;
+    dry_run_publish_parts_with_options(
+        package,
+        generation,
+        part_ids,
+        &PublishPartsOptions::default(),
+    )
+}
+
+/// [`dry_run_publish_parts`] with explicit [`PublishPartsOptions`].
+///
+/// # Errors
+///
+/// Same as [`validate_publish_parts_with_options`].
+pub fn dry_run_publish_parts_with_options(
+    package: &TetPackage,
+    generation: u64,
+    part_ids: &[String],
+    options: &PublishPartsOptions,
+) -> Result<PublishValidation, CatalogError> {
+    let (validation, _) =
+        validate_publish_parts_with_options(package, generation, part_ids, options)?;
     Ok(validation)
 }
 
 /// Single committer: freeze `part_ids` → merge into `packed.tet` → seal generation `G`.
 ///
-/// Rejects overlapping claims. Does not GC staging. Crash before seal leaves `CURRENT` unchanged.
-/// Compact of parts happens inside this step (decision I).
+/// Rejects differing overlaps and (by default) dtype/shape changes vs `CURRENT`. Does not GC
+/// staging. Crash before seal leaves `CURRENT` unchanged. Compact happens inside this step
+/// (decision I).
 ///
 /// # Errors
 ///
-/// Missing parts, claim overlap, publish lock held, merge failure, or I/O.
+/// Missing parts, claim overlap, schema conflict, publish lock held, merge failure, or I/O.
 pub fn publish_parts(
     package: &TetPackage,
     generation: u64,
     part_ids: &[String],
 ) -> Result<GenerationManifest, CatalogError> {
-    let (_, frozen) = validate_publish_parts(package, generation, part_ids)?;
+    publish_parts_with_options(
+        package,
+        generation,
+        part_ids,
+        &PublishPartsOptions::default(),
+    )
+}
+
+/// [`publish_parts`] with explicit [`PublishPartsOptions`] (opt-in dataset replace).
+///
+/// # Errors
+///
+/// Same as [`publish_parts`].
+pub fn publish_parts_with_options(
+    package: &TetPackage,
+    generation: u64,
+    part_ids: &[String],
+    options: &PublishPartsOptions,
+) -> Result<GenerationManifest, CatalogError> {
+    let (_, frozen) = validate_publish_parts_with_options(package, generation, part_ids, options)?;
 
     let part_paths: Vec<PathBuf> = frozen
         .iter()
