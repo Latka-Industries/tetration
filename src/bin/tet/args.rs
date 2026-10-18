@@ -143,10 +143,11 @@ pub enum Commands {
     },
     /// Convert HDF5, `NetCDF`, `Zarr`, `NumPy`, CSV, or Parquet into `.tet`.
     ///
-    /// A single-file `s3://bucket/key` downloads the whole object, then uses the same importer
-    /// (`tetration-s3`, `TETRATION_S3_ENDPOINT`). Zarr on S3 is not supported.
+    /// A single-file `s3://bucket/key` downloads the whole object, then uses the same importer.
+    /// A Zarr prefix (`s3://bucket/store` or `s3://bucket/store.zarr`) fetches each chunk as it
+    /// is written (`tetration-s3`, `TETRATION_S3_ENDPOINT`).
     Convert {
-        /// Source array file, Zarr directory, or `s3://bucket/object.ext`.
+        /// Source array file, Zarr directory, `s3://bucket/object.ext`, or `s3://bucket/zarr-prefix`.
         input: String,
         /// Destination `.tet` file.
         output: PathBuf,
