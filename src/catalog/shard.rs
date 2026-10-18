@@ -16,11 +16,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::CatalogError;
-use super::append::merge_tet_files;
+use super::append::{copy_stored_payload, merge_tet_files};
 use super::package::{
     GenerationManifest, PACKAGE_PROTOCOL_VERSION, TetPackage, is_safe_path_segment, read_json,
     sha256_file_hex, write_json_atomic,
 };
+use super::read_tet_summary_v1;
 use super::session::{TetDatasetWrite, TetFile, TetWriterSession};
 use crate::utils::fs_device;
 
@@ -361,7 +362,8 @@ pub fn list_sealed_parts(package: &TetPackage) -> Result<Vec<(PathBuf, PartMeta)
 
 /// Detect overlapping dataset claims across a frozen publish set (decision E).
 ///
-/// Returns the first conflicting pair with part ids, dataset name, and range displays.
+/// Returns the first overlapping pair with part ids, dataset name, and range displays.
+/// Callers that allow identical-byte overlaps should use [`reject_differing_claim_overlaps`].
 #[must_use]
 pub fn find_claim_overlap(parts: &[(PathBuf, PartMeta)]) -> Option<ClaimOverlap> {
     for i in 0..parts.len() {
@@ -382,6 +384,109 @@ pub fn find_claim_overlap(parts: &[(PathBuf, PartMeta)]) -> Option<ClaimOverlap>
         }
     }
     None
+}
+
+/// `true` when two parts have identical `part_sha256`, or the overlapping dataset's chunk
+/// payloads match byte-for-byte in both part files.
+fn overlapping_content_identical(
+    dir_a: &Path,
+    meta_a: &PartMeta,
+    dir_b: &Path,
+    meta_b: &PartMeta,
+    dataset: &str,
+) -> Result<bool, CatalogError> {
+    if meta_a.part_sha256 == meta_b.part_sha256 && !meta_a.part_sha256.is_empty() {
+        return Ok(true);
+    }
+    let path_a = dir_a.join(meta_a.part_file_name());
+    let path_b = dir_b.join(meta_b.part_file_name());
+    let bytes_a = fs::read(&path_a)?;
+    let bytes_b = fs::read(&path_b)?;
+    overlapping_dataset_bytes_match(&bytes_a, &bytes_b, dataset)
+}
+
+/// Compare one named dataset's geometry + stored chunk payloads across two part files.
+pub(crate) fn overlapping_dataset_bytes_match(
+    bytes_a: &[u8],
+    bytes_b: &[u8],
+    dataset: &str,
+) -> Result<bool, CatalogError> {
+    let sum_a = read_tet_summary_v1(bytes_a)?;
+    let sum_b = read_tet_summary_v1(bytes_b)?;
+    let (id_a, ds_a) = match sum_a
+        .datasets
+        .iter()
+        .enumerate()
+        .find(|(_, d)| d.name == dataset)
+    {
+        Some((i, d)) => (i as u64, d),
+        None => return Ok(false),
+    };
+    let (id_b, ds_b) = match sum_b
+        .datasets
+        .iter()
+        .enumerate()
+        .find(|(_, d)| d.name == dataset)
+    {
+        Some((i, d)) => (i as u64, d),
+        None => return Ok(false),
+    };
+    if ds_a.dtype != ds_b.dtype || ds_a.shape != ds_b.shape || ds_a.chunk_shape != ds_b.chunk_shape
+    {
+        return Ok(false);
+    }
+    let mut map_a = std::collections::BTreeMap::new();
+    for entry in &sum_a.chunks {
+        if entry.dataset_id == id_a {
+            map_a.insert(entry.chunk_index, copy_stored_payload(bytes_a, entry)?);
+        }
+    }
+    let mut map_b = std::collections::BTreeMap::new();
+    for entry in &sum_b.chunks {
+        if entry.dataset_id == id_b {
+            map_b.insert(entry.chunk_index, copy_stored_payload(bytes_b, entry)?);
+        }
+    }
+    Ok(map_a == map_b)
+}
+
+/// Reject overlapping claims whose content differs (decision E).
+///
+/// Identical `part_sha256` or matching dataset chunk bytes are allowed (idempotent retry).
+///
+/// # Errors
+///
+/// [`CatalogError::ClaimOverlap`] when overlapping claims have differing bytes, or I/O while
+/// reading part files.
+pub fn reject_differing_claim_overlaps(parts: &[(PathBuf, PartMeta)]) -> Result<(), CatalogError> {
+    for i in 0..parts.len() {
+        for j in (i + 1)..parts.len() {
+            for ca in &parts[i].1.claims {
+                for cb in &parts[j].1.claims {
+                    if !ca.overlaps(cb) {
+                        continue;
+                    }
+                    let identical = overlapping_content_identical(
+                        &parts[i].0,
+                        &parts[i].1,
+                        &parts[j].0,
+                        &parts[j].1,
+                        &ca.name,
+                    )?;
+                    if !identical {
+                        return Err(CatalogError::ClaimOverlap(ClaimOverlap {
+                            part_a: parts[i].1.part_id.clone(),
+                            part_b: parts[j].1.part_id.clone(),
+                            dataset: ca.name.clone(),
+                            ranges_a: ca.ranges_display(),
+                            ranges_b: cb.ranges_display(),
+                        }));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Resolve a frozen `part_ids` list against sealed staging (decision C).
@@ -500,23 +605,21 @@ pub struct PublishValidation {
     pub part_ids: Vec<String>,
 }
 
-/// Resolve `part_ids` and reject overlapping claims (decision E). Does not seal or lock.
+/// Resolve `part_ids` and reject differing-byte overlaps (decision E). Does not seal or lock.
 ///
-/// Shared by [`dry_run_publish_parts`] and [`publish_parts`]. Future schema / replace checks
-/// belong here too.
+/// Identical-byte overlaps are allowed (idempotent retry). Shared by [`dry_run_publish_parts`]
+/// and [`publish_parts`]. Future schema / replace checks belong here too.
 ///
 /// # Errors
 ///
-/// Missing parts, claim overlap, or I/O while reading staging meta.
+/// Missing parts, differing claim overlap, or I/O while reading staging meta / part bytes.
 pub fn validate_publish_parts(
     package: &TetPackage,
     generation: u64,
     part_ids: &[String],
 ) -> Result<(PublishValidation, Vec<(PathBuf, PartMeta)>), CatalogError> {
     let frozen = resolve_part_ids(package, part_ids)?;
-    if let Some(overlap) = find_claim_overlap(&frozen) {
-        return Err(CatalogError::ClaimOverlap(overlap));
-    }
+    reject_differing_claim_overlaps(&frozen)?;
     Ok((
         PublishValidation {
             generation,

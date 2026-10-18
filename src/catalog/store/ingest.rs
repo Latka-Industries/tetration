@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 
 use crate::catalog::append::merge_tet_files;
 use crate::catalog::package::{self, GenerationManifest, PACKAGE_PROTOCOL_VERSION};
-use crate::catalog::shard::{PartMeta, find_claim_overlap};
+use crate::catalog::shard::{ClaimOverlap, PartMeta, overlapping_dataset_bytes_match};
 use crate::catalog::{CatalogError, DatasetClaim, read_tet_summary_v1};
 
 use super::publish_lock::{self, PublishOptions};
@@ -118,12 +118,33 @@ pub fn seal_staged_generation_with_options(
         }
         frozen.push((PathBuf::from(&part_key), meta, bytes));
     }
-    let overlap_input: Vec<(PathBuf, PartMeta)> = frozen
-        .iter()
-        .map(|(path, meta, _)| (path.clone(), meta.clone()))
-        .collect();
-    if let Some(overlap) = find_claim_overlap(&overlap_input) {
-        return Err(CatalogError::ClaimOverlap(overlap));
+    // Reject differing-byte overlaps; identical part_sha256 / chunk bytes are OK (THI-528).
+    for i in 0..frozen.len() {
+        for j in (i + 1)..frozen.len() {
+            for ca in &frozen[i].1.claims {
+                for cb in &frozen[j].1.claims {
+                    if !ca.overlaps(cb) {
+                        continue;
+                    }
+                    let identical = if frozen[i].1.part_sha256 == frozen[j].1.part_sha256
+                        && !frozen[i].1.part_sha256.is_empty()
+                    {
+                        true
+                    } else {
+                        overlapping_dataset_bytes_match(&frozen[i].2, &frozen[j].2, &ca.name)?
+                    };
+                    if !identical {
+                        return Err(CatalogError::ClaimOverlap(ClaimOverlap {
+                            part_a: frozen[i].1.part_id.clone(),
+                            part_b: frozen[j].1.part_id.clone(),
+                            dataset: ca.name.clone(),
+                            ranges_a: ca.ranges_display(),
+                            ranges_b: cb.ranges_display(),
+                        }));
+                    }
+                }
+            }
+        }
     }
 
     let tmp = TempDir::new(generation)?;

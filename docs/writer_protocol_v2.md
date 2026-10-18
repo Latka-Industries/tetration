@@ -31,7 +31,7 @@ Same *logical* model locally and on object stores: cloud is transport for parts 
 | **B** | What a shard is | Sealed layout-v1-compatible fragment: datasets + chunk payloads for **claimed chunk ranges** (mini-`.tet` or same framing). |
 | **C** | Publish set | **Explicit part-id list** in `MANIFEST`. Staging scan is sugar that must freeze that list before build. |
 | **D** | Staging after pack | Not required. Sealed verify checks **`packed.tet`**; `MANIFEST` keeps part ids + checksums for provenance only. |
-| **E** | Overlap / schema | **Reject** overlapping chunk claims in one `G`. **New datasets in G+1 OK.** Dtype/shape change of an existing name = **reject** (rename or new package). |
+| **E** | Overlap / schema | **Reject** overlapping chunk claims in one `G` when content **differs**. Identical overlap (`part_sha256` / matching chunk bytes) = **allow** (idempotent retry). **New datasets in G+1 OK.** Dtype/shape change of an existing name = **reject** by default (opt-in replace is a separate publish flag; never mutate sealed `G`). |
 | **F** | Package identity | Root `PROTOCOL` with `protocol_version: 2`. Generation ids = monotonic `u64`, **never reuse**. |
 | **G** | Publish lock | Exclusive create of `publishing/<G>/`. Stale lock: age > N (default **1h**) + no heartbeat → verify/repair may **quarantine**; no auto-steal without `--force`. |
 | **H** | Append | Standalone `.tet` + `TetWriterSession::open_append` = **v1**. Package “append” = ingest → **publish G+1**. Never mutate `packed.tet` in place. |
@@ -124,10 +124,11 @@ example.tet.d/
 
 **Claims (decision E):** `PART_META` declares dataset names and chunk-grid ranges covered. For a given publish set:
 
-- Overlapping chunk claims → **publish error**
+- Overlapping chunk claims with **differing** bytes → **publish error**
+- Overlapping chunk claims with **identical** content (`part_sha256` match, or matching chunk payloads for the claimed dataset) → **allow** (idempotent retry; merge keeps one copy)
 - Filling disjoint chunks of an existing dataset → OK
 - Introducing a **new** dataset name → OK (typically in `G+1` relative to prior packed catalog)
-- Changing dtype or global shape of an existing dataset name → **reject**
+- Changing dtype or global shape of an existing dataset name → **reject** by default (explicit replace flag on publish is opt-in; never mutates sealed `G`)
 
 ### Committer (exactly one per publish)
 
@@ -185,7 +186,8 @@ example.tet.d/
 | Bad / missing `MANIFEST` for CURRENT | **Error** | `current_manifest` / `manifest_*` |
 | `packed.tet` fails layout-v1 verify | **Error** | `packed_layout` (+ nested e.g. `chunk_coords`) |
 | Checksum / length mismatch vs `MANIFEST` | **Error** | `manifest_sha256` / `manifest_byte_len` |
-| Overlapping claims at publish time | **Error** (publish reject) | — (never seals) |
+| Overlapping claims with differing bytes at publish time | **Error** (publish reject) | — (never seals) |
+| Overlapping claims with identical bytes | **OK** (idempotent) | — |
 | Duplicate chunk coords inside sealed `packed.tet` | **Error** | `chunk_coords` |
 | `MANIFEST` part ids missing from staging | **OK** if `packed.tet` verifies (decision **D**) | — |
 | Incomplete `publishing/<G>/` (live lock) | **Warn** | `publishing_incomplete` |

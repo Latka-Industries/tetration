@@ -3,7 +3,7 @@
 //! Reuses [`crate::catalog::file_layout`] for chunk grid math, index sizing, and
 //! [`EncodedChunkPush`] when copying or appending tile payloads.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
@@ -14,7 +14,8 @@ use super::index::ChunkIndexEntryV1;
 use super::stream_write::{ArrayWriteMeta, StreamTileJob};
 use super::tile;
 use super::{
-    CHUNK_PAYLOAD_CODEC_V1, CatalogError, DatasetRecordV1, read_tet_summary_v1, usize_from_u64,
+    CHUNK_PAYLOAD_CODEC_V1, CatalogError, DatasetRecordV1, MAX_NDIM, TetFileSummaryV1,
+    read_tet_summary_v1, usize_from_u64,
 };
 
 /// Append in-memory datasets to an existing file (rewrites the file; strips an EOF footer until
@@ -187,7 +188,10 @@ fn ensure_new_meta_names(
     Ok(())
 }
 
-fn copy_stored_payload(data: &[u8], entry: &ChunkIndexEntryV1) -> Result<Vec<u8>, CatalogError> {
+pub(super) fn copy_stored_payload(
+    data: &[u8],
+    entry: &ChunkIndexEntryV1,
+) -> Result<Vec<u8>, CatalogError> {
     let start = usize_from_u64("payload_offset", entry.payload_offset)?;
     let len = usize_from_u64("stored_byte_len", entry.stored_byte_len)?;
     let end = start
@@ -304,14 +308,54 @@ where
     Ok((entries, payloads))
 }
 
+fn dataset_geometry_eq(a: &DatasetRecordV1, b: &DatasetRecordV1) -> bool {
+    a.name == b.name && a.dtype == b.dtype && a.shape == b.shape && a.chunk_shape == b.chunk_shape
+}
+
+/// `true` when every chunk for `new_local_id` matches the already-merged dataset `existing_id`.
+fn dataset_chunk_bytes_eq(
+    new_data: &[u8],
+    new_summary: &TetFileSummaryV1,
+    new_local_id: u64,
+    merged_payloads: &[Vec<u8>],
+    merged_entries: &[ChunkIndexEntryV1],
+    existing_id: u64,
+) -> Result<bool, CatalogError> {
+    let mut existing: BTreeMap<[u64; MAX_NDIM], &[u8]> = BTreeMap::new();
+    for (i, entry) in merged_entries.iter().enumerate() {
+        if entry.dataset_id == existing_id {
+            existing.insert(entry.chunk_index, merged_payloads[i].as_slice());
+        }
+    }
+    let mut incoming: BTreeMap<[u64; MAX_NDIM], Vec<u8>> = BTreeMap::new();
+    for entry in &new_summary.chunks {
+        if entry.dataset_id == new_local_id {
+            incoming.insert(entry.chunk_index, copy_stored_payload(new_data, entry)?);
+        }
+    }
+    if existing.len() != incoming.len() {
+        return Ok(false);
+    }
+    for (coord, bytes_a) in &existing {
+        let Some(bytes_b) = incoming.get(coord) else {
+            return Ok(false);
+        };
+        if *bytes_a != bytes_b.as_slice() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// Merge one or more sealed layout-v1 `.tet` files into `dest` (byte-copy chunks, remapped ids).
 ///
-/// Dataset names must be unique across `sources`. Footers are not preserved (0.2 publish packs a
-/// fresh catalog). A single source is copied with [`std::fs::copy`].
+/// Dataset names must be unique across `sources` unless the duplicate is byte-identical
+/// (decision E identical-overlap / idempotent retry). Footers are not preserved (0.2 publish
+/// packs a fresh catalog). A single source is copied with [`std::fs::copy`].
 ///
 /// # Errors
 ///
-/// Empty `sources`, duplicate dataset names, invalid inputs, or I/O failures.
+/// Empty `sources`, differing duplicate dataset names, invalid inputs, or I/O failures.
 pub fn merge_tet_files(dest: &Path, sources: &[&Path]) -> Result<(), CatalogError> {
     if sources.is_empty() {
         return Err(CatalogError::InvalidWriteSpec(
@@ -326,7 +370,8 @@ pub fn merge_tet_files(dest: &Path, sources: &[&Path]) -> Result<(), CatalogErro
     let mut all_datasets: Vec<DatasetRecordV1> = Vec::new();
     let mut entries: Vec<ChunkIndexEntryV1> = Vec::new();
     let mut payloads: Vec<Vec<u8>> = Vec::new();
-    let mut seen_names: HashSet<String> = HashSet::new();
+    // Maps dataset name → remapped id in `all_datasets`.
+    let mut name_to_id: HashMap<String, u64> = HashMap::new();
     let mut file_execution = FileExecutionSettingsV1::default_engine();
     let mut cursor = 0u64;
 
@@ -336,28 +381,58 @@ pub fn merge_tet_files(dest: &Path, sources: &[&Path]) -> Result<(), CatalogErro
         if source_i == 0 {
             file_execution = summary.file_execution;
         }
-        let base_id =
-            u64::try_from(all_datasets.len()).map_err(|_| CatalogError::TooLargeForPlatform {
-                field: "dataset_count",
-                value: u64::MAX,
-            })?;
-        for ds in &summary.datasets {
-            if !seen_names.insert(ds.name.clone()) {
-                return Err(CatalogError::InvalidWriteSpec(
-                    "duplicate dataset name across merge sources",
-                ));
+        // Local dataset_id → remapped id, or None when skipping an identical duplicate.
+        let mut local_remap: Vec<Option<u64>> = Vec::with_capacity(summary.datasets.len());
+        for (local_i, ds) in summary.datasets.iter().enumerate() {
+            if let Some(&existing_id) = name_to_id.get(&ds.name) {
+                let existing = &all_datasets[usize::try_from(existing_id).map_err(|_| {
+                    CatalogError::TooLargeForPlatform {
+                        field: "dataset_id",
+                        value: existing_id,
+                    }
+                })?];
+                if !dataset_geometry_eq(existing, ds)
+                    || !dataset_chunk_bytes_eq(
+                        &data,
+                        &summary,
+                        local_i as u64,
+                        &payloads,
+                        &entries,
+                        existing_id,
+                    )?
+                {
+                    return Err(CatalogError::InvalidWriteSpec(
+                        "duplicate dataset name across merge sources with differing bytes",
+                    ));
+                }
+                local_remap.push(None);
+                continue;
             }
+            let new_id = u64::try_from(all_datasets.len()).map_err(|_| {
+                CatalogError::TooLargeForPlatform {
+                    field: "dataset_count",
+                    value: u64::MAX,
+                }
+            })?;
+            name_to_id.insert(ds.name.clone(), new_id);
             all_datasets.push(ds.clone());
+            local_remap.push(Some(new_id));
         }
         for entry in &summary.chunks {
+            let Some(dataset_id) = local_remap
+                .get(usize::try_from(entry.dataset_id).map_err(|_| {
+                    CatalogError::TooLargeForPlatform {
+                        field: "dataset_id",
+                        value: entry.dataset_id,
+                    }
+                })?)
+                .copied()
+                .flatten()
+            else {
+                // Identical duplicate dataset — skip its chunks.
+                continue;
+            };
             let stored = copy_stored_payload(&data, entry)?;
-            let dataset_id =
-                entry
-                    .dataset_id
-                    .checked_add(base_id)
-                    .ok_or(CatalogError::InvalidWriteSpec(
-                        "dataset_id overflow while merging",
-                    ))?;
             cursor = super::file_layout::EncodedChunkPush {
                 dataset_id,
                 chunk_index: entry.chunk_index,

@@ -58,7 +58,8 @@ pub use session::{
 pub use shard::{
     ClaimOverlap, DatasetClaim, PartMeta, PublishValidation, TetShardWriter, dry_run_publish_parts,
     find_claim_overlap, ingest_tet_file, list_sealed_parts, open_sealed_part, part_id_from_path,
-    publish_parts, read_part_meta, resolve_part_ids, validate_publish_parts, verify_part_meta,
+    publish_parts, read_part_meta, reject_differing_claim_overlaps, resolve_part_ids,
+    validate_publish_parts, verify_part_meta,
 };
 pub use store::{
     BlockCache, ByteRange, CachingStore, GenerationPin, LocalStore, MemoryStore, ObjectFetchPlan,
