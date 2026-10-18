@@ -58,6 +58,16 @@ pub struct GenerationManifest {
     pub packed_sha256: Option<String>,
 }
 
+/// Options for [`TetPackage::pack_generation_with`] (decision I — `tet pack`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PackGenerationOptions {
+    /// After a verified copy to the destination `.tet`, delete the entire package directory.
+    ///
+    /// Default is `false` (keep the `.tet.d`). Opt-in only — readers still pinned on the package
+    /// must be closed first.
+    pub remove_package: bool,
+}
+
 /// Open handle to a `.tet.d` package root.
 ///
 /// Cheap to clone (path + parsed [`PackageProtocol`]); does not hold file locks.
@@ -400,11 +410,31 @@ impl TetPackage {
     /// Copy a sealed generation's `packed.tet` to a standalone `.tet` path (decision I — `tet pack`).
     ///
     /// Does not flip `CURRENT`. Destination must not already exist.
+    /// Equivalent to [`Self::pack_generation_with`] with default options (keep the package).
     ///
     /// # Errors
     ///
     /// Missing generation, destination exists, or I/O.
     pub fn pack_generation(&self, generation: u64, dest: &Path) -> Result<(), CatalogError> {
+        self.pack_generation_with(generation, dest, &PackGenerationOptions::default())
+    }
+
+    /// Pack a sealed generation, optionally deleting the `.tet.d` package after a verified copy.
+    ///
+    /// When [`PackGenerationOptions::remove_package`] is set, the destination must verify
+    /// (size + SHA-256 match vs source `packed.tet`, plus layout-v1 verify) before the package
+    /// tree is removed. Deletion is refused if `dest` lives inside the package root.
+    /// Fail closed: a verify or delete failure leaves the package in place when possible.
+    ///
+    /// # Errors
+    ///
+    /// Missing generation, destination exists, verify failure, destination inside package, or I/O.
+    pub fn pack_generation_with(
+        &self,
+        generation: u64,
+        dest: &Path,
+        opts: &PackGenerationOptions,
+    ) -> Result<(), CatalogError> {
         let packed = self.packed_tet_path(generation);
         if !packed.is_file() {
             return Err(CatalogError::GenerationNotSealed(generation));
@@ -420,6 +450,19 @@ impl TetPackage {
         let tmp = dest.with_extension("tet.pack.tmp");
         fs::copy(&packed, &tmp)?;
         fs_device::publish_file(&tmp, dest)?;
+
+        if opts.remove_package {
+            verify_packed_copy(&packed, dest)?;
+            let root = self.root().to_path_buf();
+            let dest_canon = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+            let root_canon = root.canonicalize().unwrap_or_else(|_| root.clone());
+            if dest_canon.starts_with(&root_canon) {
+                return Err(CatalogError::Package(
+                    "refusing remove_package: destination is inside the package",
+                ));
+            }
+            fs::remove_dir_all(&root)?;
+        }
         Ok(())
     }
 
@@ -570,4 +613,29 @@ pub(crate) fn sha256_file_hex(path: &Path) -> Result<String, CatalogError> {
         hasher.update(&buf[..n]);
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Confirm `dest` matches source `packed.tet` before deleting a package (THI-518).
+fn verify_packed_copy(src: &Path, dest: &Path) -> Result<(), CatalogError> {
+    let src_len = fs::metadata(src)?.len();
+    let dest_len = fs::metadata(dest)?.len();
+    if src_len != dest_len {
+        return Err(CatalogError::Package(
+            "pack verify failed: destination size mismatch",
+        ));
+    }
+    let src_hash = sha256_file_hex(src)?;
+    let dest_hash = sha256_file_hex(dest)?;
+    if src_hash != dest_hash {
+        return Err(CatalogError::Package(
+            "pack verify failed: destination hash mismatch",
+        ));
+    }
+    let report = crate::verify::verify_tet_file(dest)?;
+    if !report.ok {
+        return Err(CatalogError::Package(
+            "pack verify failed: destination layout verify failed",
+        ));
+    }
+    Ok(())
 }

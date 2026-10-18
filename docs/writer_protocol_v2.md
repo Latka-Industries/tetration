@@ -209,7 +209,7 @@ Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path
 | `tet ingest` | Shard writer → `staging/` |
 | `tet publish` | Freeze part list → build `packed.tet` → flip `CURRENT` |
 | `tet compact` | Optional merge of parts **during** publish (not a separate visibility step) |
-| `tet pack` | Copy sealed `G`’s `packed.tet` → standalone `.tet` |
+| `tet pack` | Copy sealed `G`’s `packed.tet` → standalone `.tet` (optional `--remove-package` after verified copy) |
 
 [THI-467](https://linear.app/thicclatka/issue/THI-467) · [THI-464](https://linear.app/thicclatka/issue/THI-464).
 

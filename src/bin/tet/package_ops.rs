@@ -158,6 +158,7 @@ pub(crate) struct PackOpts {
     pub package: PathBuf,
     pub output: PathBuf,
     pub generation: Option<u64>,
+    pub remove_package: bool,
     pub quiet: bool,
 }
 
@@ -176,14 +177,26 @@ pub(crate) fn run_pack(opts: &PackOpts) -> Result<(), String> {
     {
         fs::create_dir_all(parent).map_err(cli_error)?;
     }
-    pkg.pack_generation(generation, &opts.output)
+    let pack_opts = tetration::catalog::PackGenerationOptions {
+        remove_package: opts.remove_package,
+    };
+    pkg.pack_generation_with(generation, &opts.output, &pack_opts)
         .map_err(cli_error)?;
     if !opts.quiet {
-        println!(
-            "packed generation={} → {}",
-            generation,
-            opts.output.display()
-        );
+        if opts.remove_package {
+            println!(
+                "packed generation={} → {} (removed package {})",
+                generation,
+                opts.output.display(),
+                opts.package.display()
+            );
+        } else {
+            println!(
+                "packed generation={} → {}",
+                generation,
+                opts.output.display()
+            );
+        }
     }
     Ok(())
 }

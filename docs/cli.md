@@ -13,7 +13,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet export`](#tet-export) `<in.tet> <out>`       | —      | `.tet` → Zarr v3 / HDF5 / NetCDF (from output path)         |
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
 | [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
-| [`tet pack`](#tet-ingest--publish--compact--pack)  | —      | Copy sealed `packed.tet` → standalone `.tet`                |
+| [`tet pack`](#tet-ingest--publish--compact--pack)  | —      | Copy sealed `packed.tet` → standalone `.tet` (`--remove-package` optional) |
 
 ## `tet info`
 
@@ -156,6 +156,7 @@ tet publish climate.tet.d
 tet query '{"dataset":"temp","mean":[]}' -t climate.tet.d -x -q
 tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/prefix?generation=3' -x -q
 tet pack climate.tet.d -o climate.tet
+tet pack climate.tet.d -o climate.tet --remove-package
 ```
 
 ### `tet ingest`
@@ -185,5 +186,6 @@ Freeze sealed staging parts → merge into `packed.tet` → flip `CURRENT`. **`t
 | `PKG.tet.d` | Package root |
 | `-o OUT.tet` | Destination standalone `.tet` |
 | `--generation G` | Generation to copy (default: `CURRENT`) |
+| `--remove-package` | After a verified copy (size + SHA-256 + layout verify), delete the `.tet.d` tree. Default keeps the package. Close any readers pinned on that package first. |
 
 More examples: [`fixtures/queries/`](../fixtures/queries/), [`query_engine.md`](query_engine.md).

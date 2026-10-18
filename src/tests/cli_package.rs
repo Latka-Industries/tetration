@@ -109,6 +109,7 @@ fn cli_ingest_publish_query_pack_smoke() {
         String::from_utf8_lossy(&pack.stderr)
     );
     assert!(packed.is_file());
+    assert!(pkg.is_dir(), "default pack keeps the package");
 
     let verify = tet_cmd()
         .args(["verify", pkg.to_str().unwrap(), "-q"])
@@ -117,6 +118,71 @@ fn cli_ingest_publish_query_pack_smoke() {
     assert!(
         verify.status.success(),
         "verify package: {}",
+        String::from_utf8_lossy(&verify.stderr)
+    );
+}
+
+#[test]
+fn cli_pack_remove_package() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("one.tet");
+    write_one_tet(&src, "temp", 1.0, 2.0);
+
+    let pkg = dir.path().join("climate.tet.d");
+    let ingest = tet_cmd()
+        .args([
+            "ingest",
+            src.to_str().unwrap(),
+            "--out",
+            pkg.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        ingest.status.success(),
+        "ingest: {}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+
+    let publish = tet_cmd()
+        .args(["publish", pkg.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        publish.status.success(),
+        "publish: {}",
+        String::from_utf8_lossy(&publish.stderr)
+    );
+
+    let packed = dir.path().join("climate.tet");
+    let pack = tet_cmd()
+        .args([
+            "pack",
+            pkg.to_str().unwrap(),
+            "-o",
+            packed.to_str().unwrap(),
+            "--remove-package",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        pack.status.success(),
+        "pack --remove-package: {}",
+        String::from_utf8_lossy(&pack.stderr)
+    );
+    assert!(packed.is_file());
+    assert!(
+        !pkg.exists(),
+        "package should be gone after --remove-package"
+    );
+
+    let verify = tet_cmd()
+        .args(["verify", packed.to_str().unwrap(), "-q"])
+        .output()
+        .unwrap();
+    assert!(
+        verify.status.success(),
+        "verify packed: {}",
         String::from_utf8_lossy(&verify.stderr)
     );
 }

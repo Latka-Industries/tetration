@@ -215,11 +215,13 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             package,
             output,
             generation,
+            remove_package,
             quiet,
         } => run_pack(&PackOpts {
             package,
             output,
             generation,
+            remove_package,
             quiet,
         }),
         Commands::Info { .. }
