@@ -171,7 +171,10 @@ fn cli_pack_remove_package() {
         String::from_utf8_lossy(&pack.stderr)
     );
     assert!(packed.is_file());
-    assert!(!pkg.exists(), "package should be gone after --remove-package");
+    assert!(
+        !pkg.exists(),
+        "package should be gone after --remove-package"
+    );
 
     let verify = tet_cmd()
         .args(["verify", packed.to_str().unwrap(), "-q"])
