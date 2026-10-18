@@ -137,8 +137,8 @@ fn recommendation_for_package(f: &VerifyFinding) -> Option<VerifyRecommendation>
         "publishing_incomplete" => Some(rec(
             "abort_or_finish_publish",
             "An incomplete publish lock is present; CURRENT is unchanged.",
-            "Wait for the committer, abort_publish, or quarantine if stale.",
-            None,
+            "Wait for the committer, abort with tet publish --abort, or quarantine if stale.",
+            Some("tet publish <package.tet.d> --abort --generation <G>"),
         )),
         "staging" if warn => Some(rec(
             "staging_gc_optional",

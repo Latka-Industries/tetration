@@ -195,11 +195,13 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             package,
             generation,
             parts,
+            abort,
             quiet,
         } => run_publish(&PublishOpts {
             package,
             generation,
             parts,
+            abort,
             quiet,
         }),
         Commands::Compact {
@@ -211,6 +213,7 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             package,
             generation,
             parts,
+            abort: false,
             quiet,
         }),
         Commands::Pack {

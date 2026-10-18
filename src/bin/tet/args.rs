@@ -184,15 +184,19 @@ pub enum Commands {
     /// Publish sealed staging parts into a new generation (`CURRENT` flip).
     ///
     /// Compact/merge of parts happens during this step (see also `tet compact`).
+    /// Pass `--abort --generation G` to drop a stuck `publishing/<G>/` lock.
     Publish {
         /// Package directory (`.tet.d`).
         package: PathBuf,
-        /// Generation id (default: CURRENT+1, or 1 when empty).
+        /// Generation id (default: CURRENT+1, or 1 when empty). Required with `--abort`.
         #[arg(long, value_name = "G")]
         generation: Option<u64>,
         /// Explicit part ids (comma-separated). Default: all sealed staging parts.
         #[arg(long, value_delimiter = ',', value_name = "ID")]
         parts: Option<Vec<String>>,
+        /// Drop `publishing/<G>/` for a stuck publish (requires `--generation`; refuses CURRENT).
+        #[arg(long)]
+        abort: bool,
         #[arg(short = 'q', long)]
         quiet: bool,
     },
