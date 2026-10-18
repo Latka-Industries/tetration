@@ -12,6 +12,11 @@
 //! [`convert_s3_object_to_tet`](convert::convert_s3_object_to_tet) downloads one `s3://` file, or reads a Zarr prefix one chunk at a time (`tetration-s3`).
 //! `open_s3_package` (feature `tetration-s3`) pins an `s3://bucket/prefix` package and queries it with range reads.
 //!
+//! **0.4.0:** compact/publish attaches per-chunk min/max/null zone maps to the sealed generation
+//! (`ZONE.json`). [`query::ReadPlan::logical_element_count`](query::ReadPlan::logical_element_count)
+//! is the selection length for every dtype; JSON still accepts `logical_f32_element_count` for this
+//! release. CLI history and response formatting live in [`query::cli`](query::cli), not on [`query`].
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
