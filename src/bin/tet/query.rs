@@ -1,13 +1,13 @@
 //! `tet query` execution.
 
-#![allow(deprecated)]
-
 use std::path::PathBuf;
 
 use tetration::layout::mmap_file_read;
+use tetration::query::cli::{
+    QueryOutputFormat, append_cli_query_history, format_query_response, format_query_stderr_hints,
+};
 use tetration::query::{
-    ExecutionDeviceHint, QueryDocument, QueryOutputFormat, QueryResponse, SpillPathAllowlist,
-    append_cli_query_history, format_query_response, format_query_stderr_hints, plan_query_empty,
+    ExecutionDeviceHint, QueryDocument, QueryResponse, SpillPathAllowlist, plan_query_empty,
     plan_query_with_tet_mmap_ex, validate_query,
 };
 

@@ -1,13 +1,12 @@
 //! Shared CLI helpers (`error:` prefix, query JSON input).
 
-#![allow(deprecated)]
-
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
 
 use crate::args::QueryStdoutFormat;
-use tetration::query::{QueryInputFormat, QueryOutputFormat, detect_query_input_format};
+use tetration::query::cli::QueryOutputFormat;
+use tetration::query::{QueryInputFormat, detect_query_input_format};
 
 pub(crate) fn cli_error(message: impl std::fmt::Display) -> String {
     format!("error: {message}")

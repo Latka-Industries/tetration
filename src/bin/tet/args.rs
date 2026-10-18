@@ -1,11 +1,9 @@
 //! Clap argument definitions for `tet`.
 
-#![allow(deprecated)]
-
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use tetration::query::{HistorySettings, QueryOutputFormat};
+use tetration::query::cli::{HistorySettings, QueryOutputFormat};
 
 #[derive(Parser)]
 #[command(

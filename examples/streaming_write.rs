@@ -6,6 +6,7 @@
 
 use tetration::catalog::{TetDatasetStreamSpec, TetFile, TetWriterSession};
 use tetration::prelude::*;
+use tetration::query::cli::{QueryOutputFormat, format_query_response};
 
 const SHAPE: [u64; 2] = [128, 128];
 const CHUNK_SHAPE: [u64; 2] = [32, 32];
