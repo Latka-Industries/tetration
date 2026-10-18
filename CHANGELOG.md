@@ -9,6 +9,7 @@
 ### Changed
 
 - **Breaking (0.4.0):** `ReadPlan.logical_f32_element_count` is `logical_element_count` (public field and JSON key). The count is every dtype. This release still accepts the old JSON key on input. `materialize_read_plan_f32_le` is unchanged (THI-540).
+- **Breaking (0.4.0):** removed the `tetration::query` re-exports of CLI history, `tet info` text, and `format_query_response` / `format_query_stderr_hints` that 0.3.8 deprecated. The formatters remain on `tetration::query::cli` for the `tet` binary. Embedders use `prelude` and `execute_query_*` (THI-541).
 
 ## [0.3.8] - 2026-10-18
 

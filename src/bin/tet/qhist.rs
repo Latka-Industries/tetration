@@ -1,10 +1,8 @@
 //! `tet qhist` — platform query history (list, run).
 
-#![allow(deprecated)]
-
 use std::path::PathBuf;
 
-use tetration::query::{
+use tetration::query::cli::{
     HistoryListFilter, HistorySettings, clear_cli_query_history, format_history_list_json,
     format_history_list_text, get_cli_query_history_entry, parse_history_execute_filter,
 };
@@ -56,7 +54,7 @@ fn run_qhist_list(
 }
 
 struct QhistReplayOpts {
-    entry: tetration::query::CliQueryHistoryEntry,
+    entry: tetration::query::cli::CliQueryHistoryEntry,
     tet: Option<PathBuf>,
     force_execute: bool,
     plan: bool,

@@ -240,11 +240,11 @@ Integration test: [`src/tests/concurrent_query.rs`](../src/tests/concurrent_quer
 | **`document_wire.rs`**, **`document_toml.rs`**    | —                                                                                                                                | Wire JSON parse; TOML → JSON conversion.                                                                                                                                                                   |
 | **`cli/`**                                        | `history.rs`, `info.rs`, `output/` (`mod.rs`, `plan.rs`, `quiet.rs`, `stats.rs`, …)                                              | Platform query history JSONL; `tet info` formatters; `QueryOutputFormat`, `format_query_response`.                                                                                                         |
 
-Public re-exports are wired in [`engine/mod.rs`](../src/query/engine/mod.rs) and [`query/mod.rs`](../src/query/mod.rs) (`tetration::query::plan_query_empty`, `format_query_response`, `QueryOutputFormat`, `execute_query_json`, `materialize_read_plan_f32_le`, `materialize_query_selection`, `materialize_query_transform_ram`, `plan_read_for_document`, `ExecutionBudget`, `spill_read_plan_f32_le`, …). Crate root exposes modules plus [`prelude`](../src/lib.rs).
+Public re-exports are wired in [`engine/mod.rs`](../src/query/engine/mod.rs) and [`query/mod.rs`](../src/query/mod.rs) (`tetration::query::plan_query_empty`, `execute_query_json`, `materialize_read_plan_f32_le`, `materialize_query_selection`, `materialize_query_transform_ram`, `plan_read_for_document`, `ExecutionBudget`, `spill_read_plan_f32_le`, …). Response formatting for `tet` is [`query::cli`](../src/query/cli/mod.rs), not a root re-export. Crate root exposes modules plus [`prelude`](../src/lib.rs).
 
 ## CLI query output
 
-Library entry: **`format_query_response(&QueryResponse, QueryOutputFormat)`** — builds strings for `tet` stdout without mutating the response.
+`tet` stdout: **`query::cli::format_query_response(&QueryResponse, QueryOutputFormat)`** — builds strings without mutating the response. Embedders use `execute_query_*`.
 
 - **`full` / `json`** — serialize the full envelope (pretty vs compact). Use for debugging, golden tests, and tools that need `read_plan.chunks[]`.
 - **`stats`** — [`stats.rs`](../src/query/cli/output/stats.rs) projects catalog/read*plan summaries and execution I/O + `operation*\*` fields; omits chunk rows and preview arrays.

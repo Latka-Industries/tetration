@@ -1,10 +1,9 @@
-//! JSON query documents: validated plans, execution, and CLI formatters.
+//! JSON query documents: validated plans and execution.
 //!
 //! Embedders should use [`crate::prelude`] and [`execute_query_document`] / [`execute_query_json`].
-//! History, `tet info` text, and [`format_query_response`] on this module are CLI presentation and
-//! deprecated as of 0.3.8. They stay callable until 0.4.0.
+//! History, `tet info` text, and response formatting live in [`cli`] for the `tet` binary.
 
-pub(crate) mod cli;
+pub mod cli;
 pub(crate) mod decode;
 mod device;
 mod dispatch;
@@ -24,20 +23,6 @@ pub(crate) mod transform;
 pub(crate) mod types;
 
 pub use crate::catalog::DEFAULT_MEMORY_BUDGET_PERCENT_BPS;
-#[deprecated(
-    since = "0.3.8",
-    note = "CLI presentation. Embedders should use `tetration::prelude` and `execute_query_*`. Removed in 0.4.0."
-)]
-pub use cli::{
-    CliQueryHistoryEntry, DEFAULT_INFO_CHUNK_TABLE_LIMIT, HistoryExecuteFilter, HistoryListFilter,
-    HistorySettings, InfoListFilter, InfoMetadataDisplay, InfoViewSections, QueryOutputFormat,
-    append_cli_query_history, clear_cli_query_history, cli_query_history_enabled,
-    cli_query_history_max, cli_query_history_path, format_history_list_json,
-    format_history_list_text, format_info_json, format_info_quiet, format_info_text,
-    format_query_response, format_query_stderr_hints, get_cli_query_history_entry,
-    history_entry_mode, info_view_sections_from_flags, list_cli_query_history,
-    parse_history_execute_filter,
-};
 pub use device::{
     DeviceRoute, GPU_AUTO_MIN_LOGICAL_BYTES, GPU_HOST_MATERIALIZE_RAM_FRACTION,
     GPU_HOST_MATERIALIZE_UNKNOWN_HOST_CAP_BYTES, cuda_backend_available, gpu_backend_available,

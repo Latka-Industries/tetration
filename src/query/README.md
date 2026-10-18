@@ -32,7 +32,7 @@ QueryDocument (JSON/TOML)
 | `materialize_query_selection`                                | Full dense decode (selection-only; budget preflight) |
 | `estimate_query_selection_bytes`                             | Logical dense size without decode                    |
 | `materialize_query_transform_ram`                            | Full dense transform (`write: ram`, `f32`/`f64`)   |
-| `format_query_response`                                      | CLI-oriented stdout (also used by embedders)       |
+| `query::cli::format_query_response`                          | `tet` stdout formatting                            |
 
 Re-exported from [`prelude`](../lib.rs).
 

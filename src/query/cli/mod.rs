@@ -1,4 +1,7 @@
-//! CLI-only helpers (`tet` history, query response formatting).
+//! CLI helpers for the `tet` binary (history, `tet info`, response formatting).
+//!
+//! Not re-exported from [`crate::query`] or [`crate::prelude`]. Embedders use
+//! [`crate::query::execute_query_document`] / [`crate::query::execute_query_json`].
 
 pub mod history;
 pub mod info;
