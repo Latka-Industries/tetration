@@ -6,10 +6,8 @@ use crate::catalog::{
     CoordAxisV1, DATASET_DTYPE_TAG_V1, TetDatasetStreamSpec, TetDatasetWrite, TetFile,
     TetWriterSession, read_tet_summary_v1,
 };
-use crate::query::{
-    ExecuteQueryOptions, QueryOutputFormat, execute_query_document, format_query_response,
-    parse_query_json, validate_query,
-};
+use crate::query::cli::{QueryOutputFormat, format_query_response};
+use crate::query::{ExecuteQueryOptions, execute_query_document, parse_query_json, validate_query};
 
 const SHAPE: [u64; 2] = [2, 3];
 const CHUNK_SHAPE: [u64; 2] = [2, 2];

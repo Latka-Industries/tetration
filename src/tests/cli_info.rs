@@ -9,7 +9,7 @@ use crate::catalog::{
     DatasetMetadataV1, FooterBlobV1, TetMetadataV1, read_tet_summary_v1, write_footer_blob,
 };
 use crate::layout::mmap_file_read;
-use crate::query::{
+use crate::query::cli::{
     InfoListFilter, InfoMetadataDisplay, InfoViewSections, format_info_json, format_info_quiet,
     format_info_text,
 };

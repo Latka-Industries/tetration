@@ -3,12 +3,13 @@
 use std::env;
 use std::sync::{Mutex, MutexGuard};
 
-use crate::query::{
+use crate::query::cli::{
     HistoryExecuteFilter, HistoryListFilter, HistorySettings, append_cli_query_history,
     clear_cli_query_history, cli_query_history_max, format_history_list_json,
     format_history_list_text, get_cli_query_history_entry, history_entry_mode,
-    list_cli_query_history, parse_history_execute_filter, parse_query_json, validate_query,
+    list_cli_query_history, parse_history_execute_filter,
 };
+use crate::query::{parse_query_json, validate_query};
 
 static HISTORY_ENV_LOCK: Mutex<()> = Mutex::new(());
 

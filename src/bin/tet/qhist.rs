@@ -1,5 +1,7 @@
 //! `tet qhist` — platform query history (list, run).
 
+#![allow(deprecated)]
+
 use std::path::PathBuf;
 
 use tetration::query::{

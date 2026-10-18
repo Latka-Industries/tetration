@@ -35,10 +35,10 @@ pub mod prelude {
         TetWriterSession, read_tet_summary_v1,
     };
     pub use crate::layout::{MAGIC, mmap_file_read};
+    pub use crate::query::cli::{QueryOutputFormat, format_query_response};
     pub use crate::query::{
-        ExecuteQueryOptions, QueryDocument, QueryOutputFormat, QueryResponse, ReadPlan,
-        execute_query_document, execute_query_json, format_query_response, parse_query_json,
-        plan_query_with_tet_mmap_ex, validate_query,
+        ExecuteQueryOptions, QueryDocument, QueryResponse, ReadPlan, execute_query_document,
+        execute_query_json, parse_query_json, plan_query_with_tet_mmap_ex, validate_query,
     };
     pub use crate::verify::{TetVerifyReport, verify_tet_file};
 }

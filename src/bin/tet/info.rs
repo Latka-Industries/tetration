@@ -1,5 +1,7 @@
 //! `tet info` — catalog summary for a `.tet` file.
 
+#![allow(deprecated)]
+
 use std::path::PathBuf;
 
 use tetration::catalog::read_tet_summary_v1;

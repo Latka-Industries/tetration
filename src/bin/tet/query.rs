@@ -1,5 +1,7 @@
 //! `tet query` execution.
 
+#![allow(deprecated)]
+
 use std::path::PathBuf;
 
 use tetration::layout::mmap_file_read;
