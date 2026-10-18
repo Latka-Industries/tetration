@@ -134,9 +134,19 @@ fn overlapping_claims_reject_publish() {
     assert_eq!(list_sealed_parts(&pkg).unwrap().len(), 2);
 
     let err = publish_parts(&pkg, 1, &["a".into(), "b".into()]).unwrap_err();
-    assert!(matches!(
-        err,
-        crate::catalog::CatalogError::Package("overlapping dataset claims in publish set")
-    ));
+    match err {
+        crate::catalog::CatalogError::ClaimOverlap(overlap) => {
+            assert_eq!(overlap.dataset, "same");
+            assert_eq!(overlap.part_a, "a");
+            assert_eq!(overlap.part_b, "b");
+            assert_eq!(overlap.ranges_a, "full_grid");
+            assert_eq!(overlap.ranges_b, "full_grid");
+            let msg = overlap.to_string();
+            assert!(msg.contains("dataset=same"), "{msg}");
+            assert!(msg.contains("parts=a + b"), "{msg}");
+            assert!(msg.contains("full_grid"), "{msg}");
+        }
+        other => panic!("expected ClaimOverlap, got {other:?}"),
+    }
     assert_eq!(pkg.current().unwrap(), None);
 }
