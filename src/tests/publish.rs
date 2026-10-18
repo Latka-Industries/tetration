@@ -4,8 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::catalog::{
-    TetDatasetWrite, TetPackage, TetShardWriter, format_generation_id, list_sealed_parts,
-    publish_parts,
+    TetDatasetWrite, TetPackage, TetShardWriter, dry_run_publish_parts, format_generation_id,
+    list_sealed_parts, publish_parts,
 };
 use crate::verify::{VerifySeverity, verify_tet_package};
 
@@ -149,4 +149,33 @@ fn overlapping_claims_reject_publish() {
         other => panic!("expected ClaimOverlap, got {other:?}"),
     }
     assert_eq!(pkg.current().unwrap(), None);
+}
+
+#[test]
+fn dry_run_publish_ok_leaves_current_unset() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("dry-ok.tet.d")).unwrap();
+    seal_named(&pkg, "s0", "p0", "temp", &[1.0, 2.0]);
+    seal_named(&pkg, "s1", "p1", "pressure", &[3.0, 4.0]);
+
+    let validation = dry_run_publish_parts(&pkg, 1, &["p0".into(), "p1".into()]).unwrap();
+    assert_eq!(validation.generation, 1);
+    assert_eq!(validation.part_ids, vec!["p0", "p1"]);
+    assert_eq!(pkg.current().unwrap(), None);
+    assert!(!pkg.generation_dir(1).exists());
+    assert!(!pkg.publishing_dir().join(format_generation_id(1)).exists());
+}
+
+#[test]
+fn dry_run_publish_rejects_overlap_without_sealing() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("dry-overlap.tet.d")).unwrap();
+    for (session, part) in [("s0", "a"), ("s1", "b")] {
+        seal_named(&pkg, session, part, "same", &[1.0, 2.0]);
+    }
+
+    let err = dry_run_publish_parts(&pkg, 1, &["a".into(), "b".into()]).unwrap_err();
+    assert!(matches!(err, crate::catalog::CatalogError::ClaimOverlap(_)));
+    assert_eq!(pkg.current().unwrap(), None);
+    assert!(!pkg.generation_dir(1).exists());
 }

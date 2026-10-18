@@ -178,10 +178,12 @@ Freeze sealed staging parts → merge into `packed.tet` → flip `CURRENT`. **`t
 | ---- | ------ |
 | `--generation G` | Generation id (default: `CURRENT+1`, or `1`; required with `--abort`) |
 | `--parts ID,…` | Explicit part-id list (default: all sealed staging parts) |
+| `--dry-run` | Claim / schema checks only; do not seal or flip `CURRENT` |
 | `--abort` | Drop a stuck `publishing/<G>/` lock (`--generation` required; refuses `CURRENT`) |
 | `-q` | Quiet |
 
 ```bash
+tet publish climate.tet.d --dry-run
 tet publish climate.tet.d --abort --generation 2
 ```
 
