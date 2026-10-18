@@ -162,6 +162,8 @@ tet pack climate.tet.d -o climate.tet --remove-package
 
 ### `tet ingest`
 
+Copies each input `.tet` into staging as a **full-grid** part (whole datasets). Use this to **add** sealed arrays to a package — not to tile one array across workers. For disjoint chunk-range tiling of a single dataset, use the library [`TetShardWriter`](https://docs.rs/tetration/latest/tetration/catalog/struct.TetShardWriter.html) with [`DatasetClaim::ranges`](https://docs.rs/tetration/latest/tetration/catalog/struct.DatasetClaim.html#method.ranges) (writer protocol decision E).
+
 | Flag / arg | Effect |
 | ---------- | ------ |
 | `<INPUT.tet>…` | One or more sealed `.tet` files (each → one staging part) |

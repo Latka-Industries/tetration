@@ -126,7 +126,8 @@ example.tet.d/
 
 - Overlapping chunk claims with **differing** bytes → **publish error**
 - Overlapping chunk claims with **identical** content (`part_sha256` match, or matching chunk payloads for the claimed dataset) → **allow** (idempotent retry; merge keeps one copy)
-- Filling disjoint chunks of an existing dataset → OK
+- Filling disjoint chunks of an existing dataset → OK (happy path: `TetShardWriter` + `DatasetClaim::ranges`; merge unions complementary tiles)
+- Full-file `tet ingest` → **add whole datasets** (full-grid claims), not a way to tile one array
 - Introducing a **new** dataset name → OK (typically in `G+1` relative to prior packed catalog)
 - Changing dtype or global shape of an existing dataset name → **reject** by default (explicit replace flag on publish is opt-in; never mutates sealed `G`)
 
