@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-17
+
+### Added
+
+- `tet convert` reads a Zarr v2 or v3 prefix on `s3://` one chunk at a time. The `.tet` matches a local-directory convert of the same store. A single-file `s3://bucket/file.ext` still downloads the whole object (`tetration-s3`, `TETRATION_S3_ENDPOINT`) (THI-516)
+
 ## [0.3.4] - 2026-10-17
 
 ### Added
