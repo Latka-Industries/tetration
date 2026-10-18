@@ -48,7 +48,7 @@ pub(super) struct StatsReadPlan<'a> {
     chunk_count: usize,
     total_stored_bytes: u64,
     logical_selection_shape: &'a Vec<u64>,
-    logical_f32_element_count: usize,
+    logical_element_count: usize,
 }
 
 pub(super) fn format_stats_json(response: &QueryResponse) -> Result<String, String> {
@@ -75,7 +75,7 @@ pub(super) fn stats_read_plan(p: &ReadPlan) -> StatsReadPlan<'_> {
         chunk_count: p.chunk_count,
         total_stored_bytes: p.total_stored_bytes,
         logical_selection_shape: &p.logical_selection_shape,
-        logical_f32_element_count: p.logical_f32_element_count,
+        logical_element_count: p.logical_element_count,
     }
 }
 

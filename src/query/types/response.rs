@@ -229,10 +229,10 @@ pub struct QueryExecutionPreview {
     /// Host available RAM when the budget was resolved, if detectable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host_available_ram_bytes: Option<u64>,
-    /// Logical selection size in bytes (`4 * logical_f32_element_count` for f32 datasets).
+    /// Logical selection size in bytes (`4 * logical_element_count` for f32 datasets).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logical_selection_f32_bytes: Option<u64>,
-    /// Logical selection size in bytes (`elem_size * logical_f32_element_count`).
+    /// Logical selection size in bytes (`elem_size * logical_element_count`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logical_selection_bytes: Option<u64>,
     /// Whether streaming fold used parallel chunk workers for this run.

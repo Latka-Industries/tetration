@@ -134,7 +134,7 @@ pub(crate) fn transform_read_plan_f32_le_ram(
     warnings: &mut TransformWarnings,
 ) -> Result<(Vec<f32>, u64), TetError> {
     with_warnings_cell(warnings, |cell| {
-        let n = plan.logical_f32_element_count;
+        let n = plan.logical_element_count;
         let mut out = vec![f32::NAN; n];
         let bytes = transform_scatter_fill_f32(mmap, plan, &mut out, stats, cell)?;
         Ok((out, bytes))
@@ -153,7 +153,7 @@ pub(crate) fn transform_read_plan_f64_le_ram(
     warnings: &mut TransformWarnings,
 ) -> Result<(Vec<f64>, u64), TetError> {
     with_warnings_cell(warnings, |cell| {
-        let n = plan.logical_f32_element_count;
+        let n = plan.logical_element_count;
         let mut out = vec![f64::NAN; n];
         let bytes = transform_scatter_fill_f64(mmap, plan, &mut out, stats, cell)?;
         Ok((out, bytes))
@@ -174,7 +174,7 @@ pub(crate) fn transform_spill_f32_le(
 ) -> Result<u64, TetError> {
     with_warnings_cell(warnings, |cell| {
         let byte_len = spill_byte_len_from_elem_count(
-            plan.logical_f32_element_count,
+            plan.logical_element_count,
             f32_le::bytes_from_elem_count,
         )?;
         spill_read_plan_pod_le_impl(
@@ -202,7 +202,7 @@ pub(crate) fn transform_spill_f64_le(
 ) -> Result<u64, TetError> {
     with_warnings_cell(warnings, |cell| {
         let byte_len = spill_byte_len_from_elem_count(
-            plan.logical_f32_element_count,
+            plan.logical_element_count,
             f64_le::bytes_from_elem_count,
         )?;
         spill_read_plan_pod_le_impl(

@@ -51,8 +51,8 @@ pub(crate) fn resolve_transform_output(
                 return Err(TetError::Validation(format!(
                     "logical selection ({} elements, {} bytes) exceeds memory_budget_bytes ({}); \
                      use `write`: `switch` or `spill`, or raise execution.memory_budget_bytes",
-                    plan.logical_f32_element_count,
-                    budget.logical_element_bytes(dtype, plan.logical_f32_element_count)?,
+                    plan.logical_element_count,
+                    budget.logical_element_bytes(dtype, plan.logical_element_count)?,
                     budget.memory_budget_bytes
                 )));
             }

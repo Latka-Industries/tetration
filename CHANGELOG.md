@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Per-chunk min/max/null zone maps at compact/publish. Stats are written to `generations/<G>/ZONE.json` for the sealed image and recomputed for the next generation. Staging parts are left unchanged. `tet verify` treats `MANIFEST.zone_maps = "required"` as an error when the file is missing, hashed wrong, or (with `--deep`) stale, and warns when an older generation has no zone maps (THI-473).
+
+### Changed
+
+- **Breaking (0.4.0):** `ReadPlan.logical_f32_element_count` is `logical_element_count` (public field and JSON key). The count is every dtype. This release still accepts the old JSON key on input. `materialize_read_plan_f32_le` is unchanged (THI-540).
+
 ## [0.3.8] - 2026-10-18
 
 ### Changed

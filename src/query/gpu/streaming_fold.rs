@@ -201,7 +201,7 @@ pub(crate) fn streaming_fold_chunk_subset(
         None => (0..plan.chunks.len()).collect(),
     };
 
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let mut preview = vec![0.0_f32; preview_cap];
     let mut gpu_acc = ScalarReductionResult::default_fields(0);
@@ -327,7 +327,7 @@ struct ReadPlanGeom {
     selection_box_stop_exclusive: Vec<u64>,
     selection_step: Vec<u64>,
     logical_selection_shape: Vec<u64>,
-    logical_f32_element_count: usize,
+    logical_element_count: usize,
     chunk_touch_policy: &'static str,
 }
 
@@ -345,7 +345,7 @@ impl ReadPlanGeom {
             selection_box_stop_exclusive: plan.selection_box_stop_exclusive.clone(),
             selection_step: plan.selection_step.clone(),
             logical_selection_shape: plan.logical_selection_shape.clone(),
-            logical_f32_element_count: plan.logical_f32_element_count,
+            logical_element_count: plan.logical_element_count,
             chunk_touch_policy: plan.chunk_touch_policy,
         }
     }
@@ -465,7 +465,7 @@ fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> Rea
         selection_box_stop_exclusive: geom.selection_box_stop_exclusive,
         selection_step: geom.selection_step,
         logical_selection_shape: geom.logical_selection_shape,
-        logical_f32_element_count: geom.logical_f32_element_count,
+        logical_element_count: geom.logical_element_count,
     }
 }
 
@@ -521,7 +521,7 @@ fn streaming_cpu_value_fold(
         Some(ix) => ix.to_vec(),
         None => (0..plan.chunks.len()).collect(),
     };
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let mut preview = vec![0.0_f32; preview_cap];
     let mut value = ValueAccum::default();

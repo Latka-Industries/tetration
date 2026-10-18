@@ -4,9 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::catalog::package::sha256_file_hex;
+use crate::catalog::zone::sha256_hex;
 use crate::catalog::{
     CatalogError, DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
-    TetPackage, format_generation_id,
+    TetPackage, ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, zone_maps_for_packed,
 };
 
 use super::options::VerifyOptions;
@@ -208,6 +209,7 @@ fn verify_sealed_generation(
     let findings = check_manifest_ids(&manifest, generation, findings)?;
     let findings = check_packed_len(&packed, &manifest, is_current, &prefix, findings)?;
     let findings = check_packed_sha(&packed, &manifest, is_current, findings)?;
+    let findings = check_zone_maps(package, generation, &manifest, &packed, opts, findings)?;
     check_packed_layout(&packed, opts, &prefix, findings)
 }
 
@@ -276,6 +278,126 @@ fn check_manifest_ids(
         return Err(findings);
     }
     Ok(findings)
+}
+
+fn check_zone_maps(
+    package: &TetPackage,
+    generation: u64,
+    manifest: &GenerationManifest,
+    packed: &Path,
+    opts: VerifyOptions,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
+    let zone_path = package.generation_dir(generation).join(ZONE_MAPS_FILE);
+    match manifest.zone_maps.as_deref() {
+        Some(ZONE_MAPS_REQUIRED) => {
+            if !zone_path.is_file() {
+                findings.push(err_finding(
+                    "zone_maps",
+                    format!(
+                        "generations/{}/{} missing (required)",
+                        format_generation_id(generation),
+                        ZONE_MAPS_FILE
+                    ),
+                ));
+                return Err(findings);
+            }
+            let bytes = match fs::read(&zone_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    findings.push(err_finding("zone_maps", e.to_string()));
+                    return Err(findings);
+                }
+            };
+            let actual = sha256_hex(&bytes);
+            match &manifest.zone_maps_sha256 {
+                Some(expected) if expected == &actual => {}
+                Some(expected) => {
+                    findings.push(err_finding(
+                        "zone_maps_sha256",
+                        format!("{ZONE_MAPS_FILE} sha256 {actual} != MANIFEST {expected}"),
+                    ));
+                    return Err(findings);
+                }
+                None => {
+                    findings.push(err_finding(
+                        "zone_maps_sha256",
+                        "MANIFEST zone_maps is required but zone_maps_sha256 is absent".to_owned(),
+                    ));
+                    return Err(findings);
+                }
+            }
+            let doc = match serde_json::from_slice::<crate::catalog::GenerationZoneMaps>(&bytes) {
+                Ok(d) => d,
+                Err(e) => {
+                    findings.push(err_finding("zone_maps", e.to_string()));
+                    return Err(findings);
+                }
+            };
+            if doc.generation != generation {
+                findings.push(err_finding(
+                    "zone_maps",
+                    format!(
+                        "ZONE.json generation {} != directory {generation}",
+                        doc.generation
+                    ),
+                ));
+                return Err(findings);
+            }
+            if let Some(expected) = &manifest.packed_sha256
+                && expected != &doc.packed_sha256
+            {
+                findings.push(err_finding(
+                    "zone_maps",
+                    "ZONE.json packed_sha256 does not match MANIFEST".to_owned(),
+                ));
+                return Err(findings);
+            }
+            if opts.deep_decode {
+                let packed_bytes = match fs::read(packed) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        findings.push(err_finding("zone_maps_stale", e.to_string()));
+                        return Err(findings);
+                    }
+                };
+                let fresh = match zone_maps_for_packed(
+                    &packed_bytes,
+                    generation,
+                    doc.packed_sha256.as_str(),
+                ) {
+                    Ok(z) => z,
+                    Err(e) => {
+                        findings.push(err_finding("zone_maps_stale", e.to_string()));
+                        return Err(findings);
+                    }
+                };
+                if fresh.chunks != doc.chunks {
+                    findings.push(err_finding(
+                        "zone_maps_stale",
+                        "ZONE.json does not match a recompute of packed.tet".to_owned(),
+                    ));
+                    return Err(findings);
+                }
+            }
+            findings.push(ok_finding("zone_maps", Some("required".to_owned())));
+            Ok(findings)
+        }
+        Some(other) => {
+            findings.push(err_finding(
+                "zone_maps",
+                format!("unsupported MANIFEST zone_maps value {other:?}"),
+            ));
+            Err(findings)
+        }
+        None => {
+            findings.push(warn_finding(
+                "zone_maps",
+                "advisory: generation sealed without zone maps".to_owned(),
+            ));
+            Ok(findings)
+        }
+    }
 }
 
 fn check_packed_len(

@@ -71,7 +71,7 @@ pub(crate) fn try_scalar_f32_fold_cuda(
         );
     }
     let device_index = route.cuda_device.unwrap_or(0);
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let logical_bytes = u64::try_from(n.checked_mul(4).ok_or("gpu_logical_bytes_overflow")?)
         .map_err(|_| "gpu_logical_bytes_overflow")?;
     if !crate::query::device::host_materialize_fits(logical_bytes) {
@@ -147,7 +147,7 @@ pub(crate) fn try_scalar_f32_fold_rocm(
         );
     }
     let device_index = route.cuda_device.unwrap_or(0);
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let logical_bytes = u64::try_from(n.checked_mul(4).ok_or("gpu_logical_bytes_overflow")?)
         .map_err(|_| "gpu_logical_bytes_overflow")?;
     if !crate::query::device::host_materialize_fits(logical_bytes) {
@@ -211,7 +211,7 @@ pub(crate) fn try_scalar_f32_fold_metal(
     route: DeviceRoute,
     f16_input: bool,
 ) -> Result<(FoldPlanOutcome, DeviceRoute), &'static str> {
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let logical_bytes = u64::try_from(n.checked_mul(4).ok_or("gpu_logical_bytes_overflow")?)
         .map_err(|_| "gpu_logical_bytes_overflow")?;
     if !crate::query::device::host_materialize_fits(logical_bytes) {

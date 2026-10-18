@@ -1,9 +1,11 @@
 //! Chunk read plan types produced after resolving a query selection against a catalog.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+use crate::catalog::ChunkZoneStat;
 
 /// Per-chunk file regions needed to satisfy the current plan (on-disk payload bytes; may be zstd-compressed).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct PlannedChunkIo {
     pub chunk_index: Vec<u64>,
@@ -11,6 +13,19 @@ pub struct PlannedChunkIo {
     pub stored_byte_len: u64,
     pub raw_byte_len: u64,
     pub codec: u32,
+    /// Min/max/null from the sealed generation's zone map, when the open file has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<ChunkZoneStat>,
+}
+
+fn chunk_touch_policy_static(s: &str) -> Result<&'static str, String> {
+    if s == CHUNK_TOUCH_POLICY.dense_half_open_unit_step {
+        Ok(CHUNK_TOUCH_POLICY.dense_half_open_unit_step)
+    } else if s == CHUNK_TOUCH_POLICY.strided_half_open {
+        Ok(CHUNK_TOUCH_POLICY.strided_half_open)
+    } else {
+        Err(format!("unknown chunk_touch_policy {s:?}"))
+    }
 }
 
 /// Chunk-level read plan: which tiles touch the resolved global selection box.
@@ -32,8 +47,51 @@ pub struct ReadPlan {
     pub selection_step: Vec<u64>,
     /// Extents of the strided selection grid (row-major order matches materialized `f32`).
     pub logical_selection_shape: Vec<u64>,
-    /// Element count of the logical row-major buffer produced by [`crate::query::materialize_read_plan_f32_le`].
-    pub logical_f32_element_count: usize,
+    /// Element count of the logical row-major selection. Every dtype, not only `f32`.
+    ///
+    /// JSON accepts `logical_f32_element_count` for this release only.
+    pub logical_element_count: usize,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct ReadPlanWire {
+    chunk_touch_policy: String,
+    chunk_count: usize,
+    total_stored_bytes: u64,
+    chunks: Vec<PlannedChunkIo>,
+    dataset_shape: Vec<u64>,
+    chunk_shape: Vec<u64>,
+    selection_box_start: Vec<u64>,
+    selection_box_stop_exclusive: Vec<u64>,
+    selection_step: Vec<u64>,
+    logical_selection_shape: Vec<u64>,
+    #[serde(alias = "logical_f32_element_count")]
+    logical_element_count: usize,
+}
+
+impl<'de> Deserialize<'de> for ReadPlan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = ReadPlanWire::deserialize(deserializer)?;
+        let chunk_touch_policy = chunk_touch_policy_static(&wire.chunk_touch_policy)
+            .map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            chunk_touch_policy,
+            chunk_count: wire.chunk_count,
+            total_stored_bytes: wire.total_stored_bytes,
+            chunks: wire.chunks,
+            dataset_shape: wire.dataset_shape,
+            chunk_shape: wire.chunk_shape,
+            selection_box_start: wire.selection_box_start,
+            selection_box_stop_exclusive: wire.selection_box_stop_exclusive,
+            selection_step: wire.selection_step,
+            logical_selection_shape: wire.logical_selection_shape,
+            logical_element_count: wire.logical_element_count,
+        })
+    }
 }
 
 /// Stable string tokens for [`ReadPlan::chunk_touch_policy`] (JSON wire compatibility).

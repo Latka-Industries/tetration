@@ -2,9 +2,10 @@
 
 use crate::catalog::store::{
     GenerationPin, PackageStore, PinnedPackedTet, assemble_object_from_ranges, pin_packed_tet,
-    read_superblock_at, read_tet_summary_at_store,
+    read_superblock_at, read_tet_summary_at_store, zone_maps_key,
 };
-use crate::query::engine::run::{plan_query_with_tet_mmap_ex, plan_read_for_document};
+use crate::catalog::{CatalogError, GenerationZoneMaps};
+use crate::query::engine::run::{plan_query_with_zones, plan_read_for_document};
 use crate::query::engine::spill_policy::SpillPathAllowlist;
 use crate::query::execute::ExecuteQueryOptions;
 use crate::query::plan::fetch::plan_query_fetch;
@@ -22,7 +23,8 @@ pub fn plan_query_with_store(
     tet_label: Option<&str>,
 ) -> Result<QueryResponse, TetError> {
     let buf = materialize_catalog_image(store, pin)?;
-    plan_query_with_tet_mmap_ex(doc, tet_label, &buf, None, None)
+    let zones = load_store_zone_maps(store, pin.generation)?;
+    plan_query_with_zones(doc, tet_label, &buf, None, None, zones.as_ref())
 }
 
 /// Execute a query by fetching catalog + touched chunk ranges, then running the mmap engine.
@@ -45,8 +47,29 @@ pub fn execute_query_with_store(
         .map_err(|e| TetError::Validation(e.to_string()))?;
     let buf = assemble_object_from_ranges(store, &pin.object_key, pin.object_len, &fetch.ranges)
         .map_err(|e| TetError::Validation(e.to_string()))?;
+    let zones = load_store_zone_maps(store, pin.generation)?;
     // No filesystem path: omit tet_path so spill defaults are not derived from a fake URI.
-    plan_query_with_tet_mmap_ex(doc, None, &buf, options.preview_max, spill_allowlist)
+    plan_query_with_zones(
+        doc,
+        None,
+        &buf,
+        options.preview_max,
+        spill_allowlist,
+        zones.as_ref(),
+    )
+}
+
+fn load_store_zone_maps(
+    store: &dyn PackageStore,
+    generation: u64,
+) -> Result<Option<GenerationZoneMaps>, TetError> {
+    match store.read_all(&zone_maps_key(generation)) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|e| TetError::Validation(e.to_string())),
+        Err(CatalogError::Package("store object missing")) => Ok(None),
+        Err(e) => Err(TetError::Catalog(e)),
+    }
 }
 
 /// Pin `CURRENT` (or an explicit generation) once and execute `doc` against that object.

@@ -69,7 +69,7 @@ fn plan_quiet_line(dataset: &str, plan: &ReadPlan) -> String {
         quiet_prefix(dataset),
         "status=planned".to_string(),
         format!("chunks={}", plan.chunk_count),
-        format!("elements={}", plan.logical_f32_element_count),
+        format!("elements={}", plan.logical_element_count),
         format!("stored_bytes={}", plan.total_stored_bytes),
         format!("logical_shape={shape}"),
         format!("touch_policy={}", plan.chunk_touch_policy),

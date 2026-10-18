@@ -331,7 +331,7 @@ pub(crate) fn run_tier_c_operation(
         return run_tier_c_operation(&synthetic, plan, op);
     }
 
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let shape = &plan.logical_selection_shape;
     let axes = op.axes();
 

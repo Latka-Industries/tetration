@@ -136,7 +136,7 @@ example.tet.d/
 1. **Freeze** an explicit **part-id list** (decision **C**). If using a staging scan, snapshot the list into memory/`MANIFEST` draft *before* building; parts sealed after the snapshot are not in this `G`.
 2. Exclusive-create `publishing/<G>/` (decision **G**). On collision: abort (not corruption). Heartbeat file while working; default stale threshold **1h**.
 3. Build **`packed.tet`** (layout v1) from the frozen parts (optional compact/merge first — decision **I**).
-4. Fsync `packed.tet`; write `MANIFEST.json` with: `G`, frozen part ids, provenance checksums, catalog summary, checksum of `packed.tet`.
+4. Fsync `packed.tet`; recompute per-chunk zone maps into `ZONE.json` (do not edit staging); write `MANIFEST.json` with: `G`, frozen part ids, provenance checksums, catalog summary, checksum of `packed.tet`, and `zone_maps: "required"` plus the `ZONE.json` checksum.
 5. Move/rename completed tree into `generations/<G>/` (must contain `packed.tet` + `MANIFEST`).
 6. Atomically set `CURRENT` → `G`.
 7. Staging GC optional afterward (decision **D**): sealed verify must **not** require staging files.
@@ -187,6 +187,8 @@ example.tet.d/
 | Bad / missing `MANIFEST` for CURRENT | **Error** | `current_manifest` / `manifest_*` |
 | `packed.tet` fails layout-v1 verify | **Error** | `packed_layout` (+ nested e.g. `chunk_coords`) |
 | Checksum / length mismatch vs `MANIFEST` | **Error** | `manifest_sha256` / `manifest_byte_len` |
+| `MANIFEST.zone_maps = "required"` but `ZONE.json` missing, hash mismatch, or (`--deep`) stats ≠ recompute | **Error** | `zone_maps` / `zone_maps_sha256` / `zone_maps_stale` |
+| Generation sealed with no zone maps (pre-0.4 manifest) | **Warn** (advisory) | `zone_maps` |
 | Overlapping claims with differing bytes at publish time | **Error** (publish reject) | — (never seals) |
 | Overlapping claims with identical bytes | **OK** (idempotent) | — |
 | Duplicate chunk coords inside sealed `packed.tet` | **Error** | `chunk_coords` |

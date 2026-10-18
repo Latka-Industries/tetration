@@ -20,6 +20,7 @@ pub mod store;
 mod stream_write;
 pub mod tile;
 mod write;
+pub(crate) mod zone;
 
 use std::borrow::Cow;
 use std::io;
@@ -71,7 +72,7 @@ pub use store::{
     publish_lock_is_stale, publish_staged_parts, publish_staged_parts_with_options,
     publishing_lock_key, quarantine_publish_lock, read_superblock_at, read_tet_summary_at_store,
     seal_staged_generation, seal_staged_generation_with_options, stage_part,
-    touch_publish_heartbeat,
+    touch_publish_heartbeat, zone_maps_key,
 };
 #[cfg(feature = "tetration-s3")]
 pub use store::{OpenedS3Package, S3Config, S3OpenError, S3Store, open_s3_package};
@@ -83,6 +84,10 @@ pub use tile::{chunk_coords_intersecting_global_box, chunk_coords_intersecting_s
 #[cfg(test)]
 pub(crate) use write::write_sparse_raw_array_file;
 pub use write::{write_multi_raw_array_file, write_one_chunk_raw_file, write_raw_array_file};
+pub use zone::{
+    ChunkZoneStat, GenerationZoneMaps, ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, ZONE_MAPS_VERSION,
+    encode_zone_maps, read_zone_maps_file, zone_maps_for_packed, zone_maps_json_for_packed,
+};
 
 /// Verify APIs moved to [`crate::verify`]; re-exported for compatibility.
 pub use crate::verify::{

@@ -92,7 +92,7 @@ fn fold_read_plan_partial_operation_impl(
 ) -> Result<shared::FoldPlanOutcome, TetError> {
     let layout = partial_geometry::partial_axis_layout(plan, axis_labels)?;
     let shape = &plan.logical_selection_shape;
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let mut f32_preview = vec![f32::NAN; preview_cap];
     let mut f64_preview = vec![f64::NAN; preview_cap];
