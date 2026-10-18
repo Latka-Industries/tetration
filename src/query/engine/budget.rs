@@ -155,7 +155,7 @@ impl ExecutionBudget {
         plan: &ReadPlan,
         dtype: ElementDtype,
     ) -> Result<bool, TetError> {
-        self.exceeds_budget(dtype, plan.logical_f32_element_count)
+        self.exceeds_budget(dtype, plan.logical_element_count)
     }
 
     /// Whether a dense in-memory logical buffer for `plan` would exceed the RAM budget (f32 bytes).

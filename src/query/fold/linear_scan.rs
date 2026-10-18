@@ -36,7 +36,7 @@ pub fn detect_contiguous_raw_span(plan: &ReadPlan, elem_size: usize) -> Option<C
     if plan.chunks.is_empty() {
         return None;
     }
-    let expected_raw = plan.logical_f32_element_count.checked_mul(elem_size)? as u64;
+    let expected_raw = plan.logical_element_count.checked_mul(elem_size)? as u64;
     if expected_raw == 0 {
         return None;
     }
@@ -584,7 +584,7 @@ pub(crate) fn fold_read_plan_scalar_linear(
     let span = detect_contiguous_raw_span(plan, elem_size).ok_or_else(|| {
         TetError::Validation("linear scan requires contiguous raw payload span".into())
     })?;
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let p = LinearFoldParams {
         mmap,
         tet_path,

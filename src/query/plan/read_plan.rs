@@ -1,6 +1,8 @@
 //! Build [`ReadPlan`] from catalog summary and chunk coordinate list.
 
-use crate::catalog::{ChunkIndexEntryV1, MAX_NDIM, TetFileSummaryV1};
+use crate::catalog::{
+    ChunkIndexEntryV1, ChunkZoneStat, GenerationZoneMaps, MAX_NDIM, TetFileSummaryV1,
+};
 use crate::query::types::{PlannedChunkIo, ReadPlan, TetError};
 
 pub(crate) struct ReadPlanGeometry<'a> {
@@ -73,6 +75,7 @@ fn planned_chunk_io(
     ndim: usize,
     coord: &[u64; MAX_NDIM],
     entry: &ChunkIndexEntryV1,
+    zone: Option<ChunkZoneStat>,
 ) -> PlannedChunkIo {
     PlannedChunkIo {
         chunk_index: coord[..ndim].to_vec(),
@@ -80,7 +83,21 @@ fn planned_chunk_io(
         stored_byte_len: entry.stored_byte_len,
         raw_byte_len: entry.raw_byte_len,
         codec: entry.codec,
+        zone,
     }
+}
+
+fn zone_for_chunk(
+    zones: Option<&GenerationZoneMaps>,
+    dataset_idx: usize,
+    ndim: usize,
+    coord: &[u64; MAX_NDIM],
+) -> Option<ChunkZoneStat> {
+    let zones = zones?;
+    let index = &coord[..ndim];
+    zones.chunks.iter().find_map(|z| {
+        (z.dataset_id == dataset_idx as u64 && z.chunk_index == index).then(|| z.clone())
+    })
 }
 
 fn find_chunk_entry<'a>(
@@ -101,10 +118,11 @@ pub(crate) fn build_read_plan(
     coords: &[[u64; MAX_NDIM]],
     chunk_touch_policy: &'static str,
     geom: &ReadPlanGeometry<'_>,
+    zones: Option<&GenerationZoneMaps>,
 ) -> Result<ReadPlan, TetError> {
     let logical_selection_shape =
         selection_logical_shape_u64(geom.g0, geom.g1_exclusive, geom.step)?;
-    let logical_f32_element_count = shape_product_usize(&logical_selection_shape)?;
+    let logical_element_count = shape_product_usize(&logical_selection_shape)?;
     let mut chunks = Vec::with_capacity(coords.len());
     let mut total_stored: u64 = 0;
     for coord in coords {
@@ -119,7 +137,12 @@ pub(crate) fn build_read_plan(
             .ok_or_else(|| {
                 TetError::Validation("total stored bytes overflow when summing read plan".into())
             })?;
-        chunks.push(planned_chunk_io(ndim, coord, entry));
+        chunks.push(planned_chunk_io(
+            ndim,
+            coord,
+            entry,
+            zone_for_chunk(zones, dataset_idx, ndim, coord),
+        ));
     }
     Ok(ReadPlan {
         chunk_touch_policy,
@@ -132,6 +155,6 @@ pub(crate) fn build_read_plan(
         selection_box_stop_exclusive: geom.g1_exclusive.to_vec(),
         selection_step: geom.step.to_vec(),
         logical_selection_shape,
-        logical_f32_element_count,
+        logical_element_count,
     })
 }

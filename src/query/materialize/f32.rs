@@ -43,7 +43,7 @@ pub(crate) fn materialize_read_plan_f32_le_into_core(
     dst: &mut [f32],
     scatter_fill: ScatterFillFn,
 ) -> Result<MaterializeReadPlanF32IntoOutcome, TetError> {
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     if matches!(max_elements, Some(0)) {
         return Ok(MaterializeReadPlanF32IntoOutcome {
             logical_element_count: n,
@@ -113,7 +113,7 @@ pub struct MaterializeReadPlanF32IntoOutcome {
 
 /// Like [`materialize_read_plan_f32_le`], but writes decoded values into `dst` without allocating a `Vec`.
 ///
-/// When `max_elements` is `None`, `dst.len()` must be at least [`ReadPlan::logical_f32_element_count`].
+/// When `max_elements` is `None`, `dst.len()` must be at least [`ReadPlan::logical_element_count`].
 /// When `max_elements` is `Some(m)` with `m > 0`, `dst.len()` must be at least `m.min(logical)`.
 /// `Some(0)` writes nothing and does not touch `dst`.
 ///
@@ -145,7 +145,7 @@ pub(crate) fn fold_read_plan_scalar_operation(
             policy.fold_workers,
         );
     }
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_f32.min(n);
     let mut preview = vec![f32::NAN; preview_cap];
     let mut total_bytes_read_from_disk: u64 = 0;
@@ -214,7 +214,7 @@ pub(crate) fn materialize_scatter_fill(
 /// Same validation failures as [`materialize_read_plan_f32_le`], plus I/O or mmap errors on `path`.
 pub fn spill_read_plan_f32_le(mmap: &[u8], plan: &ReadPlan, path: &Path) -> Result<u64, TetError> {
     let byte_len = spill_byte_len_from_elem_count(
-        plan.logical_f32_element_count,
+        plan.logical_element_count,
         crate::utils::f32_le::bytes_from_elem_count,
     )?;
     spill_read_plan_pod_le_impl(

@@ -31,6 +31,16 @@ pub fn packed_tet_key(generation: u64) -> String {
     )
 }
 
+/// `ZONE.json` key for a sealed generation (beside `packed.tet`).
+#[must_use]
+pub fn zone_maps_key(generation: u64) -> String {
+    format!(
+        "generations/{}/{}",
+        format_generation_id(generation),
+        crate::catalog::ZONE_MAPS_FILE
+    )
+}
+
 /// Manifest key for a sealed generation.
 #[must_use]
 pub fn generation_manifest_key(generation: u64) -> String {

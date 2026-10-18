@@ -62,6 +62,8 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Today:** organization is **geometric** — logical coordinates → chunk coordinates via the chunk index. Footer metadata supports `dim_names`, coordinate **labels**, and attrs, but there is no secondary index for value predicates.
 
+**0.4.0 (in tree, not tagged):** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats. Predicate pushdown that skips chunks is the next step, not this cut.
+
 **Direction:** optional metadata indexes so predicates such as `temperature > 100`, `year = 2025`, or `region = Arizona` can skip most chunks — analogous to database indexes, min/max zone maps, or Parquet statistics.
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Indexes must be optional, verifiable, and evolvable without breaking v1 readers.

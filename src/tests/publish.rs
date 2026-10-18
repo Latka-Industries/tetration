@@ -118,8 +118,16 @@ fn crash_after_rename_before_current_flip() {
     let g2 = pkg.generation_dir(2);
     fs::create_dir_all(&g2).unwrap();
     fs::copy(pkg.packed_tet_path(1), g2.join("packed.tet")).unwrap();
+    let mut zone = crate::catalog::read_zone_maps_file(
+        &pkg.generation_dir(1).join(crate::catalog::ZONE_MAPS_FILE),
+    )
+    .unwrap();
+    zone.generation = 2;
+    let zone_bytes = crate::catalog::encode_zone_maps(&zone).unwrap();
+    fs::write(g2.join(crate::catalog::ZONE_MAPS_FILE), &zone_bytes).unwrap();
     let mut manifest = pkg.read_manifest(1).unwrap();
     manifest.generation = 2;
+    manifest.zone_maps_sha256 = Some(crate::catalog::zone::sha256_hex(&zone_bytes));
     fs::write(
         g2.join("MANIFEST.json"),
         serde_json::to_string_pretty(&manifest).unwrap() + "\n",

@@ -3,8 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::catalog::{
-    CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1, TetFileSummaryV1,
-    chunk_coords_intersecting_strided, read_tet_summary_v1, tensor_bytes_from_shape,
+    CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1, GenerationZoneMaps, TetFileSummaryV1,
+    ZONE_MAPS_FILE, chunk_coords_intersecting_strided, read_tet_summary_v1, read_zone_maps_file,
+    tensor_bytes_from_shape,
 };
 use crate::query::resolve_axes::resolve_query_document_axes;
 use crate::query::resolve_selection::resolve_query_document_selection;
@@ -128,6 +129,25 @@ pub fn plan_query_with_tet_mmap_ex(
     raw_f32_preview_max: Option<usize>,
     spill_allowlist: Option<&SpillPathAllowlist>,
 ) -> Result<QueryResponse, TetError> {
+    let zones = zone_maps_beside(tet_path)?;
+    plan_query_with_zones(
+        doc,
+        tet_path,
+        mmap,
+        raw_f32_preview_max,
+        spill_allowlist,
+        zones.as_ref(),
+    )
+}
+
+pub(crate) fn plan_query_with_zones(
+    doc: &QueryDocument,
+    tet_path: Option<&str>,
+    mmap: &[u8],
+    raw_f32_preview_max: Option<usize>,
+    spill_allowlist: Option<&SpillPathAllowlist>,
+    zones: Option<&GenerationZoneMaps>,
+) -> Result<QueryResponse, TetError> {
     let summary = read_tet_summary_v1(mmap)?;
     match summary.datasets.iter().position(|d| d.name == doc.dataset) {
         Some(dataset_idx) => plan_query_matched_dataset(
@@ -135,12 +155,31 @@ pub fn plan_query_with_tet_mmap_ex(
             dataset_idx,
             doc,
             mmap,
-            tet_path,
-            raw_f32_preview_max,
-            spill_allowlist,
+            &PlanAttach {
+                tet_path,
+                raw_f32_preview_max,
+                spill_allowlist,
+                zones,
+            },
         ),
         None => Ok(plan_query_unmatched_dataset(doc, tet_path, &summary)),
     }
+}
+
+fn zone_maps_beside(tet_path: Option<&str>) -> Result<Option<GenerationZoneMaps>, TetError> {
+    let Some(tet_path) = tet_path else {
+        return Ok(None);
+    };
+    let zone = Path::new(tet_path).parent().map(|p| p.join(ZONE_MAPS_FILE));
+    let Some(zone) = zone else {
+        return Ok(None);
+    };
+    if !zone.is_file() {
+        return Ok(None);
+    }
+    read_zone_maps_file(&zone)
+        .map(Some)
+        .map_err(TetError::Catalog)
 }
 
 fn chunk_index_rows_for_dataset(summary: &TetFileSummaryV1, dataset_idx: usize) -> usize {
@@ -177,7 +216,7 @@ pub fn plan_read_for_document(doc: &QueryDocument, mmap: &[u8]) -> Result<Planne
     let dataset_meta = summary.metadata.datasets.get(&doc.dataset);
     resolve_query_document_axes(&mut doc, dataset_meta, rec.shape.len())?;
     resolve_query_document_selection(&mut doc, dataset_meta, &rec.shape)?;
-    let read_plan = build_matched_read_plan(&summary, dataset_idx, &doc)?;
+    let read_plan = build_matched_read_plan(&summary, dataset_idx, &doc, None)?;
     Ok(PlannedRead {
         read_plan,
         dtype: rec.dtype,
@@ -188,6 +227,7 @@ fn build_matched_read_plan(
     summary: &TetFileSummaryV1,
     dataset_idx: usize,
     doc: &QueryDocument,
+    zones: Option<&GenerationZoneMaps>,
 ) -> Result<ReadPlan, TetError> {
     let rec = &summary.datasets[dataset_idx];
     let (g0, g1, steps) = resolved_dense_global_box(doc, &rec.shape)?;
@@ -206,6 +246,7 @@ fn build_matched_read_plan(
         &coords,
         touch_policy,
         &ReadPlanGeometry::new(&rec.shape, &rec.chunk_shape, &g0, &g1, &steps),
+        zones,
     )
 }
 
@@ -298,14 +339,20 @@ fn matched_dataset_execution(
     Ok(Some(preview))
 }
 
+#[derive(Clone, Copy)]
+struct PlanAttach<'a> {
+    tet_path: Option<&'a str>,
+    raw_f32_preview_max: Option<usize>,
+    spill_allowlist: Option<&'a SpillPathAllowlist>,
+    zones: Option<&'a GenerationZoneMaps>,
+}
+
 fn plan_query_matched_dataset(
     summary: &TetFileSummaryV1,
     dataset_idx: usize,
     doc: &QueryDocument,
     mmap: &[u8],
-    tet_path: Option<&str>,
-    raw_f32_preview_max: Option<usize>,
-    spill_allowlist: Option<&SpillPathAllowlist>,
+    attach: &PlanAttach<'_>,
 ) -> Result<QueryResponse, TetError> {
     let rec = &summary.datasets[dataset_idx];
     let mut doc = doc.clone();
@@ -313,8 +360,8 @@ fn plan_query_matched_dataset(
     resolve_query_document_axes(&mut doc, dataset_meta, rec.shape.len())?;
     resolve_query_document_selection(&mut doc, dataset_meta, &rec.shape)?;
     let rows = chunk_index_rows_for_dataset(summary, dataset_idx);
-    let read_plan = build_matched_read_plan(summary, dataset_idx, &doc)?;
-    if doc.operation.is_some() && raw_f32_preview_max.is_none() {
+    let read_plan = build_matched_read_plan(summary, dataset_idx, &doc, attach.zones)?;
+    if doc.operation.is_some() && attach.raw_f32_preview_max.is_none() {
         return Err(TetError::Validation(
             "`operation` requires mmap execution with an explicit preview limit (e.g. `--execute --preview-f32 64`, or `--preview-f32 0` to omit preview floats)".into(),
         ));
@@ -329,16 +376,16 @@ fn plan_query_matched_dataset(
             read_plan: &read_plan,
             rec,
             summary,
-            tet_path,
-            raw_f32_preview_max,
-            spill_allowlist,
+            tet_path: attach.tet_path,
+            raw_f32_preview_max: attach.raw_f32_preview_max,
+            spill_allowlist: attach.spill_allowlist,
         },
         &mut message,
     )?;
     Ok(query_response(
         &doc,
         message,
-        tet_path,
+        attach.tet_path,
         Some(matched_dataset_resolution(summary, dataset_idx, rec, rows)),
         Some(read_plan),
         execution,

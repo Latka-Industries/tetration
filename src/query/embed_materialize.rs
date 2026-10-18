@@ -53,8 +53,7 @@ pub struct DenseMaterializeOutcome {
 pub fn estimate_query_selection_bytes(doc: &QueryDocument, mmap: &[u8]) -> Result<u64, TetError> {
     let planned = plan_selection_only(doc, mmap)?;
     let dtype = ElementDtype::from_wire(planned.dtype)?;
-    ExecutionBudget::default()
-        .logical_element_bytes(dtype, planned.read_plan.logical_f32_element_count)
+    ExecutionBudget::default().logical_element_bytes(dtype, planned.read_plan.logical_element_count)
 }
 
 /// Materialize a dataset selection (no `operation` key) into a dense buffer.
@@ -80,8 +79,8 @@ pub fn materialize_query_selection(
         return Err(TetError::Validation(format!(
             "logical selection ({} elements, {} bytes) exceeds memory_budget_bytes ({}); \
              slice the selection, use spill, or raise execution.memory_budget_bytes",
-            planned.read_plan.logical_f32_element_count,
-            budget.logical_element_bytes(dtype, planned.read_plan.logical_f32_element_count)?,
+            planned.read_plan.logical_element_count,
+            budget.logical_element_bytes(dtype, planned.read_plan.logical_element_count)?,
             budget.memory_budget_bytes
         )));
     }

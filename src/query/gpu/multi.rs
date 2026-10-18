@@ -71,7 +71,7 @@ pub(crate) fn try_multi_driver_fold(
         });
     }
 
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let mut preview = vec![0.0_f32; preview_cap];
     let mut gpu_acc = ScalarReductionResult::default_fields(0);

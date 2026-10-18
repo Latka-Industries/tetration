@@ -47,3 +47,4 @@ mod variance_simd;
 mod verify;
 mod verify_fixtures;
 mod write_invariants;
+mod zone;

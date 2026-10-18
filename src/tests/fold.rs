@@ -20,7 +20,7 @@ fn sample_plan(chunks: Vec<PlannedChunkIo>, shape: u64) -> ReadPlan {
         selection_box_stop_exclusive: vec![shape],
         selection_step: vec![1],
         logical_selection_shape: vec![shape],
-        logical_f32_element_count: shape as usize,
+        logical_element_count: shape as usize,
     }
 }
 
@@ -68,6 +68,7 @@ fn chunk_indices_sorted_by_payload_offset() {
             stored_byte_len: 10,
             raw_byte_len: 10,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![0],
@@ -75,6 +76,7 @@ fn chunk_indices_sorted_by_payload_offset() {
             stored_byte_len: 10,
             raw_byte_len: 10,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![1],
@@ -82,6 +84,7 @@ fn chunk_indices_sorted_by_payload_offset() {
             stored_byte_len: 10,
             raw_byte_len: 10,
             codec: 0,
+            zone: None,
         },
     ];
     let plan = sample_plan(chunks, 3);
@@ -103,6 +106,7 @@ fn policy_parallel_default_all_regimes() {
             stored_byte_len: 64,
             raw_byte_len: 64,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![1],
@@ -110,6 +114,7 @@ fn policy_parallel_default_all_regimes() {
             stored_byte_len: 64,
             raw_byte_len: 64,
             codec: 0,
+            zone: None,
         },
     ];
     let plan = sample_plan(chunks, 32);
@@ -142,6 +147,7 @@ fn detect_contiguous_raw_span_requires_adjacent_payloads() {
             stored_byte_len: 8,
             raw_byte_len: 8,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![1],
@@ -149,6 +155,7 @@ fn detect_contiguous_raw_span_requires_adjacent_payloads() {
             stored_byte_len: 8,
             raw_byte_len: 8,
             codec: 0,
+            zone: None,
         },
     ];
     let plan = sample_plan(chunks, 4);
@@ -164,6 +171,7 @@ fn detect_contiguous_raw_span_ok_for_sequential_raw() {
             stored_byte_len: 8,
             raw_byte_len: 8,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![1],
@@ -171,6 +179,7 @@ fn detect_contiguous_raw_span_ok_for_sequential_raw() {
             stored_byte_len: 8,
             raw_byte_len: 8,
             codec: 0,
+            zone: None,
         },
     ];
     let plan = sample_plan(chunks, 4);
@@ -193,6 +202,7 @@ fn policy_in_core_keeps_parallel_not_linear_scan() {
             stored_byte_len: 64,
             raw_byte_len: 64,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![1],
@@ -200,6 +210,7 @@ fn policy_in_core_keeps_parallel_not_linear_scan() {
             stored_byte_len: 64,
             raw_byte_len: 64,
             codec: 0,
+            zone: None,
         },
     ];
     let plan = sample_plan(chunks, 32);
@@ -222,6 +233,7 @@ fn policy_fold_parallel_false_enables_sequential_io() {
             stored_byte_len: 64,
             raw_byte_len: 64,
             codec: 0,
+            zone: None,
         },
         PlannedChunkIo {
             chunk_index: vec![1],
@@ -229,6 +241,7 @@ fn policy_fold_parallel_false_enables_sequential_io() {
             stored_byte_len: 64,
             raw_byte_len: 64,
             codec: 0,
+            zone: None,
         },
     ];
     let plan = sample_plan(chunks, 32);

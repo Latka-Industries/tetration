@@ -669,7 +669,7 @@ pub(crate) fn fold_read_plan_scalar_operation_int(
             policy.fold_workers,
         );
     }
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let ctx = IntScalarFoldCtx {
         mmap,

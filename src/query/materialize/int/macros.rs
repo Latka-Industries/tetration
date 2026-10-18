@@ -78,7 +78,7 @@ macro_rules! define_int_materialize {
         /// overflow, or I/O or mmap errors on `path`.
         pub fn $spill_fn(mmap: &[u8], plan: &ReadPlan, path: &Path) -> Result<u64, TetError> {
             let byte_len = $crate::query::materialize::shared::spill_byte_len_from_elem_count(
-                plan.logical_f32_element_count,
+                plan.logical_element_count,
                 $le_mod::bytes_from_elem_count,
             )?;
             spill_read_plan_int_le_impl(mmap, plan, path, byte_len, $scatter_seq)

@@ -100,7 +100,7 @@ fn attach_budget_fields(
     preview.memory_budget_bytes = Some(budget.memory_budget_bytes);
     preview.host_available_ram_bytes = budget.host_available_ram_bytes;
     preview.logical_selection_bytes = budget
-        .logical_element_bytes(dtype, plan.logical_f32_element_count)
+        .logical_element_bytes(dtype, plan.logical_element_count)
         .ok();
     if dtype == ElementDtype::F32 {
         preview.logical_selection_f32_bytes = preview.logical_selection_bytes;
@@ -216,7 +216,7 @@ fn run_materialize_required_operation(
         materialize::materialize_logical_selection(mmap, plan, budget, allowlist, dtype)?;
     let bundle = materialize::preview_from_materialized(
         &materialized,
-        plan.logical_f32_element_count,
+        plan.logical_element_count,
         max_preview,
     )?;
     let operation = run_tier_c_operation(&materialized, plan, op)?;
@@ -347,11 +347,11 @@ fn build_decode_preview(
             dispatch::spill_full_selection(mmap, plan, &resolved, dtype)?;
         let bundle = dispatch::spill_export_preview(
             &resolved,
-            plan.logical_f32_element_count,
+            plan.logical_element_count,
             max_preview,
             dtype,
         )?;
-        let spill_bytes = budget.logical_element_bytes(dtype, plan.logical_f32_element_count)?;
+        let spill_bytes = budget.logical_element_bytes(dtype, plan.logical_element_count)?;
         let mut preview = preview_from_bundle(
             total_bytes_read_from_disk,
             bundle,
@@ -371,8 +371,8 @@ fn build_decode_preview(
         return Err(types::TetError::Validation(format!(
             "logical selection ({} elements, {} bytes) exceeds memory_budget_bytes ({}); \
              use a positive preview cap, a reduction key, `spill`, or raise execution.memory_budget_bytes / memory_budget_percent_bps",
-            plan.logical_f32_element_count,
-            budget.logical_element_bytes(dtype, plan.logical_f32_element_count)?,
+            plan.logical_element_count,
+            budget.logical_element_bytes(dtype, plan.logical_element_count)?,
             budget.memory_budget_bytes
         )));
     }

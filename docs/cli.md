@@ -174,7 +174,7 @@ Copies each input `.tet` into staging as a **full-grid** part (whole datasets). 
 
 ### `tet publish` / `tet compact`
 
-Freeze sealed staging parts → merge into `packed.tet` → flip `CURRENT`. **`tet compact` is an alias**: compact/merge happens during publish (not a separate visibility step). Local packages use the same exclusive `publishing/<G>/` + heartbeat rule as [writer protocol v2](writer_protocol_v2.md). Object-store / multi-host publish is the library `PackageStore` path (`publish_staged_parts` / `PublishOptions`); the CLI still targets a local `.tet.d`.
+Freeze sealed staging parts → merge into `packed.tet` → write per-chunk zone maps (`ZONE.json`) → flip `CURRENT`. **`tet compact` is an alias**: compact/merge happens during publish (not a separate visibility step). Staging parts are not updated with those stats. Local packages use the same exclusive `publishing/<G>/` + heartbeat rule as [writer protocol v2](writer_protocol_v2.md). Object-store / multi-host publish is the library `PackageStore` path (`publish_staged_parts` / `PublishOptions`); the CLI still targets a local `.tet.d`.
 
 | Flag | Effect |
 | ---- | ------ |

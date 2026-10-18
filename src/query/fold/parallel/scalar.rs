@@ -337,7 +337,7 @@ fn fold_read_plan_scalar_parallel(
     visit: ScalarFoldVisit,
     workers: Option<usize>,
 ) -> Result<shared::FoldPlanOutcome, TetError> {
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let (previews, preview_addr, preview_len) = ParallelScalarFoldPreviews::new(preview_cap, visit);
     let parts =

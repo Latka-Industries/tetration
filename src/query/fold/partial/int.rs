@@ -98,7 +98,7 @@ fn fold_read_plan_partial_operation_promoted(
 ) -> Result<shared::FoldPlanOutcome, TetError> {
     let layout = partial_geometry::partial_axis_layout(plan, axis_labels)?;
     let shape = &plan.logical_selection_shape;
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let preview_cap = max_preview.min(n);
     let mut saw_any = false;
     let mut total_bytes_read_from_disk: u64 = 0;

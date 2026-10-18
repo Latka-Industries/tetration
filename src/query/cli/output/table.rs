@@ -113,7 +113,7 @@ fn push_plan_table(out: &mut String, plan: &ReadPlan) {
             ("logical_shape".to_string(), shape),
             (
                 "logical_elements".to_string(),
-                plan.logical_f32_element_count.to_string(),
+                plan.logical_element_count.to_string(),
             ),
         ],
     );

@@ -92,8 +92,7 @@ macro_rules! define_float_materialize {
         ///
         /// Same validation failures as [`$read_fn`], plus I/O or mmap errors on `path`.
         pub fn $spill_fn(mmap: &[u8], plan: &ReadPlan, path: &Path) -> Result<u64, TetError> {
-            let byte_len =
-                spill_byte_len_from_elem_count(plan.logical_f32_element_count, $bytes_from)?;
+            let byte_len = spill_byte_len_from_elem_count(plan.logical_element_count, $bytes_from)?;
             spill_read_plan_pod_le_impl(mmap, plan, path, byte_len, $scatter_fn, Some($check_fn))
         }
 
@@ -107,7 +106,7 @@ macro_rules! define_float_materialize {
             if crate::query::fold::parallel::use_parallel_fold(plan, policy) {
                 return $parallel_fold(mmap, plan, max_preview, kind, policy.fold_workers);
             }
-            let n = plan.logical_f32_element_count;
+            let n = plan.logical_element_count;
             let preview_cap = max_preview.min(n);
             let mut preview = vec![<$elem>::NAN; preview_cap];
             let mut total_bytes_read_from_disk: u64 = 0;

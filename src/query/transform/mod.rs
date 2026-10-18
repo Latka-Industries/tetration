@@ -93,7 +93,7 @@ fn run_pass2(
     stats: &stats::TransformStats,
     output: target::ResolvedTransformOutput,
 ) -> Result<Pass2Outcome, TetError> {
-    let logical_len = input.plan.logical_f32_element_count;
+    let logical_len = input.plan.logical_element_count;
     let mut warnings = warnings::TransformWarnings::default();
     match (input.dtype, output) {
         (ElementDtype::F32, target::ResolvedTransformOutput::Ram) => {
@@ -156,10 +156,10 @@ fn spill_pass2(
     };
     let spill_bytes = input
         .budget
-        .logical_element_bytes(input.dtype, input.plan.logical_f32_element_count)?;
+        .logical_element_bytes(input.dtype, input.plan.logical_element_count)?;
     let bundle = dispatch::spill_export_preview(
         path,
-        input.plan.logical_f32_element_count,
+        input.plan.logical_element_count,
         input.max_preview,
         input.dtype,
     )?;
@@ -188,7 +188,7 @@ fn sidecar_pass2(
         method,
     };
     let mut warnings = warnings::TransformWarnings::default();
-    let logical_len = input.plan.logical_f32_element_count;
+    let logical_len = input.plan.logical_element_count;
     let (payload, pass2_bytes, bundle) = match dtype {
         ElementDtype::F32 => {
             let (values, bytes) = apply::transform_read_plan_f32_le_ram(
@@ -223,7 +223,7 @@ fn sidecar_pass2(
     sidecar::write_and_publish_sidecar(input.mmap, paths, ctx, input.plan, dtype, &payload)?;
     let spill_bytes = input
         .budget
-        .logical_element_bytes(dtype, input.plan.logical_f32_element_count)?;
+        .logical_element_bytes(dtype, input.plan.logical_element_count)?;
     Ok(Pass2Outcome {
         strategy: MemoryStrategy::TransformSidecar,
         spill_path: Some(paths.dest.display().to_string()),
@@ -367,7 +367,7 @@ pub(crate) fn run_transform(input: &TransformRunInput<'_>) -> Result<TransformOu
     let total_bytes_read_from_disk = pass1_bytes
         .checked_add(pass2.pass2_bytes)
         .ok_or_else(|| TetError::Validation("total bytes read overflow".into()))?;
-    operation.element_count = Some(input.plan.logical_f32_element_count);
+    operation.element_count = Some(input.plan.logical_element_count);
     if pass2.warnings.div_by_zero_count > 0 {
         operation.transform_div_by_zero_count = Some(pass2.warnings.div_by_zero_count);
         operation.transform_div_by_zero_indices = Some(pass2.warnings.div_by_zero_indices);

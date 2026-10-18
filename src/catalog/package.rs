@@ -56,6 +56,12 @@ pub struct GenerationManifest {
     /// Hex SHA-256 of `packed.tet` at seal time (required for new seals; verified by package verify).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packed_sha256: Option<String>,
+    /// `"required"` when this seal wrote `ZONE.json`. Absent on generations sealed before 0.4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone_maps: Option<String>,
+    /// Hex SHA-256 of the `ZONE.json` bytes written at seal time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone_maps_sha256: Option<String>,
 }
 
 /// Options for [`TetPackage::pack_generation_with`] (decision I — `tet pack`).
@@ -354,19 +360,25 @@ impl TetPackage {
             return Err(CatalogError::Package("packed.tet source missing"));
         }
 
-        let packed_byte_len = fs::metadata(packed_tet)?.len();
-        let packed_sha256 = sha256_file_hex(packed_tet)?;
+        let packed_bytes = fs::read(packed_tet)?;
+        let packed_byte_len = packed_bytes.len() as u64;
+        let packed_sha256 = super::zone::sha256_hex(&packed_bytes);
+        let (zone_bytes, zone_sha) =
+            super::zone::zone_maps_json_for_packed(&packed_bytes, generation, &packed_sha256)?;
         let manifest = GenerationManifest {
             generation,
             protocol_version: PACKAGE_PROTOCOL_VERSION,
             part_ids,
             packed_byte_len,
             packed_sha256: Some(packed_sha256),
+            zone_maps: Some(super::zone::ZONE_MAPS_REQUIRED.to_owned()),
+            zone_maps_sha256: Some(zone_sha),
         };
 
         let staged_packed = lock_dir.join(PACKED_TET);
-        fs::copy(packed_tet, &staged_packed)?;
+        fs::write(&staged_packed, &packed_bytes)?;
         write_json_atomic(&lock_dir.join(MANIFEST_FILE), &manifest)?;
+        fs::write(lock_dir.join(super::zone::ZONE_MAPS_FILE), &zone_bytes)?;
         let _ = fs::remove_file(lock_dir.join(HEARTBEAT_FILE));
 
         fs::rename(&lock_dir, &dest_dir)?;

@@ -61,7 +61,7 @@ impl FoldIoPolicy {
         hints: Option<&ExecutionHints>,
         dtype: ElementDtype,
     ) -> Result<Self, TetError> {
-        let logical_bytes = budget.logical_element_bytes(dtype, plan.logical_f32_element_count)?;
+        let logical_bytes = budget.logical_element_bytes(dtype, plan.logical_element_count)?;
         let io_regime = resolve_io_regime(budget, logical_bytes);
         let multi_chunk = plan.chunks.len() > 1;
         let full_dense = Self::is_dense_unit_step_full_selection(plan);

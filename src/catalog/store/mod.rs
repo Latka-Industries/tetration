@@ -37,7 +37,7 @@ pub use local::LocalStore;
 pub use memory::MemoryStore;
 pub use pin::{
     PinnedPackedTet, generation_manifest_key, packed_tet_key, pin_packed_tet,
-    read_generation_manifest,
+    read_generation_manifest, zone_maps_key,
 };
 pub use publish_lock::{
     PublishOptions, begin_publish_store, heartbeat_key, publish_lock_exists, publish_lock_is_stale,

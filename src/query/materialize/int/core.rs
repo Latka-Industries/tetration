@@ -35,7 +35,7 @@ where
     if matches!(max_elements, Some(0)) {
         return Ok((Vec::new(), false, 0));
     }
-    let n = plan.logical_f32_element_count;
+    let n = plan.logical_element_count;
     let cap = max_elements.map(|m| m.min(n));
     let (buf_len, truncated) = match cap {
         Some(c) if c < n => (c, true),

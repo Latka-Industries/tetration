@@ -12,10 +12,10 @@ pub(crate) fn validate_read_plan_geometry(plan: &ReadPlan, out_len: usize) -> Re
             "read_plan geometry fields have inconsistent rank".into(),
         ));
     }
-    if out_len > plan.logical_f32_element_count {
+    if out_len > plan.logical_element_count {
         return Err(TetError::Validation(format!(
-            "output buffer length {out_len} exceeds read_plan.logical_f32_element_count {}",
-            plan.logical_f32_element_count
+            "output buffer length {out_len} exceeds read_plan.logical_element_count {}",
+            plan.logical_element_count
         )));
     }
     Ok(())
@@ -26,10 +26,10 @@ pub(crate) fn validate_full_read_plan_buffer(
     out_len: usize,
 ) -> Result<(), TetError> {
     validate_read_plan_geometry(plan, out_len)?;
-    if out_len != plan.logical_f32_element_count {
+    if out_len != plan.logical_element_count {
         return Err(TetError::Validation(format!(
-            "output buffer length {out_len} != read_plan.logical_f32_element_count {}",
-            plan.logical_f32_element_count
+            "output buffer length {out_len} != read_plan.logical_element_count {}",
+            plan.logical_element_count
         )));
     }
     Ok(())

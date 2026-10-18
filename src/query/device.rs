@@ -155,7 +155,7 @@ pub fn resolve_device_route(
         return DeviceRoute::cpu_fallback(Some(requested), "gpu_unsupported_op");
     }
 
-    let logical_bytes = u64::try_from(plan.logical_f32_element_count)
+    let logical_bytes = u64::try_from(plan.logical_element_count)
         .ok()
         .and_then(|n| dtype.bytes_from_elem_count(n));
 
