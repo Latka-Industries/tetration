@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-10-18
+
 ### Added
 
 - `tet pack --remove-package` / `TetPackage::pack_generation_with`: after a verified copy to a standalone `.tet`, optionally delete the source `.tet.d` (THI-518)
