@@ -7,14 +7,12 @@ use crate::query::engine::spill_policy::{SpillPathAllowlist, TempSpillFile};
 use crate::query::types::{ReadPlan, TetError};
 use crate::utils::dtype::ElementDtype;
 
-use super::f16::{
-    materialize_into_vec_f16, preview_from_materialized_f16, preview_from_spill_file_f16,
-};
 use super::f32::{
     materialize_into_vec, preview_from_materialized_f32, preview_from_spill_file_f32,
 };
-use super::f64::{
-    materialize_into_vec_f64, preview_from_materialized_f64, preview_from_spill_file_f64,
+use super::float::{
+    materialize_into_vec_f16, materialize_into_vec_f64, preview_from_materialized_f16,
+    preview_from_materialized_f64, preview_from_spill_file_f16, preview_from_spill_file_f64,
 };
 use super::int;
 use super::logical::MaterializedLogical;

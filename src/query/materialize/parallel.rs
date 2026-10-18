@@ -396,7 +396,7 @@ pub fn materialize_read_plan_f16_le_parallel(
     plan: &ReadPlan,
     max_elements: Option<usize>,
 ) -> Result<(Vec<half::f16>, bool, u64), TetError> {
-    super::f16::materialize_read_plan_f16_le_core(
+    super::float::materialize_read_plan_f16_le_core(
         mmap,
         plan,
         max_elements,
