@@ -40,7 +40,7 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.5:** `tet convert` of a Zarr v2 or v3 prefix on `s3://` fetches each chunk as the tile is written. The `.tet` matches a local-directory convert. A single-file `s3://bucket/file.ext` still downloads the whole object.
 
-**Shipped in 0.3.6:** local `.tet.d` package cleanup the writer protocol already allowed: `tet pack --remove-package`, `tet gc` (staging + old generations; dry-run default), and `tet publish --abort` (THI-520). S3 prune stays later.
+**Shipped in 0.3.6:** local `.tet.d` package cleanup the writer protocol already allowed: `tet pack --remove-package`, `tet gc` (staging + old generations; dry-run default), and `tet publish --abort` (THI-520). S3 prune is its own cut after 0.4.0 (THI-535), not part of zone maps.
 
 **Shipped in 0.3.7:** publish conflict UX — clearer overlap rejects, `tet publish --dry-run`, identical-byte overlap OK, opt-in `--replace` for G+1 schema change, and disjoint shard claims (THI-524). Default remains reject-on-differing-overlap.
 
