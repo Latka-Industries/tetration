@@ -331,8 +331,9 @@ impl TetPackage {
         Ok(quarantine)
     }
 
-    /// Seal generation `G`: copy `packed_tet` into the publish lock dir, write `MANIFEST`,
-    /// rename into `generations/<G>/`, then flip `CURRENT` (decision I).
+    /// Seal generation `G`: copy `packed_tet` into the publish lock dir, recompute per-chunk
+    /// zone maps into `ZONE.json`, write `MANIFEST` (`zone_maps: "required"`), rename into
+    /// `generations/<G>/`, then flip `CURRENT` (decision I). Staging parts are not updated.
     ///
     /// Caller must hold the lock from [`Self::begin_publish`]. On success the lock directory
     /// becomes the sealed generation tree (no longer under `publishing/`).

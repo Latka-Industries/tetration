@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-18
+
 ### Added
 
 - Per-chunk min/max/null zone maps at compact/publish. Stats are written to `generations/<G>/ZONE.json` for the sealed image and recomputed for the next generation. Staging parts are left unchanged. `tet verify` treats `MANIFEST.zone_maps = "required"` as an error when the file is missing, hashed wrong, or (with `--deep`) stale, and warns when an older generation has no zone maps (THI-473).

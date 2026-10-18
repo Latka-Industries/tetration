@@ -44,7 +44,9 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.7:** publish conflict UX — clearer overlap rejects, `tet publish --dry-run`, identical-byte overlap OK, opt-in `--replace` for G+1 schema change, and disjoint shard claims (THI-524). Default remains reject-on-differing-overlap.
 
-**Shipped in 0.3.8:** library hygiene only. `f16` and `f64` materialize share one macro. Matchable package failures are `CatalogError` variants (display text unchanged). `tetration::query` CLI formatters were deprecated here (THI-536) and removed in the 0.4.0 break (THI-541).
+**Shipped in 0.3.8:** library hygiene only. `f16` and `f64` materialize share one macro. Matchable package failures are `CatalogError` variants (display text unchanged). `tetration::query` CLI formatters were deprecated here (THI-536) and removed in 0.4.0 (THI-541).
+
+**Shipped in 0.4.0:** per-chunk min/max/null zone maps at compact/publish (`generations/<G>/ZONE.json`; staging parts unchanged; verify is required for new seals and advisory for older ones) (THI-473). `ReadPlan.logical_f32_element_count` is `logical_element_count` (THI-540). The deprecated `tetration::query` CLI re-exports are gone; `tet` uses `query::cli` (THI-541). Predicate pushdown and group-by are later in 0.4.x. tet-py is not pinned to this crate yet.
 
 Example query:
 
@@ -62,7 +64,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Today:** organization is **geometric** — logical coordinates → chunk coordinates via the chunk index. Footer metadata supports `dim_names`, coordinate **labels**, and attrs, but there is no secondary index for value predicates.
 
-**0.4.0 (in tree, not tagged):** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats. Predicate pushdown that skips chunks is the next step, not this cut.
+**Shipped in 0.4.0:** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats. Predicate pushdown that skips chunks is the next step, not this cut.
 
 **Direction:** optional metadata indexes so predicates such as `temperature > 100`, `year = 2025`, or `region = Arizona` can skip most chunks — analogous to database indexes, min/max zone maps, or Parquet statistics.
 

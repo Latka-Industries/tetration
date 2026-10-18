@@ -47,7 +47,7 @@ pub struct ReadPlan {
     pub selection_step: Vec<u64>,
     /// Extents of the strided selection grid (row-major order matches materialized `f32`).
     pub logical_selection_shape: Vec<u64>,
-    /// Element count of the logical row-major selection. Every dtype, not only `f32`.
+    /// Element count of the logical row-major selection. Every dtype, not only `f32` (0.4.0).
     ///
     /// JSON accepts `logical_f32_element_count` for this release only.
     pub logical_element_count: usize,
