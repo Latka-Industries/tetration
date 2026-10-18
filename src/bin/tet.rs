@@ -34,7 +34,8 @@ use convert::run_convert;
 use export::run_export;
 use info::{InfoRunOpts, run_info};
 use package_ops::{
-    IngestOpts, PackOpts, PublishOpts, run_compact, run_ingest, run_pack, run_publish,
+    GcOpts, IngestOpts, PackOpts, PublishOpts, run_compact, run_gc, run_ingest, run_pack,
+    run_publish,
 };
 use qhist::run_qhist;
 use query::{QueryRunOpts, run_query};
@@ -133,7 +134,8 @@ fn run_read(cmd: Commands) -> Result<(), String> {
         | Commands::Ingest { .. }
         | Commands::Publish { .. }
         | Commands::Compact { .. }
-        | Commands::Pack { .. } => unreachable!("read commands only"),
+        | Commands::Pack { .. }
+        | Commands::Gc { .. } => unreachable!("read commands only"),
     }
 }
 
@@ -222,6 +224,15 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             output,
             generation,
             remove_package,
+            quiet,
+        }),
+        Commands::Gc {
+            package,
+            apply,
+            quiet,
+        } => run_gc(&GcOpts {
+            package,
+            apply,
             quiet,
         }),
         Commands::Info { .. }

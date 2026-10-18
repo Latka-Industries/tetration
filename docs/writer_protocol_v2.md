@@ -196,7 +196,7 @@ example.tet.d/
 
 Crash mid-publish must leave prior `CURRENT` readable; incomplete `G` is never reader-visible until `set_current`.
 
-**GC (decision J):** default retain `current` and `current-1`. Deleting older `generations/<G>/` is opt-in; never unlink a `packed.tet` that may still be mmap’d.
+**GC (decision J):** default retain `current` and `current-1`. Deleting older `generations/<G>/` is opt-in (`tet gc --apply`); never unlink a `packed.tet` that may still be mmap’d. Staging leftovers after publish are also optional GC (decision D).
 
 Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path.tet.d`. Repair: `tet repair path.tet.d --apply quarantine_publish` for stale locks. Finding-code table: [`docs/cli.md`](cli.md#package-finding-check-names). Reject / mid-publish coverage: `src/tests/package_verify.rs`, `src/tests/publish.rs` ([THI-466](https://linear.app/thicclatka/issue/THI-466), [THI-480](https://linear.app/thicclatka/issue/THI-480)).
 
@@ -210,6 +210,7 @@ Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path
 | `tet publish` | Freeze part list → build `packed.tet` → flip `CURRENT` |
 | `tet compact` | Optional merge of parts **during** publish (not a separate visibility step) |
 | `tet pack` | Copy sealed `G`’s `packed.tet` → standalone `.tet` (optional `--remove-package` after verified copy) |
+| `tet gc` | Drop leftover `staging/` and sealed generations older than `CURRENT` / `CURRENT-1` (dry-run; `--apply`) |
 
 [THI-467](https://linear.app/thicclatka/issue/THI-467) · [THI-464](https://linear.app/thicclatka/issue/THI-464).
 

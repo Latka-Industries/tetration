@@ -14,6 +14,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
 | [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
 | [`tet pack`](#tet-ingest--publish--compact--pack)  | —      | Copy sealed `packed.tet` → standalone `.tet` (`--remove-package` optional) |
+| [`tet gc`](#tet-gc) `<path.tet.d>`                 | —      | Drop leftover staging + old generations (dry-run; `--apply` to delete) |
 
 ## `tet info`
 
@@ -187,5 +188,22 @@ Freeze sealed staging parts → merge into `packed.tet` → flip `CURRENT`. **`t
 | `-o OUT.tet` | Destination standalone `.tet` |
 | `--generation G` | Generation to copy (default: `CURRENT`) |
 | `--remove-package` | After a verified copy (size + SHA-256 + layout verify), delete the `.tet.d` tree. Default keeps the package. Close any readers pinned on that package first. |
+
+## `tet gc`
+
+Drop leftover `staging/` sessions and sealed generations older than `CURRENT` / `CURRENT-1` (writer protocol decisions D + J). **Dry-run by default.**
+
+```bash
+tet gc climate.tet.d
+tet gc climate.tet.d --apply
+```
+
+| Flag / arg | Effect |
+| ---------- | ------ |
+| `PKG.tet.d` | Package root |
+| `--apply` | Actually delete (default: print the plan only) |
+| `-q` | Quiet |
+
+Never deletes the generation named by `CURRENT` or `CURRENT-1`. Local `.tet.d` only in this cut.
 
 More examples: [`fixtures/queries/`](../fixtures/queries/), [`query_engine.md`](query_engine.md).

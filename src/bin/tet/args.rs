@@ -223,6 +223,18 @@ pub enum Commands {
         #[arg(short = 'q', long)]
         quiet: bool,
     },
+    /// Drop leftover staging and sealed generations older than CURRENT / CURRENT-1.
+    ///
+    /// Dry-run by default; pass `--apply` to delete. Never removes CURRENT or CURRENT-1.
+    Gc {
+        /// Package directory (`.tet.d`).
+        package: PathBuf,
+        /// Actually delete (default: print the plan only).
+        #[arg(long)]
+        apply: bool,
+        #[arg(short = 'q', long)]
+        quiet: bool,
+    },
     /// Recent `tet query` log (platform cache; not in `.tet` footer). Default: `list`.
     Qhist(QhistArgs),
 }

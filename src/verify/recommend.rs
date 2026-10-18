@@ -144,7 +144,7 @@ fn recommendation_for_package(f: &VerifyFinding) -> Option<VerifyRecommendation>
             "staging_gc_optional",
             "Staging sessions remain after publish (allowed by protocol).",
             "Optional GC of sealed staging once CURRENT is healthy.",
-            None,
+            Some("tet gc <package.tet.d> --apply"),
         )),
         _ => None,
     }

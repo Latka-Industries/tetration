@@ -49,7 +49,7 @@ pub use metadata::{
     CoordAxisV1, DatasetMetadataV1, FileMetadataV1, MetadataLimitsV1, TetMetadataV1,
 };
 pub use package::{
-    DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
+    DEFAULT_PUBLISH_LOCK_STALE, GcOptions, GcPlan, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
     PackGenerationOptions, PackageProtocol, TetPackage, TetPackagePin, format_generation_id,
 };
 pub use session::{

@@ -123,6 +123,46 @@ fn cli_ingest_publish_query_pack_smoke() {
 }
 
 #[test]
+fn cli_gc_apply() {
+    use crate::catalog::{TetPackage, ingest_tet_file, publish_parts};
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("one.tet");
+    write_one_tet(&src, "temp", 1.0, 2.0);
+    let pkg = TetPackage::create(dir.path().join("g.tet.d")).unwrap();
+    ingest_tet_file(&pkg, &src, "s1", "p1").unwrap();
+    publish_parts(&pkg, 1, &["p1".into()]).unwrap();
+    ingest_tet_file(&pkg, &src, "s2", "p2").unwrap();
+    publish_parts(&pkg, 2, &["p2".into()]).unwrap();
+    ingest_tet_file(&pkg, &src, "s3", "p3").unwrap();
+    publish_parts(&pkg, 3, &["p3".into()]).unwrap();
+
+    let dry = tet_cmd()
+        .args(["gc", pkg.root().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        dry.status.success(),
+        "gc dry-run: {}",
+        String::from_utf8_lossy(&dry.stderr)
+    );
+    assert!(pkg.generation_dir(1).is_dir());
+
+    let apply = tet_cmd()
+        .args(["gc", pkg.root().to_str().unwrap(), "--apply"])
+        .output()
+        .unwrap();
+    assert!(
+        apply.status.success(),
+        "gc --apply: {}",
+        String::from_utf8_lossy(&apply.stderr)
+    );
+    assert!(!pkg.generation_dir(1).exists());
+    assert!(pkg.generation_dir(2).is_dir());
+    assert!(pkg.generation_dir(3).is_dir());
+}
+
+#[test]
 fn cli_pack_remove_package() {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("one.tet");

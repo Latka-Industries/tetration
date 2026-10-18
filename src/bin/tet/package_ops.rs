@@ -1,4 +1,4 @@
-//! `tet ingest` / `tet publish` / `tet compact` / `tet pack` for `.tet.d` packages.
+//! `tet ingest` / `tet publish` / `tet compact` / `tet pack` / `tet gc` for `.tet.d` packages.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -197,6 +197,40 @@ pub(crate) fn run_pack(opts: &PackOpts) -> Result<(), String> {
                 opts.output.display()
             );
         }
+    }
+    Ok(())
+}
+
+pub(crate) struct GcOpts {
+    pub package: PathBuf,
+    pub apply: bool,
+    pub quiet: bool,
+}
+
+pub(crate) fn run_gc(opts: &GcOpts) -> Result<(), String> {
+    let pkg = TetPackage::open(&opts.package).map_err(cli_error)?;
+    let plan = pkg
+        .gc(&tetration::catalog::GcOptions { apply: opts.apply })
+        .map_err(cli_error)?;
+    if opts.quiet {
+        return Ok(());
+    }
+    let mode = if opts.apply { "applied" } else { "dry-run" };
+    if plan.is_empty() {
+        println!("gc {mode}: nothing to remove → {}", opts.package.display());
+        return Ok(());
+    }
+    println!(
+        "gc {mode}: staging_sessions={} generations={:?} → {}",
+        plan.staging_sessions.len(),
+        plan.generations,
+        opts.package.display()
+    );
+    for session in &plan.staging_sessions {
+        println!("  staging {}", session.display());
+    }
+    for &g in &plan.generations {
+        println!("  generation {g}");
     }
     Ok(())
 }

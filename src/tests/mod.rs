@@ -20,6 +20,7 @@ mod ffi;
 mod fixture;
 mod fold;
 mod fs_device;
+mod gc;
 mod layout_roundtrip;
 mod metadata;
 mod package;
