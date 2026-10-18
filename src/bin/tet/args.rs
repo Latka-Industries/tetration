@@ -217,6 +217,9 @@ pub enum Commands {
         /// Generation to pack (default: CURRENT).
         #[arg(long, value_name = "G")]
         generation: Option<u64>,
+        /// After a verified copy, delete the `.tet.d` package (opt-in; close pinned readers first).
+        #[arg(long = "remove-package")]
+        remove_package: bool,
         #[arg(short = 'q', long)]
         quiet: bool,
     },

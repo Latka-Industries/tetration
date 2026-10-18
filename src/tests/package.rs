@@ -2,7 +2,10 @@
 
 use std::time::Duration;
 
-use crate::catalog::{PACKAGE_PROTOCOL_VERSION, TetDatasetWrite, TetPackage, TetWriterSession};
+use crate::catalog::{
+    PACKAGE_PROTOCOL_VERSION, PackGenerationOptions, TetDatasetWrite, TetPackage, TetWriterSession,
+};
+use crate::verify::verify_tet_file;
 
 fn tiny_tet(path: &std::path::Path) {
     let mut session = TetWriterSession::create(path);
@@ -137,4 +140,73 @@ fn staging_session_collision() {
         err,
         crate::catalog::CatalogError::PackagePathExists(_)
     ));
+}
+
+#[test]
+fn pack_generation_keeps_package_by_default() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("keep.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    let src = dir.path().join("src.tet");
+    tiny_tet(&src);
+    pkg.begin_publish(1).unwrap();
+    pkg.seal_generation(1, &src, vec!["a".into()]).unwrap();
+
+    let dest = dir.path().join("out.tet");
+    pkg.pack_generation(1, &dest).unwrap();
+    assert!(dest.is_file());
+    assert!(root.is_dir());
+    assert!(verify_tet_file(&dest).unwrap().ok);
+}
+
+#[test]
+fn pack_generation_remove_package_after_verify() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("rm.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    let src = dir.path().join("src.tet");
+    tiny_tet(&src);
+    pkg.begin_publish(1).unwrap();
+    pkg.seal_generation(1, &src, vec!["a".into()]).unwrap();
+
+    let dest = dir.path().join("out.tet");
+    pkg.pack_generation_with(
+        1,
+        &dest,
+        &PackGenerationOptions {
+            remove_package: true,
+        },
+    )
+    .unwrap();
+    assert!(dest.is_file());
+    assert!(!root.exists());
+    assert!(verify_tet_file(&dest).unwrap().ok);
+}
+
+#[test]
+fn pack_remove_package_refuses_dest_inside_package() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("inside.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    let src = dir.path().join("src.tet");
+    tiny_tet(&src);
+    pkg.begin_publish(1).unwrap();
+    pkg.seal_generation(1, &src, vec!["a".into()]).unwrap();
+
+    let dest = root.join("nested.tet");
+    let err = pkg
+        .pack_generation_with(
+            1,
+            &dest,
+            &PackGenerationOptions {
+                remove_package: true,
+            },
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err, crate::catalog::CatalogError::Package(msg) if msg.contains("inside the package")),
+        "unexpected err: {err:?}"
+    );
+    assert!(root.is_dir());
+    assert!(dest.is_file());
 }
