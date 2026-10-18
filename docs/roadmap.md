@@ -44,6 +44,8 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.7:** publish conflict UX — clearer overlap rejects, `tet publish --dry-run`, identical-byte overlap OK, opt-in `--replace` for G+1 schema change, and disjoint shard claims (THI-524). Default remains reject-on-differing-overlap.
 
+**Shipped in 0.3.8:** library hygiene only. `f16` and `f64` materialize share one macro. Matchable package failures are `CatalogError` variants (display text unchanged). `tetration::query` CLI formatters are deprecated and still present; removal is 0.4.0 (THI-536).
+
 Example query:
 
 ```text

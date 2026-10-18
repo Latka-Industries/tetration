@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-10-18
+
 ### Changed
 
 - `f16` and `f64` materialize, spill, fold, and preview share one macro. Behavior is unchanged (THI-537).
