@@ -12,7 +12,7 @@ Implementation: [`src/convert/`](../src/convert/), [`src/export/`](../src/export
 | --------- | ------- | --------- |
 | **Import → `.tet`** | HDF5, NetCDF, Zarr v2 / v3, NumPy `.npy` / `.npz`, CSV / TSV, Parquet (`tetration-parquet`) | `tet convert <in> <out.tet>` · `convert_to_tet` |
 | **Export `.tet` →** | Zarr v3 directory; HDF5 / NetCDF (`tetration-hdf5` / `tetration-netcdf`) | `tet export <in.tet> <out>` · `export_tet` |
-| **Not implemented** | Parquet / Arrow / `.npy` export; Zarr-on-S3 chunked reads | — |
+| **Not implemented** | Parquet / Arrow / `.npy` export | — |
 
 Tetration’s interchange model is **dense numeric N-D arrays** in a **single sealed `.tet` file**. Converters map foreign arrays into that model; they do not preserve every source construct (VLEN strings, compound types, ragged tables, SQL schemas).
 
@@ -211,7 +211,7 @@ Scalars / 0-d NetCDF variables are recorded the same way.
 | **`.nc.gz` extension peel** | Sniff sees `.nc`, but file body is still gzip — open/decode **not** implemented |
 | **Zarr codecs** | Only raw `bytes` or `bytes`+`zstd`; Blosc, Gzip, Sharding, `transpose` codecs → read failure |
 | **HDF5 filters** | Read via HDF5 library (filter plugins must be available); exotic filters may fail at source |
-| **Cloud objects** | Single-file `s3://bucket/object.ext` downloads the whole object to a temp file, then the existing importer (`tetration-s3`, `TETRATION_S3_ENDPOINT`). Zarr-on-S3 chunked reads are later |
+| **Cloud objects** | Single-file `s3://bucket/object.ext` downloads the whole object to a temp file, then the existing importer. A Zarr v2 or v3 prefix is fetched one chunk at a time and matches a local-directory convert (`tetration-s3`, `TETRATION_S3_ENDPOINT`) |
 
 ### Chunking and geometry
 

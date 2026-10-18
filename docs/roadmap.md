@@ -38,15 +38,17 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.4:** `tet query -t s3://bucket/prefix` and `open_s3_package` pin that package (`CURRENT`, or `?generation=N`) and read through the existing range planner. Credentials stay in `TETRATION_S3_*`.
 
-**Still open:** Zarr-on-S3 chunked reads (0.3.5). Example query:
+**Shipped in 0.3.5:** `tet convert` of a Zarr v2 or v3 prefix on `s3://` fetches each chunk as the tile is written. The `.tet` matches a local-directory convert. A single-file `s3://bucket/file.ext` still downloads the whole object.
+
+Example query:
 
 ```text
 tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation=3' -x
 ```
 
-**Why the rest is hard:** object stores are not POSIX. Latency and partial reads differ from mmap. Conditional publish of `CURRENT` is the store CAS. Chunked Zarr reads remain. The pin rule above does not change with the transport.
+**Why the rest is hard:** object stores are not POSIX. Latency and partial reads differ from mmap. Conditional publish of `CURRENT` is the store CAS. The pin rule above does not change with the transport.
 
-**Relation to v1:** chunk index + fixed payload offsets are unchanged. A pinned `s3://` package is read with the same range planner. Chunked Zarr-on-S3 reads remain.
+**Relation to v1:** chunk index + fixed payload offsets are unchanged. A pinned `s3://` package is read with the same range planner. A Zarr prefix is a foreign store, converted into a `.tet`, not opened as a package.
 
 ---
 
