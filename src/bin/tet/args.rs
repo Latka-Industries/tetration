@@ -185,6 +185,7 @@ pub enum Commands {
     ///
     /// Compact/merge of parts happens during this step (see also `tet compact`).
     /// Pass `--abort --generation G` to drop a stuck `publishing/<G>/` lock.
+    /// Pass `--dry-run` for claim/schema checks only (no seal, no `CURRENT` flip).
     Publish {
         /// Package directory (`.tet.d`).
         package: PathBuf,
@@ -197,6 +198,9 @@ pub enum Commands {
         /// Drop `publishing/<G>/` for a stuck publish (requires `--generation`; refuses CURRENT).
         #[arg(long)]
         abort: bool,
+        /// Claim / schema checks only; do not seal or flip `CURRENT`.
+        #[arg(long = "dry-run")]
+        dry_run: bool,
         #[arg(short = 'q', long)]
         quiet: bool,
     },

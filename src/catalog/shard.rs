@@ -491,6 +491,55 @@ pub fn part_id_from_path(path: &Path) -> String {
     }
 }
 
+/// Result of [`validate_publish_parts`] / [`dry_run_publish_parts`]: claim checks passed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublishValidation {
+    /// Generation id that a real publish would seal (caller-supplied).
+    pub generation: u64,
+    /// Frozen part ids in publish-set order.
+    pub part_ids: Vec<String>,
+}
+
+/// Resolve `part_ids` and reject overlapping claims (decision E). Does not seal or lock.
+///
+/// Shared by [`dry_run_publish_parts`] and [`publish_parts`]. Future schema / replace checks
+/// belong here too.
+///
+/// # Errors
+///
+/// Missing parts, claim overlap, or I/O while reading staging meta.
+pub fn validate_publish_parts(
+    package: &TetPackage,
+    generation: u64,
+    part_ids: &[String],
+) -> Result<(PublishValidation, Vec<(PathBuf, PartMeta)>), CatalogError> {
+    let frozen = resolve_part_ids(package, part_ids)?;
+    if let Some(overlap) = find_claim_overlap(&frozen) {
+        return Err(CatalogError::ClaimOverlap(overlap));
+    }
+    Ok((
+        PublishValidation {
+            generation,
+            part_ids: part_ids.to_vec(),
+        },
+        frozen,
+    ))
+}
+
+/// Claim / schema checks only: no `publishing/` lock, no `packed.tet`, no `CURRENT` flip.
+///
+/// # Errors
+///
+/// Same as [`validate_publish_parts`].
+pub fn dry_run_publish_parts(
+    package: &TetPackage,
+    generation: u64,
+    part_ids: &[String],
+) -> Result<PublishValidation, CatalogError> {
+    let (validation, _) = validate_publish_parts(package, generation, part_ids)?;
+    Ok(validation)
+}
+
 /// Single committer: freeze `part_ids` → merge into `packed.tet` → seal generation `G`.
 ///
 /// Rejects overlapping claims. Does not GC staging. Crash before seal leaves `CURRENT` unchanged.
@@ -504,10 +553,7 @@ pub fn publish_parts(
     generation: u64,
     part_ids: &[String],
 ) -> Result<GenerationManifest, CatalogError> {
-    let frozen = resolve_part_ids(package, part_ids)?;
-    if let Some(overlap) = find_claim_overlap(&frozen) {
-        return Err(CatalogError::ClaimOverlap(overlap));
-    }
+    let (_, frozen) = validate_publish_parts(package, generation, part_ids)?;
 
     let part_paths: Vec<PathBuf> = frozen
         .iter()

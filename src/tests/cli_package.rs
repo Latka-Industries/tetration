@@ -123,6 +123,32 @@ fn cli_ingest_publish_query_pack_smoke() {
 }
 
 #[test]
+fn cli_publish_dry_run() {
+    use crate::catalog::{TetPackage, ingest_tet_file};
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("one.tet");
+    write_one_tet(&src, "temp", 1.0, 2.0);
+    let pkg = TetPackage::create(dir.path().join("dry.tet.d")).unwrap();
+    ingest_tet_file(&pkg, &src, "s0", "only").unwrap();
+
+    let dry = tet_cmd()
+        .args(["publish", pkg.root().to_str().unwrap(), "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(
+        dry.status.success(),
+        "publish --dry-run: {}",
+        String::from_utf8_lossy(&dry.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&dry.stdout);
+    assert!(stdout.contains("dry-run ok"), "{stdout}");
+    assert!(stdout.contains("CURRENT unchanged"), "{stdout}");
+    assert_eq!(pkg.current().unwrap(), None);
+    assert!(!pkg.generation_dir(1).exists());
+}
+
+#[test]
 fn cli_publish_abort() {
     use crate::catalog::{TetPackage, format_generation_id, ingest_tet_file, publish_parts};
 
