@@ -2,10 +2,8 @@
 
 use super::fixture;
 use crate::layout::mmap_file_read;
-use crate::query::{
-    QueryOutputFormat, format_query_response, format_query_stderr_hints, parse_query_json,
-    plan_query_empty, plan_query_with_tet_mmap, validate_query,
-};
+use crate::query::cli::{QueryOutputFormat, format_query_response, format_query_stderr_hints};
+use crate::query::{parse_query_json, plan_query_empty, plan_query_with_tet_mmap, validate_query};
 
 #[test]
 fn format_full_and_json_include_operation_fields() {

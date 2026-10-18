@@ -1,8 +1,10 @@
 //! JSON query documents: validated plans, execution, and CLI formatters.
 //!
-//! Primary public surface for query/embedder use; see also [`crate::prelude`].
+//! Embedders should use [`crate::prelude`] and [`execute_query_document`] / [`execute_query_json`].
+//! History, `tet info` text, and [`format_query_response`] on this module are CLI presentation and
+//! deprecated as of 0.3.8. They stay callable until 0.4.0.
 
-mod cli;
+pub(crate) mod cli;
 pub(crate) mod decode;
 mod device;
 mod dispatch;
@@ -22,6 +24,10 @@ pub(crate) mod transform;
 pub(crate) mod types;
 
 pub use crate::catalog::DEFAULT_MEMORY_BUDGET_PERCENT_BPS;
+#[deprecated(
+    since = "0.3.8",
+    note = "CLI presentation. Embedders should use `tetration::prelude` and `execute_query_*`. Removed in 0.4.0."
+)]
 pub use cli::{
     CliQueryHistoryEntry, DEFAULT_INFO_CHUNK_TABLE_LIMIT, HistoryExecuteFilter, HistoryListFilter,
     HistorySettings, InfoListFilter, InfoMetadataDisplay, InfoViewSections, QueryOutputFormat,

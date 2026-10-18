@@ -6,6 +6,7 @@
 
 - `f16` and `f64` materialize, spill, fold, and preview share one macro. Behavior is unchanged (THI-537).
 - Matchable package failures (`CURRENT` missing, bad session or part id, unsealed part, ingest source missing or empty) are `CatalogError` variants. Display text is unchanged (THI-538).
+- `tetration::query` history, info, and response formatters are deprecated. They still compile. `prelude` and `execute_query_*` are the embed path. Removal is 0.4.0 (THI-539).
 
 ## [0.3.7] - 2026-10-18
 

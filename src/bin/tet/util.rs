@@ -1,5 +1,7 @@
 //! Shared CLI helpers (`error:` prefix, query JSON input).
 
+#![allow(deprecated)]
+
 use std::fs;
 use std::io::{self, Read};
 use std::path::Path;

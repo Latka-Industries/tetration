@@ -8,10 +8,8 @@ use std::{
 };
 
 use crate::catalog::TetFile;
-use crate::query::{
-    ExecuteQueryOptions, QueryOutputFormat, execute_query_document, format_query_response,
-    parse_query_json, validate_query,
-};
+use crate::query::cli::{QueryOutputFormat, format_query_response};
+use crate::query::{ExecuteQueryOptions, execute_query_document, parse_query_json, validate_query};
 
 use super::fixture::write_multichunk_2x3_tiles;
 
