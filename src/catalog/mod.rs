@@ -433,6 +433,26 @@ pub enum CatalogError {
     TooLargeForPlatform { field: &'static str, value: u64 },
     #[error("tet package: {0}")]
     Package(&'static str),
+    #[error("tet package: invalid staging session id")]
+    InvalidStagingSessionId,
+    #[error("tet package: invalid part id")]
+    InvalidPartId,
+    #[error("tet package: PART_META.json missing")]
+    PartMetaMissing,
+    #[error("tet package: part is not sealed")]
+    PartNotSealed,
+    #[error("tet package: sealed part file missing")]
+    SealedPartMissing,
+    #[error("tet package: part byte length mismatch")]
+    PartByteLengthMismatch,
+    #[error("tet package: part sha256 mismatch")]
+    PartSha256Mismatch,
+    #[error("tet package: package has no CURRENT generation")]
+    NoCurrentGeneration,
+    #[error("tet package: ingest source .tet missing")]
+    IngestSourceMissing,
+    #[error("tet package: ingest source has no datasets")]
+    IngestSourceEmpty,
     /// Overlapping chunk claims in a publish set (decision E); includes part ids and ranges.
     #[error("{0}")]
     ClaimOverlap(crate::catalog::shard::ClaimOverlap),

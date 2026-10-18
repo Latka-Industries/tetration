@@ -3,7 +3,8 @@
 use std::time::Duration;
 
 use crate::catalog::{
-    PACKAGE_PROTOCOL_VERSION, PackGenerationOptions, TetDatasetWrite, TetPackage, TetWriterSession,
+    CatalogError, PACKAGE_PROTOCOL_VERSION, PackGenerationOptions, TetDatasetWrite, TetPackage,
+    TetWriterSession,
 };
 use crate::verify::verify_tet_file;
 
@@ -74,6 +75,14 @@ fn publish_lock_exclusive() {
     ));
     pkg.abort_publish(3).unwrap();
     pkg.begin_publish(3).unwrap();
+}
+
+#[test]
+fn pin_current_without_generation() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("empty.tet.d")).unwrap();
+    let err = pkg.pin_current().unwrap_err();
+    assert!(matches!(err, CatalogError::NoCurrentGeneration), "{err:?}");
 }
 
 #[test]

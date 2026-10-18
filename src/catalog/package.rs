@@ -390,11 +390,11 @@ impl TetPackage {
     ///
     /// # Errors
     ///
-    /// Returns [`CatalogError::Package`] when `CURRENT` is absent, or
+    /// Returns [`CatalogError::NoCurrentGeneration`] when `CURRENT` is absent, or
     /// [`CatalogError::GenerationNotSealed`] when `packed.tet` is missing.
     pub fn pin_current(&self) -> Result<TetPackagePin, CatalogError> {
         let Some(g) = self.current()? else {
-            return Err(CatalogError::Package("package has no CURRENT generation"));
+            return Err(CatalogError::NoCurrentGeneration);
         };
         self.pin_generation(g)
     }
@@ -423,7 +423,7 @@ impl TetPackage {
     ///
     /// # Errors
     ///
-    /// Returns [`CatalogError::Package`] when `CURRENT` is absent, or errors from
+    /// Returns [`CatalogError::NoCurrentGeneration`] when `CURRENT` is absent, or errors from
     /// [`Self::open_generation`].
     pub fn open_current(&self) -> Result<TetFile, CatalogError> {
         self.pin_current()?.open()
@@ -457,9 +457,7 @@ impl TetPackage {
     ///
     /// Missing / invalid `CURRENT`, or I/O listing directories.
     pub fn plan_gc(&self) -> Result<GcPlan, CatalogError> {
-        let current = self
-            .current()?
-            .ok_or(CatalogError::Package("package has no CURRENT generation"))?;
+        let current = self.current()?.ok_or(CatalogError::NoCurrentGeneration)?;
 
         let mut staging_sessions = Vec::new();
         let staging = self.staging_dir();
@@ -510,9 +508,7 @@ impl TetPackage {
             return Ok(plan);
         }
 
-        let current = self
-            .current()?
-            .ok_or(CatalogError::Package("package has no CURRENT generation"))?;
+        let current = self.current()?.ok_or(CatalogError::NoCurrentGeneration)?;
         for &g in &plan.generations {
             if g == current || (current > 1 && g == current - 1) {
                 return Err(CatalogError::Package(
@@ -636,7 +632,7 @@ impl TetPackage {
     /// on collision, or I/O errors.
     pub fn create_staging_session(&self, session_id: &str) -> Result<PathBuf, CatalogError> {
         if !is_safe_session_id(session_id) {
-            return Err(CatalogError::Package("invalid staging session id"));
+            return Err(CatalogError::InvalidStagingSessionId);
         }
         let dir = self.staging_dir().join(session_id);
         match fs::create_dir(&dir) {
