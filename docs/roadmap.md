@@ -48,7 +48,9 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.4.0:** per-chunk min/max/null zone maps at compact/publish (`generations/<G>/ZONE.json`; staging parts unchanged; verify is required for new seals and advisory for older ones) (THI-473). `ReadPlan.logical_f32_element_count` is `logical_element_count` (THI-540). The deprecated `tetration::query` CLI re-exports are gone; `tet` uses `query::cli` (THI-541). **tet-py 0.4.0** on PyPI pins this crate.
 
-**Shipped in 0.4.1:** value-filter wire + conservative zone-map chunk skip (`filter` on the query document; `ReadPlan.zone_filter_skipped_chunks`) (THI-543). Group-by remains later (0.4.2 / THI-551).
+**Shipped in 0.4.1:** value-filter wire + conservative zone-map chunk skip (`filter` on the query document; `ReadPlan.zone_filter_skipped_chunks`) (THI-543).
+
+**Shipped in 0.4.2:** `group_by` over dimension names, with the reduction streamed per group when the op is tier-A/B, plus a closed `pipeline` step list (THI-551). S3 / store prune is **0.4.3** (THI-535).
 
 Example query:
 
@@ -74,7 +76,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Indexes must be optional, verifiable, and evolvable without breaking v1 readers.
 
-**Relation to v1:** filter-by-value pushdown is in **0.4.1**; [group-by remains deferred](query_engine.md#intentional-gaps-v1).
+**Relation to v1:** filter-by-value pushdown is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Element-wise filter semantics for aggregates remain later.
 
 ---
 
@@ -105,7 +107,7 @@ GROUP BY region
 
 **Design tension:** scientists want expressive analytics; the format wants a small, auditable control plane. Any extension should declare **tiers** (scalar fold vs materialize-required) and stay JSON/TOML-serializable for agents and FFI.
 
-**Relation to v1:** [`join` vs append](query_engine.md) is already documented; group-by belongs here. Filter-by-value pushdown shipped in 0.4.1.
+**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. Windowed stats and multi-dataset alignment remain later. Filter-by-value pushdown shipped in 0.4.1.
 
 ---
 

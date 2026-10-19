@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-19
+
+### Added
+
+- Closed `group_by` on a query document: dimension names or indices that partition rank with one reduction. Tier-A/B folds stream per group (`memory_strategy = streaming_fold`); tier-C still materializes. `execution.group_count` is the product of the group axes' logical extents (THI-552).
+- Optional `pipeline` array that lowers onto the same document: `select`, then `filter`, then one reduction, then `spill` or `write`. Unknown steps, repeats, and out-of-order stages are rejected. At most eight steps (THI-553).
+
 ## [0.4.1] - 2026-10-19
 
 ### Added
