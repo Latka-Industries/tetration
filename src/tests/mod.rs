@@ -33,6 +33,7 @@ mod reject_corpus;
 mod repair;
 mod resolve_axes;
 mod resolve_selection;
+mod selective_query;
 mod session;
 mod shard;
 mod small_tet_fixtures;
