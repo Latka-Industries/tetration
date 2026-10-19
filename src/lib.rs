@@ -17,6 +17,10 @@
 //! is the selection length for every dtype; JSON still accepts `logical_f32_element_count` for this
 //! release. CLI history and response formatting live in [`query::cli`](query::cli), not on [`query`].
 //!
+//! **0.4.1:** query documents accept a closed top-level `filter` (compare / null predicates). The
+//! planner skips chunks whose zone stats cannot match; see
+//! [`query::ReadPlan::zone_filter_skipped_chunks`](query::ReadPlan::zone_filter_skipped_chunks).
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
