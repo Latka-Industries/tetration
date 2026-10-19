@@ -24,7 +24,7 @@ fn query_requests_spill(doc: &QueryDocument) -> bool {
 use crate::query::engine::budget::ExecutionBudget;
 use crate::query::engine::operations::build_execution_preview;
 use crate::query::engine::spill_policy::SpillPathAllowlist;
-use crate::query::plan::read_plan::{ReadPlanGeometry, build_read_plan};
+use crate::query::plan::read_plan::{ReadPlanGeometry, ZonePushdown, build_read_plan};
 use crate::query::plan::selection::resolved_dense_global_box;
 
 fn dataset_tensor_bytes(dtype: u32, shape: &[u64], expected: u32) -> Option<u64> {
@@ -246,7 +246,11 @@ fn build_matched_read_plan(
         &coords,
         touch_policy,
         &ReadPlanGeometry::new(&rec.shape, &rec.chunk_shape, &g0, &g1, &steps),
-        zones,
+        &ZonePushdown {
+            zones,
+            dtype: rec.dtype,
+            filter: doc.filter.as_ref(),
+        },
     )
 }
 

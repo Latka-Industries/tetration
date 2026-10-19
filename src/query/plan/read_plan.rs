@@ -3,7 +3,8 @@
 use crate::catalog::{
     ChunkIndexEntryV1, ChunkZoneStat, GenerationZoneMaps, MAX_NDIM, TetFileSummaryV1,
 };
-use crate::query::types::{PlannedChunkIo, ReadPlan, TetError};
+use crate::query::plan::zone_pushdown::zone_may_match_filter;
+use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, ValueFilter};
 
 pub(crate) struct ReadPlanGeometry<'a> {
     dataset_shape: &'a [u64],
@@ -29,6 +30,13 @@ impl<'a> ReadPlanGeometry<'a> {
             step,
         }
     }
+}
+
+/// Optional zone-map pushdown inputs for [`build_read_plan`].
+pub(crate) struct ZonePushdown<'a> {
+    pub zones: Option<&'a GenerationZoneMaps>,
+    pub dtype: u32,
+    pub filter: Option<&'a ValueFilter>,
 }
 
 pub(crate) fn selection_logical_shape_u64(
@@ -118,7 +126,7 @@ pub(crate) fn build_read_plan(
     coords: &[[u64; MAX_NDIM]],
     chunk_touch_policy: &'static str,
     geom: &ReadPlanGeometry<'_>,
-    zones: Option<&GenerationZoneMaps>,
+    pushdown: &ZonePushdown<'_>,
 ) -> Result<ReadPlan, TetError> {
     let logical_selection_shape =
         selection_logical_shape_u64(geom.g0, geom.g1_exclusive, geom.step)?;
@@ -132,17 +140,19 @@ pub(crate) fn build_read_plan(
                 &coord[..ndim]
             ))
         })?;
+        let zone = zone_for_chunk(pushdown.zones, dataset_idx, ndim, coord);
+        if let (Some(filter), Some(zone_stat)) = (pushdown.filter, zone.as_ref())
+            && !zone_may_match_filter(pushdown.dtype, zone_stat, filter)
+        {
+            // Conservative pushdown: drop only when zone stats prove a miss.
+            continue;
+        }
         total_stored = total_stored
             .checked_add(entry.stored_byte_len)
             .ok_or_else(|| {
                 TetError::Validation("total stored bytes overflow when summing read plan".into())
             })?;
-        chunks.push(planned_chunk_io(
-            ndim,
-            coord,
-            entry,
-            zone_for_chunk(zones, dataset_idx, ndim, coord),
-        ));
+        chunks.push(planned_chunk_io(ndim, coord, entry, zone));
     }
     Ok(ReadPlan {
         chunk_touch_policy,

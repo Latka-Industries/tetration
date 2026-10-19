@@ -175,6 +175,45 @@ fn deep_verify_rejects_stats_that_do_not_match_payloads() {
 }
 
 #[test]
+fn value_filter_skips_chunks_outside_zone_bounds() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("push.tet.d")).unwrap();
+    // Two chunks of 2: [1, 2] and [10, 11].
+    publish_f32(&pkg, 1, "s", "only", &[1.0, 2.0, 10.0, 11.0]);
+    let packed = pkg.packed_tet_path(1);
+    let bytes = fs::read(&packed).unwrap();
+    let path = packed.display().to_string();
+
+    let full = parse_query_json(r#"{"dataset":"a"}"#).unwrap();
+    validate_query(&full).unwrap();
+    let full_plan = plan_query_with_tet_mmap(&full, Some(&path), &bytes, None)
+        .unwrap()
+        .read_plan
+        .expect("plan");
+    assert_eq!(full_plan.chunk_count, 2);
+
+    let filtered = parse_query_json(r#"{"dataset":"a","filter":{"gt":5}}"#).unwrap();
+    validate_query(&filtered).unwrap();
+    let filtered_plan = plan_query_with_tet_mmap(&filtered, Some(&path), &bytes, None)
+        .unwrap()
+        .read_plan
+        .expect("plan");
+    assert_eq!(filtered_plan.chunk_count, 1);
+    assert!(filtered_plan.chunk_count < full_plan.chunk_count);
+    assert_eq!(filtered_plan.chunks[0].chunk_index, vec![1]);
+
+    // Without ZONE.json beside the path, filter does not skip.
+    let lone = dir.path().join("lone.tet");
+    fs::write(&lone, &bytes).unwrap();
+    let lone_path = lone.display().to_string();
+    let no_zone = plan_query_with_tet_mmap(&filtered, Some(&lone_path), &bytes, None)
+        .unwrap()
+        .read_plan
+        .expect("plan");
+    assert_eq!(no_zone.chunk_count, 2);
+}
+
+#[test]
 fn read_plan_carries_zone_stats_and_renamed_count() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("plan.tet.d")).unwrap();

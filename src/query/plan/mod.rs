@@ -3,3 +3,4 @@
 pub mod fetch;
 pub mod read_plan;
 pub mod selection;
+pub(crate) mod zone_pushdown;
