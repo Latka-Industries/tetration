@@ -367,6 +367,32 @@ pub struct QueryDocument {
     pub write: Option<WriteHints>,
     /// Host-side memory budget overrides for execution.
     pub execution: Option<ExecutionHints>,
+    /// Ordered steps when the document was written as a `pipeline`.
+    ///
+    /// Lowered into `selection`, `filter`, `group_by`, `operation`, `spill`, and `write` at parse
+    /// time. Absent on flat documents.
+    pub pipeline: Option<Vec<PipelineStep>>,
+}
+
+/// One closed stage in a query `pipeline`.
+///
+/// Order is fixed: `select`, then `filter`, then one reduction (`group_by` optional), then
+/// `spill` or `write`. Repeats and unknown stages are rejected.
+#[derive(Debug, Clone)]
+pub enum PipelineStep {
+    /// Axis slices (`select` wire key).
+    Select(Vec<AxisSlice>),
+    /// Cell-value filter (`filter` wire key).
+    Filter(ValueFilter),
+    /// One reduction, optionally partitioned by `group_by`.
+    Reduce {
+        group_by: Option<Vec<String>>,
+        operation: Operation,
+    },
+    /// Export spill path (`spill` wire key).
+    Spill(String),
+    /// Transform output routing (`write` wire key).
+    Write(WriteHints),
 }
 
 /// Host-side execution limits (JSON query document).

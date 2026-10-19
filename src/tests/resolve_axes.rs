@@ -15,6 +15,7 @@ fn minimal_doc(operation: Operation) -> QueryDocument {
         output: None,
         write: None,
         execution: None,
+        pipeline: None,
     }
 }
 
