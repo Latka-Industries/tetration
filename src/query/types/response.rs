@@ -218,6 +218,9 @@ pub struct QueryExecutionPreview {
     /// `in_memory_materialize`, `temp_spill_materialize`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_strategy: Option<&'static str>,
+    /// Number of groups when `group_by` is set (product of those axes' logical extents).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_count: Option<usize>,
     /// When set, full logical selection was spilled as row-major `f32` LE to this path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spill_f32_path: Option<String>,

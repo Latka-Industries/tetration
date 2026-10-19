@@ -33,6 +33,18 @@ fn dataset_tensor_bytes(dtype: u32, shape: &[u64], expected: u32) -> Option<u64>
         .flatten()
 }
 
+fn group_count_for(doc: &QueryDocument, plan: &ReadPlan) -> Option<usize> {
+    let keys = doc.group_by.as_ref()?;
+    let mut count = 1usize;
+    for key in keys {
+        let idx = key.parse::<usize>().ok()?;
+        let extent = *plan.logical_selection_shape.get(idx)?;
+        let extent = usize::try_from(extent).ok()?;
+        count = count.saturating_mul(extent);
+    }
+    Some(count)
+}
+
 fn map_geometry_catalog_error(e: CatalogError) -> TetError {
     match e {
         CatalogError::InvalidWriteSpec(msg) => TetError::Validation(format!(
@@ -380,7 +392,7 @@ fn plan_query_matched_dataset(
             "query accepted; dataset matched; read_plan lists mmap payload regions for touched chunks",
         )
     };
-    let execution = matched_dataset_execution(
+    let mut execution = matched_dataset_execution(
         &MatchedExecutionCtx {
             doc: &doc,
             mmap,
@@ -393,6 +405,12 @@ fn plan_query_matched_dataset(
         },
         &mut message,
     )?;
+    if let Some(preview) = execution.as_mut()
+        && let Some(count) = group_count_for(&doc, &read_plan)
+    {
+        preview.group_count = Some(count);
+        message.push_str(&format!("; group_count={count}"));
+    }
     Ok(query_response(
         &doc,
         message,

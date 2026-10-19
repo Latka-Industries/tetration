@@ -34,6 +34,8 @@ pub struct QueryLimits {
     pub max_operation_axis_label_len: usize,
     /// Maximum number of atomic predicates in a top-level `filter` object.
     pub max_filter_predicates: usize,
+    /// Maximum number of dimension keys in a top-level `group_by` array.
+    pub max_group_by_keys: usize,
 }
 
 impl QueryLimits {
@@ -44,6 +46,7 @@ impl QueryLimits {
         max_dataset_name_len: 1024,
         max_operation_axis_label_len: 32,
         max_filter_predicates: 8,
+        max_group_by_keys: 8,
     };
 }
 
@@ -200,6 +203,9 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
     if let Some(filter) = &doc.filter {
         validate_value_filter(filter, &limits)?;
     }
+    if let Some(keys) = &doc.group_by {
+        validate_group_by(keys, doc.operation.as_ref(), &limits)?;
+    }
     if let Some(op) = &doc.operation {
         validate_operation_axes_v1(op)?;
         validate_operation_params(op)?;
@@ -327,6 +333,50 @@ pub(super) fn validate_value_filter(
                 "`filter` range is empty (`{}`: {lo}, `{}`: {hi})",
                 lo_op.as_wire_str(),
                 hi_op.as_wire_str()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_group_by(
+    keys: &[String],
+    op: Option<&Operation>,
+    limits: &QueryLimits,
+) -> Result<(), TetError> {
+    if keys.is_empty() {
+        return Err(TetError::Validation(
+            "`group_by` must list at least one dimension".into(),
+        ));
+    }
+    if keys.len() > limits.max_group_by_keys {
+        return Err(TetError::Validation(format!(
+            "`group_by` has {} keys; maximum is {}",
+            keys.len(),
+            limits.max_group_by_keys
+        )));
+    }
+    let Some(op) = op else {
+        return Err(TetError::Validation(
+            "`group_by` requires a reduction (for example `\"sum\": []`)".into(),
+        ));
+    };
+    if op.requires_transform()
+        || matches!(
+            op,
+            Operation::Covariance { .. } | Operation::Correlation { .. }
+        )
+    {
+        return Err(TetError::Validation(
+            "`group_by` is not valid with transform, covariance, or correlation".into(),
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for key in keys {
+        validate_operation_axis_token(key)?;
+        if !seen.insert(key.as_str()) {
+            return Err(TetError::Validation(format!(
+                "`group_by` lists dimension `{key}` more than once"
             )));
         }
     }

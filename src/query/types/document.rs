@@ -354,6 +354,11 @@ pub struct QueryDocument {
     pub selection: Option<Vec<AxisSlice>>,
     /// Optional cell-value filter (`filter` wire key); see [`ValueFilter`].
     pub filter: Option<ValueFilter>,
+    /// Dimensions that identify each group (`group_by` wire key).
+    ///
+    /// Names or decimal indices. The reduction runs inside each group (streaming fold for
+    /// tier-A/B). Together with the reduction axes they must partition the dataset rank.
+    pub group_by: Option<Vec<String>>,
     /// Optional reduction over the logical selection.
     pub operation: Option<Operation>,
     /// Optional export spill (`spill` wire key); not used with transform ops.

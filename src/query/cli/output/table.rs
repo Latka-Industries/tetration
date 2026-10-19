@@ -131,6 +131,9 @@ fn push_execution_io_table(out: &mut String, ex: &QueryExecutionPreview) {
     if let Some(s) = ex.memory_strategy {
         rows.push(("memory_strategy".to_string(), s.to_string()));
     }
+    if let Some(n) = ex.group_count {
+        rows.push(("group_count".to_string(), n.to_string()));
+    }
     if let Some(b) = ex.memory_budget_bytes {
         rows.push(("memory_budget_bytes".to_string(), b.to_string()));
     }
