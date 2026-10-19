@@ -6,7 +6,10 @@
 use crate::catalog::MAX_NDIM;
 
 use super::document_wire::parse_query_value;
-use super::types::{AxisSlice, Operation, QueryDocument, TetError, WriteHints, WriteTarget};
+use super::types::{
+    AxisSlice, Operation, QueryDocument, TetError, ValueCompareOp, ValueFilter, ValuePredicate,
+    WriteHints, WriteTarget,
+};
 
 /// How [`parse_query_text`] chooses a parser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -29,6 +32,8 @@ pub struct QueryLimits {
     pub max_dataset_name_len: usize,
     /// Maximum per-axis operation label length (decimal indices are short).
     pub max_operation_axis_label_len: usize,
+    /// Maximum number of atomic predicates in a top-level `filter` object.
+    pub max_filter_predicates: usize,
 }
 
 impl QueryLimits {
@@ -38,6 +43,7 @@ impl QueryLimits {
         max_json_depth: 64,
         max_dataset_name_len: 1024,
         max_operation_axis_label_len: 32,
+        max_filter_predicates: 8,
     };
 }
 
@@ -191,6 +197,9 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
             validate_axis_slice_json(i, sl)?;
         }
     }
+    if let Some(filter) = &doc.filter {
+        validate_value_filter(filter, &limits)?;
+    }
     if let Some(op) = &doc.operation {
         validate_operation_axes_v1(op)?;
         validate_operation_params(op)?;
@@ -217,6 +226,109 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
         return Err(TetError::Validation(
             "query document must not set both `spill` and `write`".into(),
         ));
+    }
+    Ok(())
+}
+
+/// Validate a parsed [`ValueFilter`] (non-empty, finite compare literals, closed ops).
+pub(super) fn validate_value_filter(
+    filter: &ValueFilter,
+    limits: &QueryLimits,
+) -> Result<(), TetError> {
+    if filter.predicates.is_empty() {
+        return Err(TetError::Validation(
+            "`filter` must include at least one predicate".into(),
+        ));
+    }
+    if filter.predicates.len() > limits.max_filter_predicates {
+        return Err(TetError::Validation(format!(
+            "`filter` has {} predicates; maximum is {}",
+            filter.predicates.len(),
+            limits.max_filter_predicates
+        )));
+    }
+    let mut saw_is_null = false;
+    let mut saw_is_not_null = false;
+    let mut lower: Option<(ValueCompareOp, f64)> = None;
+    let mut upper: Option<(ValueCompareOp, f64)> = None;
+    for pred in &filter.predicates {
+        match pred {
+            ValuePredicate::Compare { op, value } => {
+                if !value.is_finite() {
+                    return Err(TetError::Validation(format!(
+                        "`filter.{}` must be a finite number",
+                        op.as_wire_str()
+                    )));
+                }
+                match op {
+                    ValueCompareOp::Gt | ValueCompareOp::Ge => {
+                        if lower.is_some() {
+                            return Err(TetError::Validation(
+                                "`filter` accepts at most one lower bound (`gt` or `ge`)".into(),
+                            ));
+                        }
+                        lower = Some((*op, *value));
+                    }
+                    ValueCompareOp::Lt | ValueCompareOp::Le => {
+                        if upper.is_some() {
+                            return Err(TetError::Validation(
+                                "`filter` accepts at most one upper bound (`lt` or `le`)".into(),
+                            ));
+                        }
+                        upper = Some((*op, *value));
+                    }
+                    ValueCompareOp::Eq | ValueCompareOp::Ne => {}
+                }
+            }
+            ValuePredicate::IsNull => {
+                if saw_is_null {
+                    return Err(TetError::Validation(
+                        "`filter.is_null` must appear at most once".into(),
+                    ));
+                }
+                saw_is_null = true;
+            }
+            ValuePredicate::IsNotNull => {
+                if saw_is_not_null {
+                    return Err(TetError::Validation(
+                        "`filter.is_not_null` must appear at most once".into(),
+                    ));
+                }
+                saw_is_not_null = true;
+            }
+        }
+    }
+    if saw_is_null && saw_is_not_null {
+        return Err(TetError::Validation(
+            "`filter` cannot set both `is_null` and `is_not_null`".into(),
+        ));
+    }
+    if saw_is_null
+        && filter
+            .predicates
+            .iter()
+            .any(|p| matches!(p, ValuePredicate::Compare { .. }))
+    {
+        return Err(TetError::Validation(
+            "`filter.is_null` cannot be combined with numeric comparisons".into(),
+        ));
+    }
+    if let (Some((lo_op, lo)), Some((hi_op, hi))) = (lower, upper) {
+        let empty = match (lo_op, hi_op) {
+            (ValueCompareOp::Gt, ValueCompareOp::Lt) | (ValueCompareOp::Gt, ValueCompareOp::Le) => {
+                lo >= hi
+            }
+            (ValueCompareOp::Ge, ValueCompareOp::Lt) => lo >= hi,
+            (ValueCompareOp::Ge, ValueCompareOp::Le) => lo > hi,
+            _ => false,
+        };
+        if empty {
+            return Err(TetError::Validation(format!(
+                "`filter` range is empty (`{}`: {lo}, `{}`: {hi})",
+                lo_op.as_wire_str(),
+                hi_op.as_wire_str()
+            )));
+        }
     }
     Ok(())
 }

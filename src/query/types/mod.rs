@@ -8,7 +8,7 @@ mod transform_method;
 
 pub use document::{
     AxisSlice, ExecutionDeviceHint, ExecutionHints, Operation, OutputHint, OutputHints,
-    QueryDocument, WriteHints, WriteTarget,
+    QueryDocument, ValueCompareOp, ValueFilter, ValuePredicate, WriteHints, WriteTarget,
 };
 pub use error::TetError;
 pub use plan::{CHUNK_TOUCH_POLICY, ChunkTouchPolicy, PlannedChunkIo, ReadPlan};

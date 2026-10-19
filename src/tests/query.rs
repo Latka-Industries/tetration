@@ -13,9 +13,10 @@ use crate::catalog::{
 use crate::layout::{create_empty_v1_file, mmap_file_read};
 use crate::query::{
     CHUNK_TOUCH_POLICY, Operation, OutputHint, QueryInputFormat, QueryLimits, SpillPathAllowlist,
-    TempSpillFile, detect_query_input_format, materialize_read_plan_f32_le,
-    materialize_read_plan_f32_le_into, materialize_read_plan_f32_le_into_parallel,
-    materialize_read_plan_f32_le_parallel, parse_query_json, parse_query_text, plan_query_empty,
+    TempSpillFile, ValueCompareOp, ValuePredicate, detect_query_input_format,
+    materialize_read_plan_f32_le, materialize_read_plan_f32_le_into,
+    materialize_read_plan_f32_le_into_parallel, materialize_read_plan_f32_le_parallel,
+    parse_query_json, parse_query_text, parse_query_toml, plan_query_empty,
     plan_query_with_tet_mmap, plan_query_with_tet_mmap_ex, validate_query,
 };
 
@@ -180,6 +181,95 @@ fn rejects_empty_dataset() {
 fn rejects_unknown_query_fields() {
     let json = r#"{"dataset":"a","extra":1}"#;
     let err = parse_query_json(json).unwrap_err();
+    assert!(err.to_string().contains("unknown"), "{err}");
+}
+
+#[test]
+fn parses_value_filter_range_and_roundtrips() {
+    let json = r#"{"dataset":"temperature","filter":{"ge":0,"lt":40},"mean":[]}"#;
+    let doc = parse_query_json(json).unwrap();
+    validate_query(&doc).unwrap();
+    let filter = doc.filter.as_ref().unwrap();
+    assert_eq!(filter.predicates.len(), 2);
+    assert!(filter.predicates.iter().any(|p| matches!(
+        p,
+        ValuePredicate::Compare {
+            op: ValueCompareOp::Ge,
+            value
+        } if (*value - 0.0).abs() < f64::EPSILON
+    )));
+    assert!(filter.predicates.iter().any(|p| matches!(
+        p,
+        ValuePredicate::Compare {
+            op: ValueCompareOp::Lt,
+            value
+        } if (*value - 40.0).abs() < f64::EPSILON
+    )));
+    let roundtrip = serde_json::to_string(&doc).unwrap();
+    assert!(roundtrip.contains(r#""filter""#));
+    assert!(roundtrip.contains(r#""ge":0"#) || roundtrip.contains(r#""ge":0.0"#));
+    let again = parse_query_json(&roundtrip).unwrap();
+    validate_query(&again).unwrap();
+    assert_eq!(again.filter, doc.filter);
+}
+
+#[test]
+fn parses_value_filter_is_null_toml() {
+    let toml = r#"
+dataset = "a"
+[filter]
+is_null = true
+"#;
+    let doc = parse_query_toml(toml).unwrap();
+    validate_query(&doc).unwrap();
+    assert_eq!(
+        doc.filter.as_ref().unwrap().predicates,
+        vec![ValuePredicate::IsNull]
+    );
+}
+
+#[test]
+fn rejects_empty_value_filter() {
+    let err = parse_query_json(r#"{"dataset":"a","filter":{}}"#).unwrap_err();
+    assert!(err.to_string().contains("filter"), "{err}");
+}
+
+#[test]
+fn rejects_unknown_value_filter_keys() {
+    let err = parse_query_json(r#"{"dataset":"a","filter":{"between":[0,1]}}"#).unwrap_err();
+    assert!(
+        err.to_string().contains("unknown field `filter.between`"),
+        "{err}"
+    );
+}
+
+#[test]
+fn rejects_non_finite_value_filter() {
+    let err = parse_query_json(r#"{"dataset":"a","filter":{"gt":"inf"}}"#).unwrap_err();
+    assert!(err.to_string().contains("filter.gt"), "{err}");
+    let doc = parse_query_json(r#"{"dataset":"a","filter":{"gt":null}}"#);
+    assert!(doc.is_err());
+}
+
+#[test]
+fn rejects_empty_value_filter_range() {
+    let doc = parse_query_json(r#"{"dataset":"a","filter":{"gt":10,"lt":5}}"#).unwrap();
+    let err = validate_query(&doc).unwrap_err();
+    assert!(err.to_string().contains("empty"), "{err}");
+}
+
+#[test]
+fn rejects_is_null_with_numeric_compare() {
+    let doc = parse_query_json(r#"{"dataset":"a","filter":{"is_null":true,"gt":0}}"#).unwrap();
+    let err = validate_query(&doc).unwrap_err();
+    assert!(err.to_string().contains("is_null"), "{err}");
+}
+
+#[test]
+fn rejects_sql_style_filter_expression() {
+    let err = parse_query_json(r#"{"dataset":"a","filter":"temperature > 100"}"#).unwrap_err();
+    assert!(err.to_string().contains("filter"), "{err}");
+    let err = parse_query_json(r#"{"dataset":"a","where":{"gt":1}}"#).unwrap_err();
     assert!(err.to_string().contains("unknown"), "{err}");
 }
 

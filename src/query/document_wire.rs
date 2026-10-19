@@ -11,7 +11,8 @@ use serde_json::{Map, Value};
 use super::document::QueryLimits;
 use super::types::{
     AxisSlice, ExecutionDeviceHint, ExecutionHints, Operation, OutputHint, OutputHints,
-    QueryDocument, TetError, TransformMethod, WriteHints, WriteTarget,
+    QueryDocument, TetError, TransformMethod, ValueCompareOp, ValueFilter, ValuePredicate,
+    WriteHints, WriteTarget,
 };
 
 const OP_KEYS: &[&str] = &[
@@ -47,10 +48,13 @@ const RESERVED_KEYS: &[&str] = &[
     "layout_version",
     "dataset",
     "selection",
+    "filter",
     "spill",
     "write",
     "execution",
 ];
+
+const FILTER_COMPARE_KEYS: &[&str] = &["eq", "ne", "lt", "le", "gt", "ge"];
 
 /// Parse a JSON value into a [`QueryDocument`].
 ///
@@ -97,6 +101,11 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
         Some(v) => Some(parse_selection(v)?),
     };
 
+    let filter = match obj.get("filter") {
+        None => None,
+        Some(v) => Some(parse_filter(v)?),
+    };
+
     let output = match obj.get("spill") {
         None => None,
         Some(v) => Some(parse_spill(v)?),
@@ -128,6 +137,7 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
         layout_version,
         dataset,
         selection,
+        filter,
         operation,
         output,
         write,
@@ -249,6 +259,90 @@ fn parse_write_timestamp(v: &Value) -> Result<bool, TetError> {
 fn parse_selection(v: &Value) -> Result<Vec<AxisSlice>, TetError> {
     let slices: Vec<AxisSlice> = serde_json::from_value(v.clone())?;
     Ok(slices)
+}
+
+fn parse_filter(v: &Value) -> Result<ValueFilter, TetError> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| TetError::Validation("`filter` must be a JSON object".into()))?;
+    if obj.is_empty() {
+        return Err(TetError::Validation(
+            "`filter` must include at least one predicate".into(),
+        ));
+    }
+    if obj.len() > QueryLimits::DEFAULT.max_filter_predicates {
+        return Err(TetError::Validation(format!(
+            "`filter` has {} keys; maximum is {}",
+            obj.len(),
+            QueryLimits::DEFAULT.max_filter_predicates
+        )));
+    }
+
+    let mut predicates = Vec::with_capacity(obj.len());
+    // Stable parse order so AND lists are deterministic across JSON key order.
+    for key in FILTER_COMPARE_KEYS {
+        if let Some(val) = obj.get(*key) {
+            let op = compare_op_from_key(key);
+            let value = parse_filter_number(key, val)?;
+            predicates.push(ValuePredicate::Compare { op, value });
+        }
+    }
+    if let Some(val) = obj.get("is_null") {
+        parse_filter_true_flag("is_null", val)?;
+        predicates.push(ValuePredicate::IsNull);
+    }
+    if let Some(val) = obj.get("is_not_null") {
+        parse_filter_true_flag("is_not_null", val)?;
+        predicates.push(ValuePredicate::IsNotNull);
+    }
+    for key in obj.keys() {
+        if !is_filter_key(key) {
+            return Err(TetError::Validation(format!(
+                "unknown field `filter.{key}` (expected eq, ne, lt, le, gt, ge, is_null, or is_not_null)"
+            )));
+        }
+    }
+    Ok(ValueFilter { predicates })
+}
+
+fn is_filter_key(key: &str) -> bool {
+    FILTER_COMPARE_KEYS.contains(&key) || matches!(key, "is_null" | "is_not_null")
+}
+
+fn compare_op_from_key(key: &str) -> ValueCompareOp {
+    match key {
+        "eq" => ValueCompareOp::Eq,
+        "ne" => ValueCompareOp::Ne,
+        "lt" => ValueCompareOp::Lt,
+        "le" => ValueCompareOp::Le,
+        "gt" => ValueCompareOp::Gt,
+        "ge" => ValueCompareOp::Ge,
+        _ => unreachable!("compare_op_from_key: {key}"),
+    }
+}
+
+fn parse_filter_number(key: &str, v: &Value) -> Result<f64, TetError> {
+    let n = v
+        .as_f64()
+        .ok_or_else(|| TetError::Validation(format!("`filter.{key}` must be a finite number")))?;
+    if !n.is_finite() {
+        return Err(TetError::Validation(format!(
+            "`filter.{key}` must be a finite number"
+        )));
+    }
+    Ok(n)
+}
+
+fn parse_filter_true_flag(key: &str, v: &Value) -> Result<(), TetError> {
+    match v.as_bool() {
+        Some(true) => Ok(()),
+        Some(false) => Err(TetError::Validation(format!(
+            "`filter.{key}` must be true (omit the key or use the opposite predicate)"
+        ))),
+        None => Err(TetError::Validation(format!(
+            "`filter.{key}` must be a boolean"
+        ))),
+    }
 }
 
 fn parse_u32_field(name: &str, v: &Value) -> Result<u32, TetError> {
@@ -579,6 +673,9 @@ impl Serialize for QueryDocumentWire<'_> {
         if let Some(sel) = &doc.selection {
             map.serialize_entry("selection", sel)?;
         }
+        if let Some(filter) = &doc.filter {
+            serialize_filter(&mut map, filter)?;
+        }
         if let Some(op) = &doc.operation {
             serialize_operation(&mut map, op)?;
         }
@@ -593,6 +690,28 @@ impl Serialize for QueryDocumentWire<'_> {
         }
         map.end()
     }
+}
+
+fn serialize_filter<S>(map: &mut S, filter: &ValueFilter) -> Result<(), S::Error>
+where
+    S: SerializeMap,
+{
+    let mut obj = serde_json::Map::new();
+    for pred in &filter.predicates {
+        match pred {
+            ValuePredicate::Compare { op, value } => {
+                obj.insert(op.as_wire_str().to_owned(), serde_json::json!(value));
+            }
+            ValuePredicate::IsNull => {
+                obj.insert("is_null".to_owned(), serde_json::Value::Bool(true));
+            }
+            ValuePredicate::IsNotNull => {
+                obj.insert("is_not_null".to_owned(), serde_json::Value::Bool(true));
+            }
+        }
+    }
+    map.serialize_entry("filter", &serde_json::Value::Object(obj))?;
+    Ok(())
 }
 
 fn serialize_output<S>(map: &mut S, out: &OutputHints) -> Result<(), S::Error>

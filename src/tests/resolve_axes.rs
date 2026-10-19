@@ -9,6 +9,7 @@ fn minimal_doc(operation: Operation) -> QueryDocument {
         layout_version: None,
         dataset: "a".into(),
         selection: None,
+        filter: None,
         operation: Some(operation),
         output: None,
         write: None,
