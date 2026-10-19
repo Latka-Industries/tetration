@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-19
+
+### Added
+
+- `prune_store` / `CachingStore::prune`: dry-run by default. Apply drops leftover staging and sealed generations older than `CURRENT` / `CURRENT-1`. Open pins and a live `publishing/<G>` claim are refused. Does not write `CURRENT` (THI-557).
+- `tet gc s3://bucket/prefix` (feature `tetration-s3`, credentials `TETRATION_S3_*`): same retention. `--protect-generation G` or `?generation=G` keeps a `packed.tet` an open pin in another process still needs. Local `.tet.d` `tet gc` is unchanged (THI-559).
+
 ## [0.4.2] - 2026-10-19
 
 ### Added

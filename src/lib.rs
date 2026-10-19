@@ -25,6 +25,11 @@
 //! fold; `execution.group_count` reports how many groups. A `pipeline` array lowers onto that same
 //! document (`select`, `filter`, one reduction, then `spill` or `write`).
 //!
+//! **0.4.3:** `prune_store` drops leftover staging and sealed generations older than `CURRENT` /
+//! `CURRENT-1` (dry-run unless apply). It does not write `CURRENT`. Open pins and a live publish
+//! claim are refused. `tet gc s3://bucket/prefix` is that command; `--protect-generation` names a
+//! pin this process cannot see.
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
