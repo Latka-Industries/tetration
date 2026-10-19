@@ -46,7 +46,7 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.8:** library hygiene only. `f16` and `f64` materialize share one macro. Matchable package failures are `CatalogError` variants (display text unchanged). `tetration::query` CLI formatters were deprecated here (THI-536) and removed in 0.4.0 (THI-541).
 
-**Shipped in 0.4.0:** per-chunk min/max/null zone maps at compact/publish (`generations/<G>/ZONE.json`; staging parts unchanged; verify is required for new seals and advisory for older ones) (THI-473). `ReadPlan.logical_f32_element_count` is `logical_element_count` (THI-540). The deprecated `tetration::query` CLI re-exports are gone; `tet` uses `query::cli` (THI-541). Predicate pushdown and group-by are later in 0.4.x. tet-py is not pinned to this crate yet.
+**Shipped in 0.4.0:** per-chunk min/max/null zone maps at compact/publish (`generations/<G>/ZONE.json`; staging parts unchanged; verify is required for new seals and advisory for older ones) (THI-473). `ReadPlan.logical_f32_element_count` is `logical_element_count` (THI-540). The deprecated `tetration::query` CLI re-exports are gone; `tet` uses `query::cli` (THI-541). **tet-py 0.4.0** on PyPI pins this crate. Predicate pushdown and group-by are later in 0.4.x.
 
 Example query:
 
