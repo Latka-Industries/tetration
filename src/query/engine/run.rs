@@ -370,9 +370,16 @@ fn plan_query_matched_dataset(
             "`operation` requires mmap execution with an explicit preview limit (e.g. `--execute --preview-f32 64`, or `--preview-f32 0` to omit preview floats)".into(),
         ));
     }
-    let mut message = String::from(
-        "query accepted; dataset matched; read_plan lists mmap payload regions for touched chunks",
-    );
+    let mut message = if read_plan.zone_filter_skipped_chunks > 0 {
+        format!(
+            "query accepted; dataset matched; read_plan lists mmap payload regions for touched chunks (zone filter skipped {})",
+            read_plan.zone_filter_skipped_chunks
+        )
+    } else {
+        String::from(
+            "query accepted; dataset matched; read_plan lists mmap payload regions for touched chunks",
+        )
+    };
     let execution = matched_dataset_execution(
         &MatchedExecutionCtx {
             doc: &doc,

@@ -46,9 +46,15 @@ pub(super) struct StatsCatalog<'a> {
 pub(super) struct StatsReadPlan<'a> {
     chunk_touch_policy: &'a str,
     chunk_count: usize,
+    #[serde(skip_serializing_if = "usize_is_zero")]
+    zone_filter_skipped_chunks: usize,
     total_stored_bytes: u64,
     logical_selection_shape: &'a Vec<u64>,
     logical_element_count: usize,
+}
+
+fn usize_is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 pub(super) fn format_stats_json(response: &QueryResponse) -> Result<String, String> {
@@ -73,6 +79,7 @@ pub(super) fn stats_read_plan(p: &ReadPlan) -> StatsReadPlan<'_> {
     StatsReadPlan {
         chunk_touch_policy: p.chunk_touch_policy,
         chunk_count: p.chunk_count,
+        zone_filter_skipped_chunks: p.zone_filter_skipped_chunks,
         total_stored_bytes: p.total_stored_bytes,
         logical_selection_shape: &p.logical_selection_shape,
         logical_element_count: p.logical_element_count,

@@ -155,6 +155,7 @@ fn resolve_device_auto_large_prefers_metal_when_enabled() {
     let plan = ReadPlan {
         chunk_touch_policy: "dense",
         chunk_count: 0,
+        zone_filter_skipped_chunks: 0,
         total_stored_bytes: 0,
         chunks: vec![],
         dataset_shape: vec![elems as u64],
@@ -198,6 +199,7 @@ fn resolve_device_auto_huge_selection_still_routes_gpu_for_streaming_fold() {
     let plan = ReadPlan {
         chunk_touch_policy: "dense",
         chunk_count: 0,
+        zone_filter_skipped_chunks: 0,
         total_stored_bytes: 0,
         chunks: vec![],
         dataset_shape: vec![elems as u64],

@@ -107,6 +107,10 @@ fn push_plan_table(out: &mut String, plan: &ReadPlan) {
             ),
             ("chunk_count".to_string(), plan.chunk_count.to_string()),
             (
+                "zone_filter_skipped_chunks".to_string(),
+                plan.zone_filter_skipped_chunks.to_string(),
+            ),
+            (
                 "total_stored_bytes".to_string(),
                 plan.total_stored_bytes.to_string(),
             ),

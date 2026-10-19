@@ -35,6 +35,11 @@ pub struct ReadPlan {
     /// How `selection` maps to chunk coordinates in this build.
     pub chunk_touch_policy: &'static str,
     pub chunk_count: usize,
+    /// Chunks dropped by value-filter zone pushdown (0 when no `filter` or no zone stats).
+    ///
+    /// Geometric touch count is `chunk_count + zone_filter_skipped_chunks`.
+    #[serde(default)]
+    pub zone_filter_skipped_chunks: usize,
     pub total_stored_bytes: u64,
     pub chunks: Vec<PlannedChunkIo>,
     /// Dataset global shape (same rank as selection).
@@ -58,6 +63,8 @@ pub struct ReadPlan {
 struct ReadPlanWire {
     chunk_touch_policy: String,
     chunk_count: usize,
+    #[serde(default)]
+    zone_filter_skipped_chunks: usize,
     total_stored_bytes: u64,
     chunks: Vec<PlannedChunkIo>,
     dataset_shape: Vec<u64>,
@@ -81,6 +88,7 @@ impl<'de> Deserialize<'de> for ReadPlan {
         Ok(Self {
             chunk_touch_policy,
             chunk_count: wire.chunk_count,
+            zone_filter_skipped_chunks: wire.zone_filter_skipped_chunks,
             total_stored_bytes: wire.total_stored_bytes,
             chunks: wire.chunks,
             dataset_shape: wire.dataset_shape,

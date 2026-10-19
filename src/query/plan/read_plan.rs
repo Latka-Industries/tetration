@@ -133,6 +133,7 @@ pub(crate) fn build_read_plan(
     let logical_element_count = shape_product_usize(&logical_selection_shape)?;
     let mut chunks = Vec::with_capacity(coords.len());
     let mut total_stored: u64 = 0;
+    let mut zone_filter_skipped_chunks = 0usize;
     for coord in coords {
         let entry = find_chunk_entry(summary, dataset_idx, ndim, coord).ok_or_else(|| {
             TetError::Validation(format!(
@@ -145,6 +146,7 @@ pub(crate) fn build_read_plan(
             && !zone_may_match_filter(pushdown.dtype, zone_stat, filter)
         {
             // Conservative pushdown: drop only when zone stats prove a miss.
+            zone_filter_skipped_chunks = zone_filter_skipped_chunks.saturating_add(1);
             continue;
         }
         total_stored = total_stored
@@ -157,6 +159,7 @@ pub(crate) fn build_read_plan(
     Ok(ReadPlan {
         chunk_touch_policy,
         chunk_count: chunks.len(),
+        zone_filter_skipped_chunks,
         total_stored_bytes: total_stored,
         chunks,
         dataset_shape: geom.dataset_shape.to_vec(),

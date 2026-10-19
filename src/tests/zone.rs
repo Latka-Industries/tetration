@@ -11,7 +11,10 @@ use crate::catalog::{
     zone_maps_key,
 };
 use crate::query::types::CHUNK_TOUCH_POLICY;
-use crate::query::{parse_query_json, plan_query_with_tet_mmap, validate_query};
+use crate::query::{
+    ExecuteQueryOptions, execute_query_document, parse_query_json, plan_query_with_tet_mmap,
+    validate_query,
+};
 use crate::verify::{
     VerifyOptions, VerifySeverity, verify_tet_package, verify_tet_package_with_options,
 };
@@ -192,25 +195,45 @@ fn value_filter_skips_chunks_outside_zone_bounds() {
         .expect("plan");
     assert_eq!(full_plan.chunk_count, 2);
 
-    let filtered = parse_query_json(r#"{"dataset":"a","filter":{"gt":5}}"#).unwrap();
+    let filtered = parse_query_json(r#"{"dataset":"a","filter":{"gt":5},"sum":[]}"#).unwrap();
     validate_query(&filtered).unwrap();
-    let filtered_plan = plan_query_with_tet_mmap(&filtered, Some(&path), &bytes, None)
-        .unwrap()
-        .read_plan
-        .expect("plan");
+    let filtered_resp = plan_query_with_tet_mmap(&filtered, Some(&path), &bytes, Some(0)).unwrap();
+    let filtered_plan = filtered_resp.read_plan.expect("plan");
     assert_eq!(filtered_plan.chunk_count, 1);
+    assert_eq!(filtered_plan.zone_filter_skipped_chunks, 1);
     assert!(filtered_plan.chunk_count < full_plan.chunk_count);
     assert_eq!(filtered_plan.chunks[0].chunk_index, vec![1]);
+    assert!(
+        filtered_resp.message.contains("zone filter skipped 1"),
+        "{}",
+        filtered_resp.message
+    );
+
+    // Execute uses the same skipped plan (fewer payload bytes than a full-touch plan).
+    let executed = execute_query_document(
+        &filtered,
+        &packed,
+        &bytes,
+        ExecuteQueryOptions::execute_no_preview(),
+        None,
+    )
+    .unwrap();
+    let ex_plan = executed.read_plan.expect("execute plan");
+    assert_eq!(ex_plan.zone_filter_skipped_chunks, 1);
+    assert_eq!(ex_plan.chunk_count, 1);
+    let ex = executed.execution.expect("execution");
+    assert!(ex.total_bytes_read_from_disk < full_plan.total_stored_bytes);
 
     // Without ZONE.json beside the path, filter does not skip.
     let lone = dir.path().join("lone.tet");
     fs::write(&lone, &bytes).unwrap();
     let lone_path = lone.display().to_string();
-    let no_zone = plan_query_with_tet_mmap(&filtered, Some(&lone_path), &bytes, None)
+    let no_zone = plan_query_with_tet_mmap(&filtered, Some(&lone_path), &bytes, Some(0))
         .unwrap()
         .read_plan
         .expect("plan");
     assert_eq!(no_zone.chunk_count, 2);
+    assert_eq!(no_zone.zone_filter_skipped_chunks, 0);
 }
 
 #[test]
