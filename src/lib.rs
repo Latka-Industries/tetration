@@ -21,6 +21,10 @@
 //! planner skips chunks whose zone stats cannot match; see
 //! [`query::ReadPlan::zone_filter_skipped_chunks`](query::ReadPlan::zone_filter_skipped_chunks).
 //!
+//! **0.4.2:** `group_by` partitions a reduction by dimension name. Tier-A/B stays on the streaming
+//! fold; `execution.group_count` reports how many groups. A `pipeline` array lowers onto that same
+//! document (`select`, `filter`, one reduction, then `spill` or `write`).
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
