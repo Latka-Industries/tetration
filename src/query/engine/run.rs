@@ -397,6 +397,9 @@ fn plan_query_matched_dataset(
             "query accepted; dataset matched; read_plan lists mmap payload regions for touched chunks",
         )
     };
+    if read_plan.cell_filter.is_some() {
+        message.push_str("; cell filter applied to kept chunks");
+    }
     let mut execution = matched_dataset_execution(
         &MatchedExecutionCtx {
             doc: &doc,
