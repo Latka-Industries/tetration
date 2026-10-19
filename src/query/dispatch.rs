@@ -190,7 +190,10 @@ pub(crate) fn scalar_fold(
     policy: &FoldIoPolicy,
     tet_path: Option<&Path>,
 ) -> Result<FoldPlanOutcome, TetError> {
-    if policy.linear_scan && crate::query::fold::linear_scan::supports_scalar_kind(kind) {
+    if plan.cell_filter.is_none()
+        && policy.linear_scan
+        && crate::query::fold::linear_scan::supports_scalar_kind(kind)
+    {
         return crate::query::fold::linear_scan::fold_read_plan_scalar_linear(
             mmap,
             plan,

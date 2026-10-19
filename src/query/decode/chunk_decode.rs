@@ -6,7 +6,7 @@ use crate::catalog::{CHUNK_PAYLOAD_CODEC_V1, MAX_NDIM, tile};
 use crate::query::decode::dense_visit::{dense_tile_logical_base, logical_index_unit_step};
 use crate::query::decode::indexing::linear_rm_index;
 use crate::query::fold::reduction::{ArgIndexAccum, ReductionKind, ValueAccum};
-use crate::query::types::{PlannedChunkIo, ReadPlan, TetError};
+use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, fold_keeps_cell};
 use crate::utils::{
     f16_le, f32_le, f64_le, i16_le, i32_le, i64_le, u8_le, u16_le, u32_le, u64_le, wire,
 };
@@ -356,27 +356,36 @@ where
 {
     let prep = prepare_chunk::<E>(mmap, plan, c)?;
     let preview_len = preview.len();
+    let filter_cells = plan.cell_filter.is_some();
     if prep.ndim == 1
         && let Some(li_base) =
             dense_tile_logical_base(plan, &prep.chunk_coord[..prep.ndim], &prep.tile)?
     {
-        match kind {
-            ReductionKind::ArgMin | ReductionKind::ArgMax => {
-                for k in 0..prep.nelem {
-                    let v = E::read_at(&prep.raw_bytes, k);
-                    let li = li_base + k;
-                    E::push_arg(arg, li as u64, v, kind);
-                    if li < preview_len {
-                        preview[li] = v;
+        if filter_cells {
+            for k in 0..prep.nelem {
+                let v = E::read_at(&prep.raw_bytes, k);
+                let li = li_base + k;
+                record_fold_cell(plan, kind, value, arg, preview, li, v);
+            }
+        } else {
+            match kind {
+                ReductionKind::ArgMin | ReductionKind::ArgMax => {
+                    for k in 0..prep.nelem {
+                        let v = E::read_at(&prep.raw_bytes, k);
+                        let li = li_base + k;
+                        E::push_arg(arg, li as u64, v, kind);
+                        if li < preview_len {
+                            preview[li] = v;
+                        }
                     }
                 }
-            }
-            _ => {
-                E::push_le_bytes(value, &prep.raw_bytes, kind);
-                if preview_len > 0 {
-                    let cap = preview_len.saturating_sub(li_base).min(prep.nelem);
-                    for k in 0..cap {
-                        preview[li_base + k] = E::read_at(&prep.raw_bytes, k);
+                _ => {
+                    E::push_le_bytes(value, &prep.raw_bytes, kind);
+                    if preview_len > 0 {
+                        let cap = preview_len.saturating_sub(li_base).min(prep.nelem);
+                        for k in 0..cap {
+                            preview[li_base + k] = E::read_at(&prep.raw_bytes, k);
+                        }
                     }
                 }
             }
@@ -384,21 +393,36 @@ where
         return Ok(prep.bytes_read);
     }
     visit_prepared_chunk::<E, _>(&prep, plan, |li, v| {
-        match kind {
-            ReductionKind::ArgMin | ReductionKind::ArgMax => E::push_arg(arg, li as u64, v, kind),
-            ReductionKind::NanCount => value.push_nan_f64(E::as_f64(v)),
-            ReductionKind::InfCount => value.push_inf_f64(E::as_f64(v)),
-            ReductionKind::NullCount { fill } => value.push_null_f64(E::as_f64(v), fill),
-            ReductionKind::NanMean => value.push_nan_mean_f64(E::as_f64(v)),
-            ReductionKind::NanStd => value.push_nan_std_f64(E::as_f64(v)),
-            _ => E::push_value(value, v),
-        }
-        if li < preview_len {
-            preview[li] = v;
-        }
+        record_fold_cell(plan, kind, value, arg, preview, li, v);
         Ok(())
     })?;
     Ok(prep.bytes_read)
+}
+
+fn record_fold_cell<E: FoldChunkElem>(
+    plan: &ReadPlan,
+    kind: ReductionKind,
+    value: &mut ValueAccum,
+    arg: &mut ArgIndexAccum,
+    preview: &mut [E],
+    li: usize,
+    v: E,
+) {
+    if li < preview.len() {
+        preview[li] = v;
+    }
+    if !fold_keeps_cell(plan.cell_filter, E::as_f64(v)) {
+        return;
+    }
+    match kind {
+        ReductionKind::ArgMin | ReductionKind::ArgMax => E::push_arg(arg, li as u64, v, kind),
+        ReductionKind::NanCount => value.push_nan_f64(E::as_f64(v)),
+        ReductionKind::InfCount => value.push_inf_f64(E::as_f64(v)),
+        ReductionKind::NullCount { fill } => value.push_null_f64(E::as_f64(v), fill),
+        ReductionKind::NanMean => value.push_nan_mean_f64(E::as_f64(v)),
+        ReductionKind::NanStd => value.push_nan_std_f64(E::as_f64(v)),
+        _ => E::push_value(value, v),
+    }
 }
 
 fn scatter_chunk_into<E>(

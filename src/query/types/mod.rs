@@ -1,10 +1,13 @@
 //! JSON query / response types.
 
+mod cell_filter;
 mod document;
 mod error;
 mod plan;
 mod response;
 mod transform_method;
+
+pub(crate) use cell_filter::{CellPredicate, fold_keeps_cell};
 
 pub use document::{
     AxisSlice, ExecutionDeviceHint, ExecutionHints, Operation, OutputHint, OutputHints,

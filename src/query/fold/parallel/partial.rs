@@ -10,7 +10,7 @@ use super::preview::{write_disjoint_preview_f32, write_disjoint_preview_f64};
 use super::workers::with_fold_workers;
 use crate::query::decode;
 use crate::query::fold::{partial, partial_geometry, reduction, shared};
-use crate::query::types::{OperationPreviewFields, ReadPlan, TetError};
+use crate::query::types::{OperationPreviewFields, ReadPlan, TetError, fold_keeps_cell};
 
 #[derive(Copy, Clone)]
 enum PartialFoldVisit {
@@ -112,6 +112,9 @@ fn parallel_partial_arg(
                     saw_any = true;
                     ctx.visit
                         .write_preview(ctx.preview_addr, ctx.preview_len, li, v);
+                    if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                        return Ok(());
+                    }
                     let (oi, fi) = reduced_cell_index(li, ctx.shape, ctx.layout)?;
                     ctx.visit.push_arg(&mut cells[oi], fi, v, ctx.kind);
                     Ok(())
@@ -158,6 +161,9 @@ fn parallel_partial_value(
                     saw_any = true;
                     ctx.visit
                         .write_preview(ctx.preview_addr, ctx.preview_len, li, v);
+                    if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                        return Ok(());
+                    }
                     let (oi, _) = reduced_cell_index(li, ctx.shape, ctx.layout)?;
                     ctx.visit.push_value(&mut cells[oi], v);
                     Ok(())

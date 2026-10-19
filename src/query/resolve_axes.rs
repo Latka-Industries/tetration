@@ -139,6 +139,19 @@ pub(crate) fn resolve_null_count_fill(
     ))
 }
 
+/// Dataset missing-value from `_FillValue`, `missing_value`, or `fill_value`.
+///
+/// Invalid text is ignored (zone maps also skip a fill they cannot parse).
+#[must_use]
+pub(crate) fn fill_from_attrs(attrs: &BTreeMap<String, String>) -> Option<f64> {
+    for key in ["_FillValue", "missing_value", "fill_value"] {
+        if let Some(raw) = attrs.get(key) {
+            return parse_fill_attr(raw).ok();
+        }
+    }
+    None
+}
+
 fn parse_fill_attr(raw: &str) -> Result<f64, TetError> {
     let trimmed = raw.trim();
     if trimmed.eq_ignore_ascii_case("nan") {

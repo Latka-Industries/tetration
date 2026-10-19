@@ -30,6 +30,7 @@ pub(crate) fn merge_scalar_chunks(
     parts: &[ScalarChunkWork],
     kind: reduction::ReductionKind,
     n: usize,
+    allow_empty: bool,
 ) -> Result<OperationPreviewFields, TetError> {
     match kind {
         reduction::ReductionKind::ArgMin | reduction::ReductionKind::ArgMax => {
@@ -37,7 +38,7 @@ pub(crate) fn merge_scalar_chunks(
             for p in parts {
                 acc.merge_from(&p.arg, kind);
             }
-            if acc.is_empty() {
+            if acc.is_empty() && !allow_empty {
                 return Err(TetError::Validation(
                     "operation requires at least one decoded value from the read plan".into(),
                 ));
@@ -49,7 +50,7 @@ pub(crate) fn merge_scalar_chunks(
             for p in parts {
                 acc.merge_from(&p.value);
             }
-            if acc.is_empty() {
+            if acc.is_empty() && !allow_empty {
                 return Err(TetError::Validation(
                     "operation requires at least one decoded value from the read plan".into(),
                 ));

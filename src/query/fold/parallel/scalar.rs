@@ -13,7 +13,7 @@ use super::workers::with_fold_workers;
 use crate::query::decode;
 use crate::query::fold::{reduction, shared};
 use crate::query::materialize::int::IntVisit;
-use crate::query::types::{OperationPreviewFields, ReadPlan, TetError};
+use crate::query::types::{OperationPreviewFields, ReadPlan, TetError, fold_keeps_cell};
 use crate::utils::dtype::ElementDtype;
 
 #[derive(Copy, Clone)]
@@ -60,6 +60,10 @@ impl ScalarFoldVisit {
                 disjoint_preview_mut(ctx.preview_addr, ctx.preview_len),
             ),
             Self::F16 | Self::Int(_) => self.visit_chunk(mmap, plan, c, |li, val| {
+                self.write_preview(ctx.preview_addr, ctx.preview_len, li, val);
+                if !fold_keeps_cell(plan.cell_filter, val) {
+                    return Ok(());
+                }
                 match ctx.kind {
                     reduction::ReductionKind::ArgMin | reduction::ReductionKind::ArgMax => {
                         self.push_arg(ctx.arg, li, val, ctx.kind);
@@ -71,7 +75,6 @@ impl ScalarFoldVisit {
                     }
                     _ => self.push_value(ctx.value, val),
                 }
-                self.write_preview(ctx.preview_addr, ctx.preview_len, li, val);
                 Ok(())
             }),
         }
@@ -343,7 +346,7 @@ fn fold_read_plan_scalar_parallel(
     let parts =
         parallel_scalar_fold_chunks(mmap, plan, kind, visit, preview_addr, preview_len, workers)?;
     let total_bytes_read_from_disk = sum_chunk_bytes(parts.iter().map(|p| p.bytes))?;
-    let operation = merge_scalar_chunks(&parts, kind, n)?;
+    let operation = merge_scalar_chunks(&parts, kind, n, plan.cell_filter.is_some())?;
     visit.finish_parallel_scalar_fold(
         previews,
         max_preview,
