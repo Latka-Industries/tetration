@@ -30,6 +30,10 @@
 //! claim are refused. `tet gc s3://bucket/prefix` is that command; `--protect-generation` names a
 //! pin this process cannot see.
 //!
+//! **0.4.4:** the same `filter` applies to cells inside a kept chunk. Tier-A/B folds ignore
+//! non-matches. Materialize and transform keep the selection shape (NaN for floats, dataset fill
+//! for integers). `zone_filter_skipped_chunks` remains the chunk-skip stat.
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
