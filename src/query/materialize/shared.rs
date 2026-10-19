@@ -80,7 +80,10 @@ where
     };
     let mut out = vec![unset; buf_len];
     let total_bytes_read_from_disk = scatter_fill(mmap, plan, &mut out)?;
-    check_complete(&out)?;
+    // Filtered floats write NaN for non-matches; that is the mask, not a hole.
+    if plan.cell_filter.is_none() {
+        check_complete(&out)?;
+    }
     Ok((out, truncated, total_bytes_read_from_disk))
 }
 
@@ -152,7 +155,9 @@ where
     let out = bytemuck::cast_slice_mut(out_mmap.as_mut());
     validate_full_read_plan_buffer(plan, out.len())?;
     let total = scatter_fill(mmap, plan, out)?;
-    if let Some(check) = check_complete {
+    if plan.cell_filter.is_none()
+        && let Some(check) = check_complete
+    {
         check(out)?;
     }
     out_mmap

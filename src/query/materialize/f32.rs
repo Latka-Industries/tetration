@@ -64,12 +64,16 @@ pub(crate) fn materialize_read_plan_f32_le_into_core(
     let total_bytes_read_from_disk = if want_write < n {
         let mut tmp = vec![f32::NAN; want_write];
         let bytes = scatter_fill(mmap, plan, &mut tmp)?;
-        check_materialized_complete(&tmp)?;
+        if plan.cell_filter.is_none() {
+            check_materialized_complete(&tmp)?;
+        }
         dst[..want_write].copy_from_slice(&tmp);
         bytes
     } else {
         let bytes = scatter_fill(mmap, plan, &mut dst[..n])?;
-        check_materialized_complete(&dst[..n])?;
+        if plan.cell_filter.is_none() {
+            check_materialized_complete(&dst[..n])?;
+        }
         bytes
     };
     Ok(MaterializeReadPlanF32IntoOutcome {
