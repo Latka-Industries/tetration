@@ -5,7 +5,7 @@ use crate::query::{
     decode::chunk_decode,
     dispatch,
     fold::{fold_policy, partial_geometry, reduction, shared},
-    types::{OperationPreviewFields, ReadPlan, TetError},
+    types::{OperationPreviewFields, ReadPlan, TetError, fold_keeps_cell},
 };
 use crate::utils::dtype::ElementDtype;
 
@@ -207,6 +207,9 @@ fn run_partial_promoted(
                 let chunk_bytes = visit_promoted_chunk(width, mmap, plan, c, |li, v| {
                     *saw_any = true;
                     preview.store(li, preview_cap, v);
+                    if !fold_keeps_cell(plan.cell_filter, v) {
+                        return Ok(());
+                    }
                     let (oi, fi) = partial_geometry::reduced_cell_index(li, shape, layout)?;
                     cells[oi].push_f64(fi, v, kind);
                     Ok(())
@@ -222,6 +225,9 @@ fn run_partial_promoted(
                 let chunk_bytes = visit_promoted_chunk(width, mmap, plan, c, |li, v| {
                     *saw_any = true;
                     preview.store(li, preview_cap, v);
+                    if !fold_keeps_cell(plan.cell_filter, v) {
+                        return Ok(());
+                    }
                     let (oi, _) = partial_geometry::reduced_cell_index(li, shape, layout)?;
                     cells[oi].push_f64(v);
                     Ok(())

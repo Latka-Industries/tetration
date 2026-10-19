@@ -22,6 +22,7 @@ fn sample_plan(chunks: Vec<PlannedChunkIo>, shape: u64) -> ReadPlan {
         selection_step: vec![1],
         logical_selection_shape: vec![shape],
         logical_element_count: shape as usize,
+        cell_filter: None,
     }
 }
 

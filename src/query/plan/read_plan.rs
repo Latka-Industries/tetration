@@ -4,7 +4,7 @@ use crate::catalog::{
     ChunkIndexEntryV1, ChunkZoneStat, GenerationZoneMaps, MAX_NDIM, TetFileSummaryV1,
 };
 use crate::query::plan::zone_pushdown::zone_may_match_filter;
-use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, ValueFilter};
+use crate::query::types::{CellPredicate, PlannedChunkIo, ReadPlan, TetError, ValueFilter};
 
 pub(crate) struct ReadPlanGeometry<'a> {
     dataset_shape: &'a [u64],
@@ -37,6 +37,8 @@ pub(crate) struct ZonePushdown<'a> {
     pub zones: Option<&'a GenerationZoneMaps>,
     pub dtype: u32,
     pub filter: Option<&'a ValueFilter>,
+    /// Dataset fill (`_FillValue` / `missing_value` / `fill_value`) for cell-null tests.
+    pub fill: Option<f64>,
 }
 
 pub(crate) fn selection_logical_shape_u64(
@@ -169,5 +171,8 @@ pub(crate) fn build_read_plan(
         selection_step: geom.step.to_vec(),
         logical_selection_shape,
         logical_element_count,
+        cell_filter: pushdown
+            .filter
+            .map(|filter| CellPredicate::from_filter(filter, pushdown.fill)),
     })
 }

@@ -5,7 +5,7 @@ use crate::query::{
     decode::{chunk_decode, indexing},
     dispatch,
     fold::{fold_policy, parallel, partial_geometry, reduction, shared},
-    types::{OperationPreviewFields, ReadPlan, TetError},
+    types::{OperationPreviewFields, ReadPlan, TetError, fold_keeps_cell},
 };
 
 struct PartialFoldCtx<'a> {
@@ -154,6 +154,9 @@ fn run_partial_f32(
                         if li < ctx.preview_cap {
                             preview[li] = v;
                         }
+                        if !fold_keeps_cell(ctx.plan.cell_filter, f64::from(v)) {
+                            return Ok(());
+                        }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
                         let oi = partial_geometry::reduced_index(
                             &coords,
@@ -186,6 +189,9 @@ fn run_partial_f32(
                         *ctx.saw_any = true;
                         if li < ctx.preview_cap {
                             preview[li] = v;
+                        }
+                        if !fold_keeps_cell(ctx.plan.cell_filter, f64::from(v)) {
+                            return Ok(());
                         }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
                         let oi = partial_geometry::reduced_index(
@@ -226,6 +232,9 @@ fn run_partial_f64(
                         if li < ctx.preview_cap {
                             preview[li] = v;
                         }
+                        if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                            return Ok(());
+                        }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
                         let oi = partial_geometry::reduced_index(
                             &coords,
@@ -258,6 +267,9 @@ fn run_partial_f64(
                         *ctx.saw_any = true;
                         if li < ctx.preview_cap {
                             preview[li] = v;
+                        }
+                        if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                            return Ok(());
                         }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
                         let oi = partial_geometry::reduced_index(

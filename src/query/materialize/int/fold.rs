@@ -179,7 +179,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -189,7 +191,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));
@@ -230,7 +232,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -240,7 +244,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));
@@ -281,7 +285,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -291,7 +297,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));
@@ -332,7 +338,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -342,7 +350,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));
@@ -383,7 +391,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -393,7 +403,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));
@@ -434,7 +444,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -444,7 +456,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));
@@ -485,7 +497,9 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                $on_value(&mut $acc, li, v, $kind);
+                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                    $on_value(&mut $acc, li, v, $kind);
+                }
                 if li < $preview_cap {
                     let $v = v;
                     preview[li] = $cast;
@@ -495,7 +509,7 @@ macro_rules! int_scalar_fold_run {
             })?;
             accumulate_chunk_read_bytes(&mut total_bytes_read_from_disk, chunk_bytes)?;
         }
-        if $acc.is_empty() {
+        if $acc.is_empty() && $plan.cell_filter.is_none() {
             return Err(TetError::Validation(
                 "operation requires at least one decoded value from the read plan".into(),
             ));

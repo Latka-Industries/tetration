@@ -262,6 +262,11 @@ fn build_matched_read_plan(
             zones,
             dtype: rec.dtype,
             filter: doc.filter.as_ref(),
+            fill: summary
+                .metadata
+                .datasets
+                .get(&doc.dataset)
+                .and_then(|meta| crate::query::resolve_axes::fill_from_attrs(&meta.attrs)),
         },
     )
 }

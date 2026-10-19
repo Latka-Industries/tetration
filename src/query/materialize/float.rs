@@ -120,7 +120,9 @@ macro_rules! define_float_materialize {
                         let c = &plan.chunks[i];
                         let chunk_bytes = $visit(mmap, plan, c, |li, v| {
                             let $v = v;
-                            acc.push_f64(li as u64, $promote, kind);
+                            if crate::query::types::fold_keeps_cell(plan.cell_filter, $promote) {
+                                acc.push_f64(li as u64, $promote, kind);
+                            }
                             if li < preview_cap {
                                 preview[li] = v;
                             }
@@ -132,7 +134,7 @@ macro_rules! define_float_materialize {
                                 TetError::Validation("total bytes read overflow".into())
                             })?;
                     }
-                    if acc.is_empty() {
+                    if acc.is_empty() && plan.cell_filter.is_none() {
                         return Err(TetError::Validation(
                             "operation requires at least one decoded value from the read plan"
                                 .into(),
@@ -151,7 +153,9 @@ macro_rules! define_float_materialize {
                         let c = &plan.chunks[i];
                         let chunk_bytes = $visit(mmap, plan, c, |li, v| {
                             let $v = v;
-                            acc.push_f64($promote);
+                            if crate::query::types::fold_keeps_cell(plan.cell_filter, $promote) {
+                                acc.push_f64($promote);
+                            }
                             if li < preview_cap {
                                 preview[li] = v;
                             }
@@ -163,7 +167,7 @@ macro_rules! define_float_materialize {
                                 TetError::Validation("total bytes read overflow".into())
                             })?;
                     }
-                    if acc.is_empty() {
+                    if acc.is_empty() && plan.cell_filter.is_none() {
                         return Err(TetError::Validation(
                             "operation requires at least one decoded value from the read plan"
                                 .into(),

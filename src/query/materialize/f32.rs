@@ -170,7 +170,11 @@ pub(crate) fn fold_read_plan_scalar_operation(
                     .checked_add(chunk_bytes)
                     .ok_or_else(|| TetError::Validation("total bytes read overflow".into()))?;
             }
-            fold::shared::validate_fold_preview(!acc.is_empty(), &preview, preview_cap)?;
+            fold::shared::validate_fold_preview(
+                !acc.is_empty() || plan.cell_filter.is_some(),
+                &preview,
+                preview_cap,
+            )?;
             acc.finish_scalar(kind, n).into()
         }
         _ => {
@@ -184,7 +188,11 @@ pub(crate) fn fold_read_plan_scalar_operation(
                     .checked_add(chunk_bytes)
                     .ok_or_else(|| TetError::Validation("total bytes read overflow".into()))?;
             }
-            fold::shared::validate_fold_preview(!acc.is_empty(), &preview, preview_cap)?;
+            fold::shared::validate_fold_preview(
+                !acc.is_empty() || plan.cell_filter.is_some(),
+                &preview,
+                preview_cap,
+            )?;
             acc.finish_scalar(kind).into()
         }
     };

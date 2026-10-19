@@ -467,6 +467,7 @@ fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> Rea
         selection_step: geom.selection_step,
         logical_selection_shape: geom.logical_selection_shape,
         logical_element_count: geom.logical_element_count,
+        cell_filter: None,
     }
 }
 

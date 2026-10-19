@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::CellPredicate;
 use crate::catalog::ChunkZoneStat;
 
 /// Per-chunk file regions needed to satisfy the current plan (on-disk payload bytes; may be zstd-compressed).
@@ -56,6 +57,12 @@ pub struct ReadPlan {
     ///
     /// JSON accepts `logical_f32_element_count` for this release only.
     pub logical_element_count: usize,
+    /// Execute-path cell filter. Not part of the JSON plan wire (`serde` skips it).
+    ///
+    /// Zone skip still uses `filter` while planning. Folds read this copy so a kept
+    /// chunk can drop non-matching cells without a second wire key.
+    #[serde(skip)]
+    pub(crate) cell_filter: Option<CellPredicate>,
 }
 
 #[derive(Deserialize)]
@@ -98,6 +105,7 @@ impl<'de> Deserialize<'de> for ReadPlan {
             selection_step: wire.selection_step,
             logical_selection_shape: wire.logical_selection_shape,
             logical_element_count: wire.logical_element_count,
+            cell_filter: None,
         })
     }
 }
