@@ -497,7 +497,7 @@ Each **query document** names **one dataset** in the `.tet` file (`"dataset": "t
 ### Coordinate labels (index values)
 
 - **One value per position** along an axis — e.g. every row’s timestamp, every column’s variable name, every station id.
-- **Query use (shipped):** `selection[].start_label` / `stop_label` resolve to axis indices at plan time when footer `coords` exist (axis key = `dim_names[d]` or `"d"`). Filter-by-value and group-by remain later.
+- **Query use (shipped):** `selection[].start_label` / `stop_label` resolve to axis indices at plan time when footer `coords` exist (axis key = `dim_names[d]` or `"d"`). Cell-value **`filter`** is a separate top-level key (numeric / null predicates on dataset values); group-by remains later.
 - **Size:** O(`shape[d]`) — may be stored inline, as attrs, or as a separate 1D array/dataset in the file.
 
 ### What labels do _not_ imply
@@ -506,7 +506,8 @@ Each **query document** names **one dataset** in the `.tet` file (`"dataset": "t
 | ------------------------------- | ------------------------------------------------------------------- |
 | `"mean": "time"` (axis name)    | **Dimension names** only                                            |
 | Slice rows 100–200 by index     | **Today** — numeric `selection`                                     |
-| Slice by timestamp / station id | **Coordinate labels** on `selection` (**done**); range/filter later |
+| Slice by timestamp / station id | **Coordinate labels** on `selection` (**done**)                     |
+| Filter cells by numeric value   | Top-level **`filter`** wire (**done** parse/validate); zone-map chunk skip next |
 | Fast lookup without full scan   | Coords **+ optional index** (sorted array, hash, …)                 |
 | `GROUP BY station`              | Coords on key axis **+ group-by op**                                |
 | SQL-style join two datasets     | Two queries or spill + caller; **non-goal** as full engine          |
@@ -532,6 +533,7 @@ The wire format is **flat**: one top-level reduction key per document (`mean`, `
 | `"any_inf": []` / `"any_inf": 0`                                 | True when any element is ±infinity (scalar / partial; integers contribute false)                                                                                                                                                                                                                                                                                |
 | `"null_count": []` or `{ "fill": 99, "axis": 0 }`                | Count of fill-missing values (fill from query or dataset attrs)                                                                                                                                                                                                                                                                                                 |
 | `"selection": [{ "start_label": "r0", "stop_label": "r1" }, …]`  | Half-open slice by coordinate label (requires footer `coords`)                                                                                                                                                                                                                                                                                                  |
+| `"filter": { "ge": 0, "lt": 40 }` / `{ "is_null": true }`         | Cell-value predicate (AND of closed keys: `eq`/`ne`/`lt`/`le`/`gt`/`ge`, `is_null`/`is_not_null`). Wire parse/validate only in **0.4.1** start; chunk skip via zone maps follows. No SQL / expression strings.                                                                                                                                                  |
 | `"covariance": { "axis": 0 }` / `"correlation": 0`               | Rank-2 only; `axis` = observation dimension; `operation_*_order` = variable count                                                                                                                                                                                                                                                                               |
 | `"transform": { "method": "zscore", "axis": 0 }`                 | Shape-preserving transform; methods: `zscore`, `minmax`, `l1`, `l2`, `center`, `scale`, `log1p`, `sqrt`, `softmax`; pass-1 stats in `operation_*` / `operation_reduced_*`; div-by-zero → **NaN** with `transform_div_by_zero_*` warnings                                                                                                                        |
 | `"nan_mean": []` / `"nan_std": []`                               | Mean/std over finite elements (NaN-skipping); results in `operation_nan_mean` / `operation_nan_std` (or `operation_reduced_nan_*`)                                                                                                                                                                                                                              |
@@ -557,6 +559,7 @@ Equivalent TOML for the same wire (parametric ops use inline tables; `selection`
 | `[execution]` / `memory_budget_percent = 40`              | `"execution": { "memory_budget_percent": 40 }`          |
 | `spill = "slice.bin"`                                     | `"spill": "slice.bin"`                                  |
 | `[[selection]]` / `start = 0` / `stop = 100` / `step = 2` | `"selection": [{ "start": 0, "stop": 100, "step": 2 }]` |
+| `[filter]` / `ge = 0` / `lt = 40`                         | `"filter": { "ge": 0, "lt": 40 }`                       |
 
 ```toml
 dataset = "temperature"
@@ -735,7 +738,7 @@ These match the product vision but belong **beside** the reduction enum:
 | **Read / export**                         | Plan + materialize or `output.spill` ([`OutputHint::SpillArray`](../src/query/types/document.rs)); **`.tet` → Zarr / HDF5 / NetCDF** via `tet export` ([`export`](../src/export/mod.rs)); **transform sidecar** publishes a derived `.tet` beside the source ([`transform/sidecar.rs`](../src/query/transform/sidecar.rs)). |
 | **`cast` / integer dtypes**               | **`i32` / `i64`** on disk and in materialize/query fold (**done**).                                                                                                                                                                                                                                            |
 | **Named axis labels**                     | **Done** — footer `dim_names` resolves `"time"` to axis index at plan time ([`resolve_axes.rs`](../src/query/resolve_axes.rs)).                                                                                                                                                                                |
-| **Coordinate labels / filter-by-value**   | **Slice by label** shipped (`start_label` / `stop_label`); filter-by-value / group-by and optional lookup index remain later.                                                                                                                                                                                  |
+| **Coordinate labels / filter-by-value**   | **Slice by label** shipped (`start_label` / `stop_label`). **Value filter wire** shipped (`filter` object; parse/validate). Chunk skip via zone maps and group-by remain later in 0.4.x.                                                                                                                    |
 | **`rechunk` / resample**                  | Writer / transform path, not read-time aggregate.                                                                                                                                                                                                                                                              |
 | **Linear algebra** (`matmul`, `einsum`)   | Belongs in caller libraries on materialized slabs.                                                                                                                                                                                                                                                             |
 | **Spectral / ML** (FFT, CWT, conv, train) | Same: materialize or spill, then NumPy / SciPy / PyTorch / JAX — not chunk-local in the engine.                                                                                                                                                                                                                |
@@ -779,8 +782,8 @@ Implemented in [`document.rs`](../src/query/document.rs) and planning:
 5. **Non-empty `dataset`** — Whitespace-only names rejected.
 6. **Catalog binding** — After parse, selection rank/shape and axis indices are checked against the mmap’d dataset ([`plan_query_with_tet_mmap`](../src/query/engine/run.rs), [`resolved_dense_global_box`](../src/query/plan/selection.rs)); JSON cannot name chunk file offsets directly.
 7. **No `.tet` path in query JSON** — Opening a `.tet` file uses the **host** path (`--tet`, API argument), not a field inside the query document. Spill **output** paths _are_ in JSON today; deployments should allowlist or rewrite them.
-8. **Size and shape caps** — [`parse_query_json`](../src/query/document.rs) / [`parse_query_toml`](../src/query/document_toml.rs) reject payloads over [`QueryLimits::DEFAULT.max_json_bytes`](../src/query/document.rs) (1 MiB) and nesting depth over [`QueryLimits::DEFAULT.max_json_depth`](../src/query/document.rs) (64) on the converted JSON tree. [`validate_query`](../src/query/document.rs) caps `dataset` length, `selection` rank and `operation.axes` count (≤ [`MAX_NDIM`](../src/catalog/mod.rs)), and per-axis label length via **`QueryLimits::DEFAULT`**.
-9. **`deny_unknown_fields`** — [`QueryDocument`](../src/query/types/document.rs) and nested input types reject unexpected keys at parse time (after TOML→JSON conversion).
+8. **Size and shape caps** — [`parse_query_json`](../src/query/document.rs) / [`parse_query_toml`](../src/query/document_toml.rs) reject payloads over [`QueryLimits::DEFAULT.max_json_bytes`](../src/query/document.rs) (1 MiB) and nesting depth over [`QueryLimits::DEFAULT.max_json_depth`](../src/query/document.rs) (64) on the converted JSON tree. [`validate_query`](../src/query/document.rs) caps `dataset` length, `selection` rank and `operation.axes` count (≤ [`MAX_NDIM`](../src/catalog/mod.rs)), per-axis label length, and **`filter`** predicate count via **`QueryLimits::DEFAULT`**.
+9. **`deny_unknown_fields`** — [`QueryDocument`](../src/query/types/document.rs) and nested input types reject unexpected keys at parse time (after TOML→JSON conversion). Top-level **`filter`** accepts only closed compare / null keys (no SQL strings or expression trees).
 10. **Fuzz / property tests** — `src/tests/query.rs` proptest: random UTF-8 must not panic in `parse_query_json` / `validate_query`; TOML covered by unit tests on representative profiles.
 
 **Not enforced yet (deployments should add limits):**
@@ -843,7 +846,7 @@ Implemented in [`document.rs`](../src/query/document.rs) and planning:
 ## Intentional gaps (v1)
 
 - Direct callers can still use **`materialize_read_plan_f32_le`** / **`_f64_le`** (always sequential) or **`_parallel`** twins; execution picks parallel decode/fold per `FoldIoPolicy` (see [Adaptive fold I/O](#adaptive-fold-io)).
-- Filter-by-value and **group-by** on coordinate labels remain deferred; **`operation.axes`** accepts decimal indices or **dimension names** (`dim_names`), not coordinate values — see [Dimension names vs coordinate labels](#dimension-names-vs-coordinate-labels).
+- Cell-value **`filter`** wire is parse/validate only until zone-map chunk skip lands; **group-by** on coordinate labels remains deferred. **`operation.axes`** accepts decimal indices or **dimension names** (`dim_names`), not coordinate values — see [Dimension names vs coordinate labels](#dimension-names-vs-coordinate-labels).
 - Spill path must lie under default roots (canonical **`.tet` parent** and descendants + platform `…/tetration` cache dirs) or `--spill-allow`; relative **`"spill"`** paths resolve against the **`.tet` directory** (not shell cwd).
 - Integer and narrow float dtypes (`u8`–`u64`, `f16`) are supported in writers, convert, and query execution (tier-A/B aggregates promote to `f64` for fold paths).
 - Query hardening (JSON and TOML): byte size, depth, `deny_unknown_fields`, and string/rank caps via **`QueryLimits`**; spill path policy via **`SpillPathAllowlist`** (see [JSON security](#json-security-input-and-output)).

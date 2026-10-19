@@ -70,7 +70,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Indexes must be optional, verifiable, and evolvable without breaking v1 readers.
 
-**Relation to v1:** [`filter-by-value` and group-by remain deferred](query_engine.md#intentional-gaps-v1); this direction generalizes “slice by label” into predicate pushdown and chunk skipping.
+**Relation to v1:** value-filter **wire** is in progress under 0.4.1; [group-by remains deferred](query_engine.md#intentional-gaps-v1). This direction generalizes “slice by label” into predicate pushdown and chunk skipping.
 
 ---
 

@@ -294,6 +294,55 @@ pub struct OutputHints {
     pub preferred: Option<OutputHint>,
 }
 
+/// Comparison operator for a numeric cell-value predicate (`filter` wire key).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueCompareOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl ValueCompareOp {
+    /// Stable wire key (`eq`, `gt`, …).
+    #[must_use]
+    pub const fn as_wire_str(self) -> &'static str {
+        match self {
+            Self::Eq => "eq",
+            Self::Ne => "ne",
+            Self::Lt => "lt",
+            Self::Le => "le",
+            Self::Gt => "gt",
+            Self::Ge => "ge",
+        }
+    }
+}
+
+/// One atomic value predicate on cells of the queried dataset.
+///
+/// Closed set only — no arbitrary expressions or SQL. Zone-map pushdown (later)
+/// uses these against per-chunk min/max/null stats.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValuePredicate {
+    /// Compare every cell (and chunk bounds) to a finite numeric literal.
+    Compare { op: ValueCompareOp, value: f64 },
+    /// Match fill/NaN nulls (`ZONE.json` `null_count`).
+    IsNull,
+    /// Match non-null cells.
+    IsNotNull,
+}
+
+/// Conjunction of [`ValuePredicate`]s (`filter` wire key). AND semantics.
+///
+/// Wire shape is a single object of closed keys, e.g. `{ "ge": 0, "lt": 40 }` or
+/// `{ "is_null": true }`. Slice-by-label stays on `selection`; this filters **cell values**.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ValueFilter {
+    pub predicates: Vec<ValuePredicate>,
+}
+
 /// Top-level JSON query document accepted by the engine and `tet query`.
 #[derive(Debug, Clone)]
 pub struct QueryDocument {
@@ -303,6 +352,8 @@ pub struct QueryDocument {
     pub dataset: String,
     /// Per-axis half-open slices; omitted means the full dataset extent on each axis.
     pub selection: Option<Vec<AxisSlice>>,
+    /// Optional cell-value filter (`filter` wire key); see [`ValueFilter`].
+    pub filter: Option<ValueFilter>,
     /// Optional reduction over the logical selection.
     pub operation: Option<Operation>,
     /// Optional export spill (`spill` wire key); not used with transform ops.
