@@ -65,7 +65,7 @@ fn fmt_name_list(names: &[String]) -> String {
 
 fn plan_quiet_line(dataset: &str, plan: &ReadPlan) -> String {
     let shape = fmt_shape(&plan.logical_selection_shape);
-    [
+    let mut parts = vec![
         quiet_prefix(dataset),
         "status=planned".to_string(),
         format!("chunks={}", plan.chunk_count),
@@ -73,8 +73,14 @@ fn plan_quiet_line(dataset: &str, plan: &ReadPlan) -> String {
         format!("stored_bytes={}", plan.total_stored_bytes),
         format!("logical_shape={shape}"),
         format!("touch_policy={}", plan.chunk_touch_policy),
-    ]
-    .join(" ")
+    ];
+    if plan.zone_filter_skipped_chunks > 0 {
+        parts.push(format!(
+            "zone_filter_skipped={}",
+            plan.zone_filter_skipped_chunks
+        ));
+    }
+    parts.join(" ")
 }
 
 fn preview_quiet_line(dataset: &str, ex: &QueryExecutionPreview) -> String {
