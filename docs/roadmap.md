@@ -54,6 +54,8 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.4.3:** store prune (`prune_store`, `tet gc s3://bucket/prefix`): leftover staging and sealed generations older than `CURRENT` / `CURRENT-1`. Dry-run by default. Open pins and a live publish claim are refused. Does not write `CURRENT` (THI-535).
 
+**Ships in 0.4.4:** element-wise `filter`. Chunk skip from 0.4.1 (`zone_filter_skipped_chunks`) is unchanged. Folds ignore non-matching cells inside kept chunks. Materialize and transform keep the selection shape: NaN for floats, dataset fill for integers (refused when no fill is set). PyPI tet-py stays **0.4.3** until that package is cut.
+
 Example query:
 
 ```text
@@ -72,13 +74,15 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.4.0:** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats.
 
-**Shipped in 0.4.1:** query `filter` predicates skip chunks that cannot match those zone stats (conservative; missing zones → no skip). `zone_filter_skipped_chunks` is on the plan for demos/tests.
+**Shipped in 0.4.1:** query `filter` predicates skip chunks that cannot match those zone stats (conservative; missing zones → no skip). `zone_filter_skipped_chunks` is the chunk-skip stat.
 
-**Direction:** richer indexes beyond per-chunk zone maps (e.g. sorted coord lookup) and group-by — analogous to database indexes or Parquet statistics.
+**Ships in 0.4.4:** the same predicate filters cells inside a kept chunk. A fold under `filter` ignores non-matches. Materialize and transform keep the selection shape and write NaN (floats) or the dataset fill (integers; refused when no fill is set). Chunk skip stays the I/O win.
+
+**Direction:** richer indexes beyond per-chunk zone maps (e.g. sorted coord lookup) — analogous to database indexes or Parquet statistics.
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Indexes must be optional, verifiable, and evolvable without breaking v1 readers.
 
-**Relation to v1:** filter-by-value pushdown is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Element-wise filter semantics for aggregates remain later.
+**Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**.
 
 ---
 

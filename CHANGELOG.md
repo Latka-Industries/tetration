@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Element-wise `filter` on cells inside chunks the zone map kept. Chunk skip from 0.4.1 is unchanged (`ReadPlan.zone_filter_skipped_chunks`). Tier-A/B folds ignore non-matching cells. Materialize and transform keep the selection shape: non-matches are NaN for `f16`/`f32`/`f64`, or the dataset fill for integers. Integer materialize under `filter` without `_FillValue`, `missing_value`, or `fill_value` is refused (THI-563–THI-565).
+
 ## [0.4.3] - 2026-10-19
 
 ### Added
