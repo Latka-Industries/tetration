@@ -40,6 +40,7 @@ mod small_tet_fixtures;
 mod store;
 mod store_cache;
 mod store_ingest;
+mod store_prune;
 mod store_query;
 #[cfg(feature = "tetration-s3")]
 mod store_s3;

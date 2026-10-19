@@ -201,7 +201,7 @@ example.tet.d/
 
 Crash mid-publish must leave prior `CURRENT` readable; incomplete `G` is never reader-visible until `set_current`.
 
-**GC (decision J):** default retain `current` and `current-1`. Deleting older `generations/<G>/` is opt-in (`tet gc --apply`); never unlink a `packed.tet` that may still be mmap’d. Staging leftovers after publish are also optional GC (decision D).
+**GC (decision J):** default retain `current` and `current-1`. Deleting older `generations/<G>/` is opt-in (`tet gc --apply`); never unlink a `packed.tet` that may still be mmap’d. Staging leftovers after publish are also optional GC (decision D). [`prune_store`](../src/catalog/store/prune.rs) is that rule on [`PackageStore`](../src/catalog/store/mod.rs): dry-run unless apply is set; an open [`TetPackagePin`](../src/catalog/package.rs) or [`PinnedPackedTet`](../src/catalog/store/pin.rs), and any live `publishing/<G>` claim, are refused; prune does not write `CURRENT`.
 
 Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path.tet.d`. Repair: `tet repair path.tet.d --apply quarantine_publish` for stale locks. Finding-code table: [`docs/cli.md`](cli.md#package-finding-check-names). Reject / mid-publish coverage: `src/tests/package_verify.rs`, `src/tests/publish.rs` ([THI-466](https://linear.app/thicclatka/issue/THI-466), [THI-480](https://linear.app/thicclatka/issue/THI-480)).
 

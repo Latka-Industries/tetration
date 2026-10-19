@@ -8,6 +8,8 @@
 //! loses the claim does not write `CURRENT`. A query pins `packed.tet` once and does not follow
 //! a newer `CURRENT`. `open_s3_package` (feature `tetration-s3`) opens `s3://bucket/prefix` onto that pin.
 //! Optional [`CachingStore`] remembers packed ranges by `(generation, offset)`.
+//! [`prune_store`] drops leftover `staging/` sessions and sealed generations older than
+//! `CURRENT` / `CURRENT-1` (dry-run unless apply). It does not write `CURRENT`.
 
 mod cache;
 mod fetch;
@@ -15,6 +17,7 @@ mod ingest;
 mod local;
 mod memory;
 mod pin;
+mod prune;
 mod publish_lock;
 #[cfg(feature = "tetration-s3")]
 mod s3;
@@ -38,6 +41,9 @@ pub use memory::MemoryStore;
 pub use pin::{
     PinnedPackedTet, generation_manifest_key, packed_tet_key, pin_packed_tet,
     read_generation_manifest, zone_maps_key,
+};
+pub use prune::{
+    PruneOptions, PruneRefusal, PruneRefuseReason, PruneReport, PruneTarget, prune_store,
 };
 pub use publish_lock::{
     PublishOptions, begin_publish_store, heartbeat_key, publish_lock_exists, publish_lock_is_stale,
