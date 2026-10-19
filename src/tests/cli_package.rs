@@ -240,6 +240,60 @@ fn cli_gc_apply() {
 }
 
 #[test]
+fn cli_gc_protect_generation_does_not_apply_to_local_package() {
+    use crate::catalog::{TetPackage, ingest_tet_file, publish_parts};
+
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("one.tet");
+    write_one_tet(&src, "temp", 1.0, 2.0);
+    let pkg = TetPackage::create(dir.path().join("g.tet.d")).unwrap();
+    ingest_tet_file(&pkg, &src, "s1", "p1").unwrap();
+    publish_parts(&pkg, 1, &["p1".into()]).unwrap();
+    ingest_tet_file(&pkg, &src, "s2", "p2").unwrap();
+    publish_parts(&pkg, 2, &["p2".into()]).unwrap();
+    ingest_tet_file(&pkg, &src, "s3", "p3").unwrap();
+    publish_parts(&pkg, 3, &["p3".into()]).unwrap();
+
+    let out = tet_cmd()
+        .args([
+            "gc",
+            pkg.root().to_str().unwrap(),
+            "--apply",
+            "--protect-generation",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "local protect-generation: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("protect-generation"),
+        "stderr should name the flag: {err}"
+    );
+    assert!(pkg.generation_dir(1).is_dir());
+    assert_eq!(pkg.current().unwrap(), Some(3));
+}
+
+#[test]
+fn cli_gc_s3_rejects_without_store() {
+    let out = tet_cmd()
+        .args(["gc", "s3://not-a-real-bucket/prefix"])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "s3 gc: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("error:"), "expected a cli error, got: {err}");
+}
+
+#[test]
 fn cli_pack_remove_package() {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("one.tet");

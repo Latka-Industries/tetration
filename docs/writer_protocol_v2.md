@@ -215,7 +215,7 @@ Library: [`verify_tet_package`](../src/verify/package.rs). CLI: `tet verify path
 | `tet publish` | Freeze part list → build `packed.tet` → flip `CURRENT` (`--dry-run` = claim/schema checks only; `--replace NAME` = opt-in dtype/shape change vs CURRENT; `--abort --generation G` drops a stuck lock) |
 | `tet compact` | Optional merge of parts **during** publish (not a separate visibility step) |
 | `tet pack` | Copy sealed `G`’s `packed.tet` → standalone `.tet` (optional `--remove-package` after verified copy) |
-| `tet gc` | Drop leftover `staging/` and sealed generations older than `CURRENT` / `CURRENT-1` (dry-run; `--apply`) |
+| `tet gc` | Local `.tet.d`: drop leftover `staging/` and sealed generations older than `CURRENT` / `CURRENT-1` (dry-run; `--apply`). `s3://bucket/prefix` uses [`prune_store`](../src/catalog/store/prune.rs) with the same retention; pass `--protect-generation G` for an open pin this process cannot see. Does not write `CURRENT`. |
 
 [THI-467](https://linear.app/thicclatka/issue/THI-467) · [THI-464](https://linear.app/thicclatka/issue/THI-464).
 

@@ -2,6 +2,7 @@
 //!
 //! Conditional publish uses HTTP `If-None-Match` / `If-Match` (decision K). MinIO speaks
 //! that pair; point [`S3Config::endpoint`] at a local MinIO for tests.
+//! [`super::prune_store`] uses the same retention as local `tet gc` on this backend.
 
 use std::fmt;
 use std::future::Future;
