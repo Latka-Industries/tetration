@@ -7,7 +7,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use super::{CatalogError, ObjectMeta, PinnedPackedTet, PublishGeneration, ReadAt, WritePart};
+use super::prune::{self, PruneOptions, PruneReport};
+use super::{
+    CatalogError, ObjectMeta, PackageStore, PinnedPackedTet, PublishGeneration, ReadAt, WritePart,
+};
 
 /// In-memory map of downloaded packed ranges, keyed by generation id + byte offset.
 #[derive(Debug, Default)]
@@ -139,6 +142,23 @@ impl<S> CachingStore<S> {
     #[must_use]
     pub fn cache(&self) -> Option<&Arc<Mutex<BlockCache>>> {
         self.cache.as_ref()
+    }
+
+    /// Prune the inner store, always protecting this wrapper's pinned generation.
+    ///
+    /// Dry-run unless [`PruneOptions::apply`] is set. Does not write `CURRENT`.
+    /// Other open pins still have to be passed in `opts`.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`prune::prune_store`].
+    pub fn prune(&self, opts: &PruneOptions) -> Result<PruneReport, CatalogError>
+    where
+        S: PackageStore,
+    {
+        let mut opts = opts.clone();
+        opts.pinned_generations.push(self.pin.generation);
+        prune::prune_store(&self.inner, &opts)
     }
 
     fn is_pinned_packed_key(&self, key: &str) -> bool {

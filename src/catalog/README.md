@@ -37,7 +37,7 @@ Verify APIs are implemented in [`verify`](../verify/README.md) but re-exported h
 | `execution.rs`    | Per-file defaults in chunk index header (memory budget bps)                    |
 | `session.rs`      | `TetWriterSession` / `TetFile` façade; `TetDatasetWrite` / `TetDatasetStreamSpec` |
 | `package.rs`      | `.tet.d` package roles (`PROTOCOL`, `CURRENT`, staging/generations/publishing)   |
-| `store/`          | `PackageStore` (`ReadAt` / `WritePart` / `PublishGeneration`): `LocalStore` + `MemoryStore` (THI-469) |
+| `store/`          | `PackageStore` (`ReadAt` / `WritePart` / `PublishGeneration`): `LocalStore` + `MemoryStore` (THI-469). `prune_store` drops leftover staging and sealed generations older than `CURRENT` / `CURRENT-1` (THI-557) |
 | `shard.rs`        | `TetShardWriter` / `PartMeta` — immutable staging parts for concurrent ingest    |
 
 ## Codecs and dtypes
