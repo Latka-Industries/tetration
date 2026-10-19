@@ -237,12 +237,14 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             quiet,
         }),
         Commands::Gc {
-            package,
+            target,
             apply,
+            protect_generation,
             quiet,
         } => run_gc(&GcOpts {
-            package,
+            target,
             apply,
+            protect_generation,
             quiet,
         }),
         Commands::Info { .. }

@@ -14,7 +14,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
 | [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
 | [`tet pack`](#tet-ingest--publish--compact--pack)  | —      | Copy sealed `packed.tet` → standalone `.tet` (`--remove-package` optional) |
-| [`tet gc`](#tet-gc) `<path.tet.d>`                 | —      | Drop leftover staging + old generations (dry-run; `--apply` to delete) |
+| [`tet gc`](#tet-gc) `<path.tet.d\|s3://>`       | —      | Drop leftover staging + old generations (dry-run; `--apply` to delete) |
 
 ## `tet info`
 
@@ -202,19 +202,25 @@ tet publish climate.tet.d --abort --generation 2
 
 ## `tet gc`
 
-Drop leftover `staging/` sessions and sealed generations older than `CURRENT` / `CURRENT-1` (writer protocol decisions D + J). **Dry-run by default.**
+Drop leftover `staging/` sessions and sealed generations older than `CURRENT` / `CURRENT-1` (writer protocol decisions D + J). **Dry-run by default.** Does not change `CURRENT`.
 
 ```bash
 tet gc climate.tet.d
 tet gc climate.tet.d --apply
+tet gc s3://bucket/prefix
+tet gc s3://bucket/prefix --apply --protect-generation 1
 ```
 
 | Flag / arg | Effect |
 | ---------- | ------ |
-| `PKG.tet.d` | Package root |
+| `PKG.tet.d` | Local package root (`TetPackage::gc`) |
+| `s3://bucket/prefix` | Store prune (`prune_store` on `S3Store`). Feature `tetration-s3`. Credentials are `TETRATION_S3_*` (`ENDPOINT` required), not the URI. Optional `?generation=G` protects that generation. |
 | `--apply` | Actually delete (default: print the plan only) |
+| `--protect-generation G` | Repeatable. `s3://` only. Keep generation `G` even when it is older than `CURRENT-1` (an open pin this process cannot see). |
 | `-q` | Quiet |
 
-Never deletes the generation named by `CURRENT` or `CURRENT-1`. Local `.tet.d` only in this cut.
+Never deletes the generation named by `CURRENT` or `CURRENT-1`. A live `publishing/<G>` claim (heartbeat not stale) keeps staging and that generation.
+
+**Pin safety (`s3://`):** `tet gc` cannot see `TetPackagePin` / `PinnedPackedTet` handles held by other processes. Those `packed.tet` objects are deleted if they are older than `CURRENT-1` unless you pass `--protect-generation` or `?generation=G`. `CachingStore::prune` protects its own pin; the CLI does not open a pin for you. Local `.tet.d` gc is unchanged and does not take `--protect-generation`.
 
 More examples: [`fixtures/queries/`](../fixtures/queries/), [`query_engine.md`](query_engine.md).

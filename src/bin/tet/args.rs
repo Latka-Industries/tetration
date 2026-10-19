@@ -238,13 +238,22 @@ pub enum Commands {
     },
     /// Drop leftover staging and sealed generations older than CURRENT / CURRENT-1.
     ///
-    /// Dry-run by default; pass `--apply` to delete. Never removes CURRENT or CURRENT-1.
+    /// A local `.tet.d` uses package GC. An `s3://bucket/prefix` target (feature
+    /// `tetration-s3`, credentials `TETRATION_S3_*`) uses the same retention on
+    /// `PackageStore`. Dry-run by default; pass `--apply` to delete.
+    ///
+    /// `s3://` gc cannot see open pins in other processes. Pass `--protect-generation G`
+    /// for each (or `?generation=G` on the URI). CURRENT, CURRENT-1, and a live
+    /// `publishing/<G>` claim are kept either way. Prune does not change CURRENT.
     Gc {
-        /// Package directory (`.tet.d`).
-        package: PathBuf,
+        /// Local `.tet.d` package, or `s3://bucket/prefix` (`?generation=G` protects G).
+        target: PathBuf,
         /// Actually delete (default: print the plan only).
         #[arg(long)]
         apply: bool,
+        /// Generation an open reader still needs. Repeatable. `s3://` targets only.
+        #[arg(long = "protect-generation", value_name = "G")]
+        protect_generation: Vec<u64>,
         #[arg(short = 'q', long)]
         quiet: bool,
     },

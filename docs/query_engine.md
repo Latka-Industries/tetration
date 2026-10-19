@@ -100,6 +100,12 @@ Normative for every package query, local or store-backed (THI-498 / THI-472).
 
 Public package API: [`TetPackage::pin_current`](../src/catalog/package.rs) / `pin_generation` → [`TetPackagePin`](../src/catalog/package.rs). `open_current` pins then opens once; keep the pin for multi-query loops. Store entry point: `pin_packed_tet`.
 
+### Store prune
+
+[`prune_store`](../src/catalog/store/prune.rs) is local `tet gc` on a [`PackageStore`](../src/catalog/store/mod.rs), including `S3Store` (feature `tetration-s3`, path-style, `TETRATION_S3_*`). Dry-run unless `PruneOptions::apply` (CLI: `tet gc s3://bucket/prefix`, `--apply` to delete). It removes leftover `staging/<session>` prefixes and sealed generations older than `CURRENT` / `CURRENT-1`. It does not write `CURRENT`. A sealed generation newer than `CURRENT` is kept.
+
+**Pin safety:** the store has no process-wide pin registry. Pass open generations via `pinned_generations`, `with_package_pins`, or `with_store_pins`. [`CachingStore::prune`](../src/catalog/store/cache.rs) always protects that wrapper's pin. `tet gc` on `s3://` cannot see pins held by other processes; name them with `--protect-generation G` or `?generation=G`. A live `publishing/<G>` claim (heartbeat not stale) withholds every staging session and that generation. `CURRENT` and `CURRENT-1` are never candidates.
+
 ### Latency assumptions
 
 - Catalog bootstrap is typically **one or two** `read_at` calls (header through TIDX; optional EOF footer probe when the history flag is set).
