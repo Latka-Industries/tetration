@@ -46,7 +46,9 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.3.8:** library hygiene only. `f16` and `f64` materialize share one macro. Matchable package failures are `CatalogError` variants (display text unchanged). `tetration::query` CLI formatters were deprecated here (THI-536) and removed in 0.4.0 (THI-541).
 
-**Shipped in 0.4.0:** per-chunk min/max/null zone maps at compact/publish (`generations/<G>/ZONE.json`; staging parts unchanged; verify is required for new seals and advisory for older ones) (THI-473). `ReadPlan.logical_f32_element_count` is `logical_element_count` (THI-540). The deprecated `tetration::query` CLI re-exports are gone; `tet` uses `query::cli` (THI-541). **tet-py 0.4.0** on PyPI pins this crate. Predicate pushdown and group-by are later in 0.4.x.
+**Shipped in 0.4.0:** per-chunk min/max/null zone maps at compact/publish (`generations/<G>/ZONE.json`; staging parts unchanged; verify is required for new seals and advisory for older ones) (THI-473). `ReadPlan.logical_f32_element_count` is `logical_element_count` (THI-540). The deprecated `tetration::query` CLI re-exports are gone; `tet` uses `query::cli` (THI-541). **tet-py 0.4.0** on PyPI pins this crate.
+
+**Shipped in 0.4.1:** value-filter wire + conservative zone-map chunk skip (`filter` on the query document; `ReadPlan.zone_filter_skipped_chunks`) (THI-543). Group-by remains later (0.4.2 / THI-551).
 
 Example query:
 
@@ -64,13 +66,15 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Today:** organization is **geometric** — logical coordinates → chunk coordinates via the chunk index. Footer metadata supports `dim_names`, coordinate **labels**, and attrs, but there is no secondary index for value predicates.
 
-**Shipped in 0.4.0:** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats. Predicate pushdown that skips chunks is the next step, not this cut.
+**Shipped in 0.4.0:** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats.
 
-**Direction:** optional metadata indexes so predicates such as `temperature > 100`, `year = 2025`, or `region = Arizona` can skip most chunks — analogous to database indexes, min/max zone maps, or Parquet statistics.
+**Shipped in 0.4.1:** query `filter` predicates skip chunks that cannot match those zone stats (conservative; missing zones → no skip). `zone_filter_skipped_chunks` is on the plan for demos/tests.
+
+**Direction:** richer indexes beyond per-chunk zone maps (e.g. sorted coord lookup) and group-by — analogous to database indexes or Parquet statistics.
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Indexes must be optional, verifiable, and evolvable without breaking v1 readers.
 
-**Relation to v1:** value-filter **wire** is in progress under 0.4.1; [group-by remains deferred](query_engine.md#intentional-gaps-v1). This direction generalizes “slice by label” into predicate pushdown and chunk skipping.
+**Relation to v1:** filter-by-value pushdown is in **0.4.1**; [group-by remains deferred](query_engine.md#intentional-gaps-v1).
 
 ---
 
@@ -101,7 +105,7 @@ GROUP BY region
 
 **Design tension:** scientists want expressive analytics; the format wants a small, auditable control plane. Any extension should declare **tiers** (scalar fold vs materialize-required) and stay JSON/TOML-serializable for agents and FFI.
 
-**Relation to v1:** [`join` vs append](query_engine.md) is already documented; group-by and filter-by-value belong here, not in ad hoc op sprawl.
+**Relation to v1:** [`join` vs append](query_engine.md) is already documented; group-by belongs here. Filter-by-value pushdown shipped in 0.4.1.
 
 ---
 

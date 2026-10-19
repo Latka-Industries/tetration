@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Query value filter (`filter` wire key): closed compare / null predicates on cell values (`eq`/`ne`/`lt`/`le`/`gt`/`ge`, `is_null`/`is_not_null`). Planner conservatively skips chunks whose zone min/max/null cannot match; missing `ZONE.json` means no skip. `ReadPlan.zone_filter_skipped_chunks` reports drops on plan and execute (THI-543–THI-547).
+
 ## [0.4.0] - 2026-10-18
 
 ### Added
