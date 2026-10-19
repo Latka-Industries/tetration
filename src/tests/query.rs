@@ -765,6 +765,94 @@ fn named_axis_requires_dim_names_metadata() {
 }
 
 #[test]
+fn group_by_wire_rejects_unknown_and_oversize() {
+    let unknown = parse_query_json(r#"{"dataset":"a","group":["row"],"sum":[]}"#).unwrap_err();
+    assert!(unknown.to_string().contains("unknown field"));
+
+    let empty = parse_query_json(r#"{"dataset":"a","group_by":[],"sum":[]}"#).unwrap_err();
+    assert!(empty.to_string().contains("at least one"));
+
+    let missing_op = parse_query_json(r#"{"dataset":"a","group_by":["0"]}"#).unwrap();
+    let err = validate_query(&missing_op).unwrap_err();
+    assert!(err.to_string().contains("requires a reduction"));
+
+    let dup = parse_query_json(r#"{"dataset":"a","group_by":["row","row"],"sum":[]}"#).unwrap();
+    let err = validate_query(&dup).unwrap_err();
+    assert!(err.to_string().contains("more than once"));
+
+    let too_many = parse_query_json(
+        r#"{"dataset":"a","group_by":["0","1","2","3","4","5","6","7","8"],"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(too_many.to_string().contains("maximum"));
+}
+
+#[test]
+fn group_by_named_dimension_streams_fold() {
+    use crate::catalog::{DatasetMetadataV1, FooterBlobV1, TetMetadataV1, write_footer_blob};
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("group_by.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    write_footer_blob(
+        &path,
+        &FooterBlobV1 {
+            history: Vec::new(),
+            metadata: Some(TetMetadataV1 {
+                datasets: [(
+                    "a".to_owned(),
+                    DatasetMetadataV1 {
+                        dim_names: Some(vec!["row".to_owned(), "col".to_owned()]),
+                        ..Default::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            }),
+            metadata_ref: None,
+        },
+    )
+    .unwrap();
+
+    let doc = parse_query_json(r#"{"dataset":"a","group_by":["col"],"sum":[]}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let roundtrip = parse_query_json(&serde_json::to_string(&doc).unwrap()).unwrap();
+    assert_eq!(roundtrip.group_by.as_deref(), Some(&["col".to_owned()][..]));
+
+    let mmap = mmap_file_read(&path).unwrap();
+    let plan = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    let logical = plan.read_plan.as_ref().unwrap().logical_element_count;
+    assert_eq!(ex.memory_strategy, Some("streaming_fold"));
+    assert_eq!(ex.group_count, Some(3));
+    assert!(logical > ex.group_count.unwrap());
+    assert_eq!(ex.operation_reduced_shape.as_deref(), Some(&[3u64][..]));
+    let sums = ex.operation_reduced_sum.as_ref().unwrap();
+    assert_eq!(sums.len(), 3);
+    assert!((sums[0] - 5.0).abs() < 1e-5);
+    assert!((sums[1] - 7.0).abs() < 1e-5);
+    assert!((sums[2] - 9.0).abs() < 1e-5);
+    assert!(ex.spill_f32_path.is_none());
+}
+
+#[test]
+fn group_by_tier_c_materializes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("group_by_median.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let doc = parse_query_json(r#"{"dataset":"a","group_by":["1"],"median":[]}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let plan = plan_query_with_tet_mmap(&doc, path.to_str(), &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    assert_eq!(ex.group_count, Some(3));
+    assert_ne!(ex.memory_strategy, Some("streaming_fold"));
+    assert!(ex.memory_strategy.unwrap_or("").contains("materialize"));
+    assert_eq!(ex.operation_reduced_median.as_ref().map(Vec::len), Some(3));
+}
+
+#[test]
 fn plan_query_scalar_sum_fold_matches_materialize_path() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fold_sum.tet");

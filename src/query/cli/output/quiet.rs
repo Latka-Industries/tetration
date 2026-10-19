@@ -259,6 +259,9 @@ fn scalar_operation_quiet_line(
     if let Some(n) = ex.operation_element_count {
         parts.push(format!("elements={n}"));
     }
+    if let Some(n) = ex.group_count {
+        parts.push(format!("group_count={n}"));
+    }
     if let Some(strategy) = ex.memory_strategy {
         parts.push(format!("memory_strategy={strategy}"));
     }
@@ -285,6 +288,9 @@ fn partial_operation_quiet_line(
     parts.push(format!("values={values}"));
     if let Some(n) = ex.operation_element_count {
         parts.push(format!("elements={n}"));
+    }
+    if let Some(n) = ex.group_count {
+        parts.push(format!("group_count={n}"));
     }
     if let Some(strategy) = ex.memory_strategy {
         parts.push(format!("memory_strategy={strategy}"));

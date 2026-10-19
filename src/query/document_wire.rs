@@ -49,6 +49,7 @@ const RESERVED_KEYS: &[&str] = &[
     "dataset",
     "selection",
     "filter",
+    "group_by",
     "spill",
     "write",
     "execution",
@@ -106,6 +107,11 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
         Some(v) => Some(parse_filter(v)?),
     };
 
+    let group_by = match obj.get("group_by") {
+        None => None,
+        Some(v) => Some(parse_group_by(v)?),
+    };
+
     let output = match obj.get("spill") {
         None => None,
         Some(v) => Some(parse_spill(v)?),
@@ -138,6 +144,7 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
         dataset,
         selection,
         filter,
+        group_by,
         operation,
         output,
         write,
@@ -147,6 +154,25 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
 
 fn is_allowed_key(key: &str) -> bool {
     RESERVED_KEYS.contains(&key) || OP_KEYS.contains(&key)
+}
+
+fn parse_group_by(v: &Value) -> Result<Vec<String>, TetError> {
+    let arr = v.as_array().ok_or_else(|| {
+        TetError::Validation("`group_by` must be an array of dimension names or indices".into())
+    })?;
+    if arr.is_empty() {
+        return Err(TetError::Validation(
+            "`group_by` must list at least one dimension".into(),
+        ));
+    }
+    if arr.len() > QueryLimits::DEFAULT.max_group_by_keys {
+        return Err(TetError::Validation(format!(
+            "`group_by` has {} keys; maximum is {}",
+            arr.len(),
+            QueryLimits::DEFAULT.max_group_by_keys
+        )));
+    }
+    arr.iter().map(parse_axis_spec_item).collect()
 }
 
 fn parse_spill(v: &Value) -> Result<OutputHints, TetError> {
@@ -675,6 +701,9 @@ impl Serialize for QueryDocumentWire<'_> {
         }
         if let Some(filter) = &doc.filter {
             serialize_filter(&mut map, filter)?;
+        }
+        if let Some(keys) = &doc.group_by {
+            map.serialize_entry("group_by", keys)?;
         }
         if let Some(op) = &doc.operation {
             serialize_operation(&mut map, op)?;

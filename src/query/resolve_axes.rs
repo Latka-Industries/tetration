@@ -43,17 +43,78 @@ pub(crate) fn resolve_query_document_axes(
     dataset_meta: Option<&DatasetMetadataV1>,
     ndim: usize,
 ) -> Result<(), TetError> {
+    let dim_names = dataset_meta.and_then(|m| m.dim_names.as_deref());
+    if let Some(keys) = doc.group_by.as_mut() {
+        for label in keys.iter_mut() {
+            *label = resolve_one_axis_label(label, dim_names, ndim)?;
+        }
+    }
     let Some(op) = doc.operation.as_mut() else {
         return Ok(());
     };
-    let dim_names = dataset_meta.and_then(|m| m.dim_names.as_deref());
     resolve_operation_axes(op, dim_names, ndim)?;
     if let Some(attrs) = dataset_meta.map(|m| &m.attrs) {
         resolve_null_count_fill(op, attrs)?;
     } else {
         resolve_null_count_fill(op, &BTreeMap::new())?;
     }
+    apply_group_by_partition(doc, ndim)?;
     Ok(())
+}
+
+/// Reduction axes are the complement of `group_by` when omitted, and must partition rank otherwise.
+fn apply_group_by_partition(doc: &mut QueryDocument, ndim: usize) -> Result<(), TetError> {
+    let Some(keys) = doc.group_by.as_ref() else {
+        return Ok(());
+    };
+    let Some(op) = doc.operation.as_mut() else {
+        return Err(TetError::Validation(
+            "`group_by` requires a reduction (for example `\"sum\": []`)".into(),
+        ));
+    };
+    let group_idx = axis_index_set(keys)?;
+    if op.axes().is_empty() {
+        let reduce: Vec<String> = (0..ndim)
+            .filter(|i| !group_idx.contains(i))
+            .map(|i| i.to_string())
+            .collect();
+        if reduce.is_empty() {
+            return Err(TetError::Validation(
+                "`group_by` must leave at least one axis for the reduction".into(),
+            ));
+        }
+        *op.axes_mut() = reduce;
+        return Ok(());
+    }
+    let reduce_idx = axis_index_set(op.axes())?;
+    if group_idx.intersection(&reduce_idx).next().is_some() {
+        return Err(TetError::Validation(
+            "`group_by` dimensions must be disjoint from the reduction axes".into(),
+        ));
+    }
+    if group_idx.len() + reduce_idx.len() != ndim {
+        return Err(TetError::Validation(
+            "`group_by` and the reduction axes must together cover every dimension".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn axis_index_set(labels: &[String]) -> Result<std::collections::BTreeSet<usize>, TetError> {
+    let mut set = std::collections::BTreeSet::new();
+    for label in labels {
+        let idx = label.parse::<usize>().map_err(|_| {
+            TetError::Validation(format!(
+                "invalid axis index {label:?} after name resolution"
+            ))
+        })?;
+        if !set.insert(idx) {
+            return Err(TetError::Validation(format!(
+                "`group_by` resolves dimension `{label}` more than once"
+            )));
+        }
+    }
+    Ok(set)
 }
 
 /// Fill [`Operation::NullCount::fill`] from query JSON or dataset attrs (`_FillValue`, …).

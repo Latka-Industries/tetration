@@ -119,6 +119,7 @@ fn push_execution_io_stats(map: &mut Map<String, Value>, ex: &QueryExecutionPrev
         json!(ex.total_bytes_read_from_disk),
     );
     opt_str(map, "memory_strategy", ex.memory_strategy);
+    opt_usize(map, "group_count", ex.group_count);
     opt_str(map, "spill_f32_path", ex.spill_f32_path.as_deref());
     opt_u64(map, "spill_f32_bytes", ex.spill_f32_bytes);
     opt_u64(map, "memory_budget_bytes", ex.memory_budget_bytes);
