@@ -47,6 +47,7 @@ fn resolve_row_labels_to_indices() {
         output: None,
         write: None,
         execution: None,
+        pipeline: None,
     };
     resolve_query_document_selection(&mut doc, Some(&meta), &[2, 3]).unwrap();
     let sel = doc.selection.as_ref().unwrap();

@@ -853,6 +853,89 @@ fn group_by_tier_c_materializes() {
 }
 
 #[test]
+fn pipeline_lowers_to_group_by_fold() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pipeline.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let raw = r#"{"dataset":"a","pipeline":[{"select":[{},{}]},{"group_by":["1"],"sum":[]}]}"#;
+    let doc = parse_query_json(raw).unwrap();
+    validate_query(&doc).unwrap();
+    assert!(doc.pipeline.as_ref().is_some_and(|steps| steps.len() == 2));
+    assert_eq!(doc.group_by.as_deref(), Some(&["1".to_owned()][..]));
+    let again = parse_query_json(&serde_json::to_string(&doc).unwrap()).unwrap();
+    assert_eq!(again.group_by, doc.group_by);
+    assert!(again.pipeline.is_some());
+
+    let flat = parse_query_json(r#"{"dataset":"a","group_by":["1"],"sum":[]}"#).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let piped = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let direct = plan_query_with_tet_mmap(&flat, None, &mmap, Some(0)).unwrap();
+    assert_eq!(
+        piped.execution.as_ref().unwrap().operation_reduced_sum,
+        direct.execution.as_ref().unwrap().operation_reduced_sum
+    );
+    assert_eq!(piped.execution.as_ref().unwrap().group_count, Some(3));
+    assert_eq!(
+        piped.execution.as_ref().unwrap().memory_strategy,
+        Some("streaming_fold")
+    );
+}
+
+#[test]
+fn pipeline_rejects_reorder_unknown_and_oversize() {
+    let reorder = parse_query_json(r#"{"dataset":"a","pipeline":[{"sum":[]},{"select":[{},{}]}]}"#)
+        .unwrap_err();
+    assert!(reorder.to_string().contains("out of order"));
+
+    let unknown = parse_query_json(r#"{"dataset":"a","pipeline":[{"map":1}]}"#).unwrap_err();
+    assert!(unknown.to_string().contains("unknown pipeline step"));
+
+    let mixed =
+        parse_query_json(r#"{"dataset":"a","sum":[],"pipeline":[{"sum":[]}]}"#).unwrap_err();
+    assert!(mixed.to_string().contains("cannot be combined"));
+
+    let steps = (0..9)
+        .map(|_| r#"{"select":[]}"#)
+        .collect::<Vec<_>>()
+        .join(",");
+    let over = parse_query_json(&format!(r#"{{"dataset":"a","pipeline":[{steps}]}}"#)).unwrap_err();
+    assert!(over.to_string().contains("maximum"));
+}
+
+#[test]
+fn pipeline_cli_quiet_group_sum() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pipeline_cli.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let mut cmd = std::process::Command::new(env!("CARGO"));
+    cmd.current_dir(env!("CARGO_MANIFEST_DIR"));
+    cmd.args([
+        "run",
+        "--quiet",
+        "--bin",
+        "tet",
+        "--",
+        "query",
+        r#"{"dataset":"a","pipeline":[{"group_by":["1"],"sum":[]}]}"#,
+        "-t",
+        path.to_str().unwrap(),
+        "-x",
+        "-q",
+    ]);
+    let output = cmd.output().unwrap();
+    assert!(
+        output.status.success(),
+        "stderr {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("group_count=3") && stdout.contains("values="),
+        "stdout {stdout}"
+    );
+}
+
+#[test]
 fn plan_query_scalar_sum_fold_matches_materialize_path() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fold_sum.tet");

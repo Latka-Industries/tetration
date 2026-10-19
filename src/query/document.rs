@@ -36,6 +36,8 @@ pub struct QueryLimits {
     pub max_filter_predicates: usize,
     /// Maximum number of dimension keys in a top-level `group_by` array.
     pub max_group_by_keys: usize,
+    /// Maximum number of steps in a top-level `pipeline` array.
+    pub max_pipeline_steps: usize,
 }
 
 impl QueryLimits {
@@ -47,6 +49,7 @@ impl QueryLimits {
         max_operation_axis_label_len: 32,
         max_filter_predicates: 8,
         max_group_by_keys: 8,
+        max_pipeline_steps: 8,
     };
 }
 
