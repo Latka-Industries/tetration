@@ -12,7 +12,7 @@ use crate::query::fold::partial_geometry;
 use crate::query::materialize::shared::{
     scatter_fill_chunks, spill_byte_len_from_elem_count, spill_read_plan_pod_le_impl,
 };
-use crate::query::types::{ReadPlan, TetError, TransformMethod};
+use crate::query::types::{ReadPlan, TetError, TransformMethod, fold_keeps_cell};
 use crate::utils::{f32_le, f64_le};
 
 use super::stats::TransformStats;
@@ -98,6 +98,10 @@ fn transform_scatter_fill_f32(
     let shape = plan.logical_selection_shape.clone();
     scatter_fill_chunks(mmap, plan, out, |mmap, plan, c, out| {
         visit_planned_chunk(mmap, plan, c, |li, v| {
+            if !fold_keeps_cell(plan.cell_filter, f64::from(v)) {
+                out[li] = f32::NAN;
+                return Ok(());
+            }
             let y =
                 transform_f64(f64::from(v), li, &shape, stats, &mut warnings.borrow_mut())? as f32;
             out[li] = y;
@@ -116,6 +120,10 @@ fn transform_scatter_fill_f64(
     let shape = plan.logical_selection_shape.clone();
     scatter_fill_chunks(mmap, plan, out, |mmap, plan, c, out| {
         visit_planned_chunk_f64(mmap, plan, c, |li, v| {
+            if !fold_keeps_cell(plan.cell_filter, v) {
+                out[li] = f64::NAN;
+                return Ok(());
+            }
             out[li] = transform_f64(v, li, &shape, stats, &mut warnings.borrow_mut())?;
             Ok(())
         })

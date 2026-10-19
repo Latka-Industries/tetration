@@ -95,6 +95,12 @@ impl CellPredicate {
         true
     }
 
+    /// Dataset fill used for integer masks, when the query resolved one.
+    #[must_use]
+    pub(crate) fn fill_f64(self) -> Option<f64> {
+        self.has_fill.then_some(self.fill)
+    }
+
     fn is_null_cell(self, value: f64) -> bool {
         if value.is_nan() {
             return true;
@@ -102,6 +108,9 @@ impl CellPredicate {
         self.has_fill && values_equal_fill(value, self.fill)
     }
 }
+
+/// Error when an integer dense materialize has `filter` but no dataset fill.
+pub(crate) const INTEGER_FILTER_FILL_MSG: &str = "integer materialize under `filter` requires a dataset fill (_FillValue, missing_value, or fill_value)";
 
 /// Keep `value` when no cell filter is attached, or when it matches.
 #[inline]
