@@ -50,7 +50,9 @@ Near-term work also tracked in [`query_engine.md` — operations roadmap](query_
 
 **Shipped in 0.4.1:** value-filter wire + conservative zone-map chunk skip (`filter` on the query document; `ReadPlan.zone_filter_skipped_chunks`) (THI-543).
 
-**Shipped in 0.4.2:** `group_by` over dimension names, with the reduction streamed per group when the op is tier-A/B, plus a closed `pipeline` step list (THI-551). S3 / store prune is **0.4.3** (THI-535).
+**Shipped in 0.4.2:** `group_by` over dimension names, with the reduction streamed per group when the op is tier-A/B, plus a closed `pipeline` step list (THI-551).
+
+**Shipped in 0.4.3:** store prune (`prune_store`, `tet gc s3://bucket/prefix`): leftover staging and sealed generations older than `CURRENT` / `CURRENT-1`. Dry-run by default. Open pins and a live publish claim are refused. Does not write `CURRENT` (THI-535).
 
 Example query:
 
