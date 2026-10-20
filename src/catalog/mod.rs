@@ -62,10 +62,9 @@ pub use secondary_index::{
     prepare_secondary_index, read_secondary_index_file, secondary_index_for_packed, value_postings,
 };
 pub use semantics::{
-    DECLARED_ATTR_KEYS, SEMANTICS_EXAMPLES_URL, SEMANTICS_GUIDE_URL, ScaffoldFormat,
-    declared_attrs, declared_attrs_for_dataset, get_dataset_attr, is_declared_key,
-    metadata_has_declared_attrs, scaffold_policy, scaffold_policy_from_path, set_dataset_attrs,
-    write_recording_fixture,
+    DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, declared_attrs,
+    declared_attrs_for_dataset, get_dataset_attr, is_declared_key, metadata_has_declared_attrs,
+    scaffold_policy, scaffold_policy_from_path, set_dataset_attrs, write_recording_fixture,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,

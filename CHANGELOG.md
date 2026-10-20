@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `tet semantics scaffold` (empty attrs) emits a single docs URL — `https://docs.tetration.sh/guides/semantics/` — matching the site guide that now includes worked examples. Removed `SEMANTICS_EXAMPLES_URL` (THI-600; ships in 0.5.2).
+
 ## [0.5.1] - 2026-10-20
 
 ### Added

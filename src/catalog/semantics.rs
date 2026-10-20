@@ -33,9 +33,8 @@ pub const DECLARED_ATTR_KEYS: &[&str] = &[
     "standard_name",
 ];
 
-/// Doc URLs emitted by [`scaffold_policy`] when no declared attrs are present.
+/// Doc URL emitted by [`scaffold_policy`] when no declared attrs are present.
 pub const SEMANTICS_GUIDE_URL: &str = "https://docs.tetration.sh/guides/semantics/";
-pub const SEMANTICS_EXAMPLES_URL: &str = "https://docs.tetration.sh/guides/semantics/examples";
 
 /// Output format for [`scaffold_policy`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,7 +272,6 @@ fn scaffold_toml(summary: &TetFileSummaryV1) -> String {
         out.push_str("#\n");
         out.push_str("# Docs:\n");
         out.push_str(&format!("#   {SEMANTICS_GUIDE_URL}\n"));
-        out.push_str(&format!("#   {SEMANTICS_EXAMPLES_URL}\n"));
         return out;
     }
 
@@ -312,12 +310,12 @@ fn scaffold_json(summary: &TetFileSummaryV1) -> String {
         struct EmptyScaffold {
             note: &'static str,
             catalog: Vec<String>,
-            docs: [&'static str; 2],
+            docs: [&'static str; 1],
         }
         let body = EmptyScaffold {
             note: "No declared semantics attrs in this .tet.",
             catalog: catalog_lines(&summary.datasets),
-            docs: [SEMANTICS_GUIDE_URL, SEMANTICS_EXAMPLES_URL],
+            docs: [SEMANTICS_GUIDE_URL],
         };
         return serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_owned());
     }

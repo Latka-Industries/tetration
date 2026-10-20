@@ -79,7 +79,8 @@ fn scaffold_empty_vs_declared() {
         let summary = read_tet_summary_v1(&mmap).unwrap();
         let empty = scaffold_policy(&summary, ScaffoldFormat::Toml);
         assert!(empty.contains("No declared semantics attrs"));
-        assert!(empty.contains("docs.tetration.sh/guides/semantics"));
+        assert!(empty.contains("docs.tetration.sh/guides/semantics/"));
+        assert!(!empty.contains("guides/semantics/examples"));
         assert!(!empty.contains("[profiles."));
     }
 
