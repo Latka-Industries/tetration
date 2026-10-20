@@ -121,7 +121,7 @@ Do **not** conflate them:
 
 - **`dim_names`** — O(`ndim`) strings; enables `"mean": "time"` in query JSON/TOML.
 - **`coords`** — O(`shape[d]`) inline label vectors per axis (limits in [`MetadataLimitsV1`](../src/catalog/metadata.rs)); large coords may spill via `metadata_spill`.
-- **`attrs`** — scalar metadata (`units`, `_FillValue`, `missing_value`, …); used by `null_count` and `tet info`.
+- **`attrs`** — scalar string metadata (`units`, `_FillValue`, `missing_value`, …); used by `null_count` and `tet info`. Optional declared science/media keys (`frame_rate`, `crs`, …) are documented in [`semantics.md`](semantics.md); they do not change layout_version.
 
 **Coordinate labels ≠ a query index by default.** Storing labels enables **name → integer index** resolution at plan time. Fast **filter / group-by** on high-cardinality keys may additionally need an auxiliary lookup structure — a separate layout/query decision.
 
