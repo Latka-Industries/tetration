@@ -62,7 +62,7 @@ Prefer the site for product docs. The **normative contract** for third-party rea
 
 | Topic | Site | Repo |
 | ----- | ---- | ---- |
-| **Normative SPEC (0.5.2)** | — | [`SPEC/`](SPEC/README.md) · [`COMPATIBILITY`](SPEC/COMPATIBILITY.md) · [`conformance/`](conformance/README.md) |
+| **Normative SPEC (0.5.3 pack)** | — | [`SPEC/`](SPEC/README.md) · [`COMPATIBILITY`](SPEC/COMPATIBILITY.md) · [`conformance/`](conformance/README.md) |
 | Getting started | [docs.tetration.sh](https://docs.tetration.sh/getting-started) | — |
 | Format / layout | [/format/](https://docs.tetration.sh/format/) | [`docs/layout_v1.md`](docs/layout_v1.md) |
 | CLI | [/cli/](https://docs.tetration.sh/cli/) | [`docs/cli.md`](docs/cli.md) |

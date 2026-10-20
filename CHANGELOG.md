@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-20
+
 ### Changed
 
 - Conformance pack `spec_milestone` **0.5.3**: more accept cases (u32/f16 mean+var, sample strided mean, large verify, element_count), full legacy reject_verify set, and expanded closed-wire reject_query fixtures (THI-605).
+
+### Notes
+
+- Semver patch: conformance coverage grow only. Layout / query ABI unchanged. PyPI **tet-py** stays on **0.5.1** until after crates.io shows 0.5.3 (then pin).
 
 ## [0.5.2] - 2026-10-20
 
