@@ -23,11 +23,13 @@ no-default-features = true
 features = ["tetration-ffi", "tetration-parquet", "tetration-s3"]
 
 [features]
-default = ["tetration-netcdf", "tetration-hdf5"]
+default = ["tetration-netcdf", "tetration-hdf5", "tetration-cli"]
 # Phase 11: C ABI (`include/tetration.h`, `src/ffi/`). Build shared lib: `cargo build --features tetration-ffi`.
 tetration-ffi = []
 tetration-netcdf = ["dep:netcdf"]
 tetration-hdf5 = ["dep:hdf5-metno"]
+# CLI binary deps (`clap`, `indicatif`). Off when embedding the rlib/cdylib only.
+tetration-cli = ["dep:clap", "dep:indicatif"]
 # Phase 10b: CUDA scalar f32 reductions (Linux/Windows + NVIDIA).
 tetration-gpu = ["dep:cudarc"]
 # Phase 10d: ROCm / HIP scalar f32 reductions (Linux + AMD; do not enable with `tetration-gpu`).
@@ -42,6 +44,7 @@ tetration-s3 = ["dep:object_store", "dep:tokio", "dep:futures"]
 [[bin]]
 name = "tet"
 path = "src/bin/tet.rs"
+required-features = ["tetration-cli"]
 
 [[example]]
 name = "create_and_query"
@@ -66,8 +69,8 @@ path = "examples/gen_small_tet_fixtures.rs"
 [dependencies]
 argus-chunk = "0.1.0"
 bytemuck = "1.25.0"
-clap = { version = "4.5.51", features = ["derive"] }
-indicatif = "0.18.3"
+clap = { version = "4.5.51", features = ["derive"], optional = true }
+indicatif = { version = "0.18.3", optional = true }
 memmap2 = "0.9.10"
 rayon = "1.12.0"
 rkyv = "0.8.16"

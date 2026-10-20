@@ -1,0 +1,8 @@
+{
+  "dataset": "a",
+  "output": {
+    "preferred": {
+      "spill_array": { "handle": "out.bin" }
+    }
+  }
+}

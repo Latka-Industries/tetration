@@ -87,7 +87,7 @@ fn read_hdf5_tile_typed_into<T>(
 where
     T: hdf5_metno::H5Type + bytemuck::Pod,
 {
-    let err = |e: hdf5_metno::Error| ConvertError::Hdf5(e.to_string());
+    let err = ConvertError::from;
     match ndim {
         1 => {
             let sel = hdf5_range_selection(&ranges[..1])?;
@@ -209,8 +209,7 @@ pub(crate) fn read_netcdf_tile_le_into(
     }
     let ranges = tile_axis_ranges(spec);
     let slices = netcdf_axis_ranges(&ranges)?;
-    read_netcdf_raw_values_into(var, &slices, buf)
-        .map_err(|e| ConvertError::Netcdf(e.to_string()))?;
+    read_netcdf_raw_values_into(var, &slices, buf)?;
     if let Some(cf) = spec.cf {
         cf.apply_tile_le(spec.dtype, buf)?;
     }

@@ -40,9 +40,8 @@ pub fn export_tet_to_netcdf_with_progress(
     let started = Instant::now();
     ensure_missing_file(output)?;
     let (mmap, summary) = open_summary(input)?;
-    let mut file = netcdf::create(output).map_err(|e| ExportError::Netcdf(e.to_string()))?;
-    file.add_attribute("tetration_export", env!("CARGO_PKG_VERSION"))
-        .map_err(|e| ExportError::Netcdf(e.to_string()))?;
+    let mut file = netcdf::create(output)?;
+    file.add_attribute("tetration_export", env!("CARGO_PKG_VERSION"))?;
 
     let chunks_total = summary.chunks.len() as u64;
     let mut chunks_done = 0u64;
@@ -118,15 +117,10 @@ fn ensure_parent_group(file: &mut netcdf::FileMut, catalog_name: &str) -> Result
     let Some((parent, _)) = catalog_name.rsplit_once('/') else {
         return Ok(());
     };
-    if file
-        .group(parent)
-        .map_err(|e| ExportError::Netcdf(e.to_string()))?
-        .is_some()
-    {
+    if file.group(parent)?.is_some() {
         return Ok(());
     }
-    file.add_group(parent)
-        .map_err(|e| ExportError::Netcdf(e.to_string()))?;
+    file.add_group(parent)?;
     Ok(())
 }
 
@@ -165,8 +159,7 @@ fn ensure_dimensions(
         } else {
             format!("{group_key}/{name}")
         };
-        file.add_dimension(&dim_path, len)
-            .map_err(|e| ExportError::Netcdf(e.to_string()))?;
+        file.add_dimension(&dim_path, len)?;
         dim_lens.insert(key, len);
     }
     Ok(())
@@ -207,11 +200,8 @@ fn put_variable<T: netcdf::NcTypeDescriptor + bytemuck::Pod>(
 ) -> Result<(), ExportError> {
     let values: &[T] = bytemuck::try_cast_slice(dense)
         .map_err(|e| ExportError::Netcdf(format!("dense buffer cast failed for `{name}`: {e}")))?;
-    let mut var = file
-        .add_variable::<T>(name, dims)
-        .map_err(|e| ExportError::Netcdf(e.to_string()))?;
-    var.put_values(values, ..)
-        .map_err(|e| ExportError::Netcdf(e.to_string()))?;
+    let mut var = file.add_variable::<T>(name, dims)?;
+    var.put_values(values, ..)?;
     Ok(())
 }
 
@@ -225,10 +215,8 @@ fn write_variable_attrs(
         .variable_mut(name)
         .ok_or_else(|| ExportError::Netcdf(format!("missing variable after create: `{name}`")))?;
     for (key, value) in dataset_basic_export_attrs(summary, name) {
-        var.put_attribute(key.as_str(), value.as_str())
-            .map_err(|e| ExportError::Netcdf(e.to_string()))?;
+        var.put_attribute(key.as_str(), value.as_str())?;
     }
-    var.put_attribute("tetration_dtype", element_dtype_wire_label(elem))
-        .map_err(|e| ExportError::Netcdf(e.to_string()))?;
+    var.put_attribute("tetration_dtype", element_dtype_wire_label(elem))?;
     Ok(())
 }

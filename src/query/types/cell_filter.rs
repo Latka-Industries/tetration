@@ -127,14 +127,14 @@ fn values_equal_fill(value: f64, fill: f64) -> bool {
     }
 }
 
-#[allow(clippy::float_cmp)]
 fn compare_cell(null: bool, op: ValueCompareOp, value: f64, rhs: f64) -> bool {
     if null {
         return matches!(op, ValueCompareOp::Ne);
     }
     match op {
-        ValueCompareOp::Eq => value == rhs,
-        ValueCompareOp::Ne => value != rhs,
+        // Bit equality matches fill handling and avoids clippy::float_cmp.
+        ValueCompareOp::Eq => value.to_bits() == rhs.to_bits(),
+        ValueCompareOp::Ne => value.to_bits() != rhs.to_bits(),
         ValueCompareOp::Lt => value < rhs,
         ValueCompareOp::Le => value <= rhs,
         ValueCompareOp::Gt => value > rhs,

@@ -33,3 +33,10 @@ path = "fuzz_targets/verify_tet_package.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "parse_query_json"
+path = "fuzz_targets/parse_query_json.rs"
+test = false
+doc = false
+bench = false

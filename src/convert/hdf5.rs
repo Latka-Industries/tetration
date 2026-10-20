@@ -55,7 +55,7 @@ pub(crate) fn convert_h5_inner(
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
-    let file = File::open(input).map_err(|e| ConvertError::Hdf5(e.to_string()))?;
+    let file = File::open(input)?;
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
     collect_h5_plans(&file, "", chunk_bytes, &mut plans, &mut skipped)?;
@@ -105,7 +105,7 @@ fn collect_h5_plans(
     plans: &mut Vec<ImportPlan>,
     skipped: &mut Vec<super::ConvertSkip>,
 ) -> Result<(), ConvertError> {
-    let err = |e: hdf5_metno::Error| ConvertError::Hdf5(e.to_string());
+    let err = ConvertError::from;
     let mut names = loc.member_names().map_err(err)?;
     names.sort();
     for name in names {

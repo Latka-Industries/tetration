@@ -42,10 +42,8 @@ pub(crate) fn map_hdf5_element_dtype(
     ds: &hdf5_metno::Dataset,
     name: &str,
 ) -> Result<ElementDtype, ConvertError> {
-    let td = ds.dtype().map_err(|e| ConvertError::Hdf5(e.to_string()))?;
-    let desc = td
-        .to_descriptor()
-        .map_err(|e| ConvertError::Hdf5(e.to_string()))?;
+    let td = ds.dtype()?;
+    let desc = td.to_descriptor()?;
     element_dtype_from_hdf5_descriptor(&desc).ok_or(ConvertError::UnsupportedDtype {
         name: name.to_owned(),
         detail: format!("{desc:?}"),

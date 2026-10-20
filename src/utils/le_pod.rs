@@ -30,8 +30,11 @@ macro_rules! define_le_pod_module {
                 let off = i
                     .checked_mul($elem_size)
                     .expect(concat!($type_name, " index overflow in ", stringify!($read_fn)));
-                debug_assert!(off + $elem_size <= bytes.len());
-                bytemuck::pod_read_unaligned::<$elem>(&bytes[off..off + $elem_size])
+                let end = off
+                    .checked_add($elem_size)
+                    .expect(concat!($type_name, " slice end overflow in ", stringify!($read_fn)));
+                debug_assert!(end <= bytes.len());
+                bytemuck::pod_read_unaligned::<$elem>(&bytes[off..end])
             }
 
             /// Zero-copy slice when `bytes.len()` is a multiple of `elem_size` and aligned.
@@ -113,7 +116,7 @@ define_le_pod_module! {
 }
 
 define_le_pod_module! {
-    #[allow(clippy::int_plus_one, dead_code)]
+    #[allow(dead_code)]
     pub(crate) mod u8_le;
     ty u8;
     elem_size: 1;

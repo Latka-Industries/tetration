@@ -1,0 +1,7 @@
+{
+  "dataset": "temperature",
+  "selection": [
+    { "start": 0, "stop": 2 },
+    { "start": 0, "stop": 2 }
+  ]
+}

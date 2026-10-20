@@ -65,8 +65,7 @@ impl H5ParallelSource {
                 .as_ref()
                 .is_none_or(|c| c.input != self.input || c.plans_len != self.plans.len())
             {
-                let file = hdf5_metno::File::open(&self.input)
-                    .map_err(|e| ConvertError::Hdf5(e.to_string()))?;
+                let file = hdf5_metno::File::open(&self.input)?;
                 *ctx = Some(H5ThreadCtx {
                     input: self.input.clone(),
                     plans_len: self.plans.len(),
@@ -75,10 +74,7 @@ impl H5ParallelSource {
             }
             let ctx = ctx.as_ref().expect("h5 thread ctx");
             let plan = &self.plans[job.dataset_id];
-            let ds = ctx
-                .file
-                .dataset(&plan.name)
-                .map_err(|e| ConvertError::Hdf5(e.to_string()))?;
+            let ds = ctx.file.dataset(&plan.name)?;
             let spec = plan.tile_read(job);
             read_hdf5_tile_le_into(&ds, spec, buf)
         })
@@ -122,8 +118,7 @@ impl NetcdfParallelSource {
                 .as_ref()
                 .is_none_or(|c| c.input != self.input || c.plans_len != self.plans.len())
             {
-                let file =
-                    netcdf::open(&self.input).map_err(|e| ConvertError::Netcdf(e.to_string()))?;
+                let file = netcdf::open(&self.input)?;
                 *ctx = Some(NetcdfThreadCtx {
                     input: self.input.clone(),
                     plans_len: self.plans.len(),

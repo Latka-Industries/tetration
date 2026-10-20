@@ -40,11 +40,10 @@ pub fn export_tet_to_hdf5_with_progress(
     let started = Instant::now();
     ensure_missing_file(output)?;
     let (mmap, summary) = open_summary(input)?;
-    let file = File::create(output).map_err(|e| ExportError::Hdf5(e.to_string()))?;
+    let file = File::create(output)?;
     file.new_attr_builder()
         .with_data(env!("CARGO_PKG_VERSION"))
-        .create("tetration_export")
-        .map_err(|e| ExportError::Hdf5(e.to_string()))?;
+        .create("tetration_export")?;
 
     let chunks_total = summary.chunks.len() as u64;
     let mut chunks_done = 0u64;
@@ -97,14 +96,12 @@ fn export_dataset(
         h5_ds
             .new_attr_builder()
             .with_data(joined.as_str())
-            .create("dim_names")
-            .map_err(|e| ExportError::Hdf5(e.to_string()))?;
+            .create("dim_names")?;
     }
     h5_ds
         .new_attr_builder()
         .with_data(element_dtype_wire_label(elem))
-        .create("tetration_dtype")
-        .map_err(|e| ExportError::Hdf5(e.to_string()))?;
+        .create("tetration_dtype")?;
     Ok(())
 }
 
@@ -148,12 +145,8 @@ fn create_and_write<T: hdf5_metno::H5Type + bytemuck::Pod>(
     } else {
         builder
     };
-    let ds = builder
-        .shape(shape)
-        .create(name)
-        .map_err(|e| ExportError::Hdf5(e.to_string()))?;
-    ds.write_raw(values)
-        .map_err(|e| ExportError::Hdf5(e.to_string()))?;
+    let ds = builder.shape(shape).create(name)?;
+    ds.write_raw(values)?;
     Ok(ds)
 }
 
@@ -167,8 +160,7 @@ fn write_string_attrs(
         }
         ds.new_attr_builder()
             .with_data(value.as_str())
-            .create(key.as_str())
-            .map_err(|e| ExportError::Hdf5(e.to_string()))?;
+            .create(key.as_str())?;
     }
     Ok(())
 }

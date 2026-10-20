@@ -161,8 +161,16 @@ run = "cargo +nightly fuzz run verify_tet_package"
 description = "60s package fuzz smoke (THI-481; needs nightly)"
 run = "cargo +nightly fuzz run verify_tet_package -- -max_total_time=60 -timeout=10 -rss_limit_mb=2048"
 
+[tasks.fuzz-query]
+description = "Run cargo-fuzz parse_query_json (THI-604; needs nightly)"
+run = "cargo +nightly fuzz run parse_query_json"
+
+[tasks.fuzz-query-smoke]
+description = "60s query-wire fuzz smoke (THI-604; needs nightly)"
+run = "cargo +nightly fuzz run parse_query_json -- -max_total_time=60 -timeout=10 -rss_limit_mb=2048"
+
 [tasks.fuzz-clean]
-description = "Remove mutated fuzz corpus + crash artifacts; keep *.tet / *.pkgfuzz seeds"
+description = "Remove mutated fuzz corpus + crash artifacts; keep *.tet / *.pkgfuzz / *.json seeds"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
@@ -173,20 +181,20 @@ if [[ -d fuzz/corpus ]]; then
   while IFS= read -r -d '' f; do
     rm -f "$f"
     removed=$((removed + 1))
-  done < <(find fuzz/corpus -type f ! -name '*.tet' ! -name '*.pkgfuzz' -print0 2>/dev/null)
+  done < <(find fuzz/corpus -type f ! -name '*.tet' ! -name '*.pkgfuzz' ! -name '*.json' -print0 2>/dev/null)
 fi
 rm -rf fuzz/artifacts
-echo "fuzz-clean: removed $removed mutated corpus file(s); artifacts wiped; *.tet / *.pkgfuzz seeds kept"
+echo "fuzz-clean: removed $removed mutated corpus file(s); artifacts wiped; *.tet / *.pkgfuzz / *.json seeds kept"
 """
 
 [tasks.fuzz-reseed]
-description = "Refresh fuzz corpus *.tet / *.pkgfuzz seeds from fixtures (+ tiny reject stubs)"
+description = "Refresh fuzz corpus *.tet / *.pkgfuzz / *.json seeds from fixtures (+ tiny reject stubs)"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$root"
-mkdir -p fuzz/corpus/verify_tet_bytes fuzz/corpus/verify_tet_bytes_deep fuzz/corpus/verify_tet_package
+mkdir -p fuzz/corpus/verify_tet_bytes fuzz/corpus/verify_tet_bytes_deep fuzz/corpus/verify_tet_package fuzz/corpus/parse_query_json
 cp fixtures/small/tet/sample.tet \\
    fixtures/small/tet/plan.tet \\
    fixtures/small/tet/multichunk_u8.tet \\
@@ -242,5 +250,10 @@ python3 "$enc" fuzz/corpus/verify_tet_package/reject_packed.pkgfuzz \\
   --manifest-text "$(printf '{"generation":1,"protocol_version":2,"part_ids":["p0"],"packed_byte_len":%s}' "$reject_len")" \\
   --packed "$reject"
 
-echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package"
+# --- query wire seeds (THI-604) ---
+cp fixtures/queries/*.json fuzz/corpus/parse_query_json/ 2>/dev/null || true
+cp conformance/reject/queries/*.json fuzz/corpus/parse_query_json/ 2>/dev/null || true
+cp conformance/accept/queries/*.json fuzz/corpus/parse_query_json/ 2>/dev/null || true
+
+echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package; $(ls fuzz/corpus/parse_query_json/*.json | wc -l) query"
 """
