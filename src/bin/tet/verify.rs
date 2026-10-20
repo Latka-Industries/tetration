@@ -10,11 +10,17 @@ use tetration::verify::{
 
 use crate::util::cli_error;
 
-#[allow(clippy::struct_excessive_bools)]
+/// Output mode for `tet verify`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VerifyOutputMode {
+    Text,
+    Json,
+    Quiet,
+}
+
 pub(crate) struct VerifyRunOpts {
     pub path: PathBuf,
-    pub json: bool,
-    pub quiet: bool,
+    pub output: VerifyOutputMode,
     pub repair: bool,
     pub deep: bool,
 }
@@ -38,17 +44,15 @@ pub(crate) fn run_verify(opts: &VerifyRunOpts) -> Result<(), String> {
     if opts.repair && !report.ok {
         let repair_report =
             repair_from_verify_report(&opts.path, &report, false).map_err(cli_error)?;
-        if !opts.quiet && !opts.json {
+        if matches!(opts.output, VerifyOutputMode::Text) {
             eprintln!("{}", format_repair_text(&repair_report));
         }
         report = run_verify_once(&opts.path, verify_opts)?;
     }
-    let out = if opts.json {
-        format_verify_json(&report).map_err(cli_error)?
-    } else if opts.quiet {
-        format_verify_quiet(&report)
-    } else {
-        format_verify_text(&report)
+    let out = match opts.output {
+        VerifyOutputMode::Json => format_verify_json(&report).map_err(cli_error)?,
+        VerifyOutputMode::Quiet => format_verify_quiet(&report),
+        VerifyOutputMode::Text => format_verify_text(&report),
     };
     print!("{out}");
     if report.ok {

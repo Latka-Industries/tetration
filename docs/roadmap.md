@@ -90,6 +90,16 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Today:** one machine, many cores (Rayon), optional GPUs; scale-out is **N independent queries × N processes**, not one query sharded across nodes ([README — Concurrency](../README.md#concurrency-and-scale)).
 
+**0.5.x integration:** work lands on Git branch **`dev`**. `main` stays on **0.4.5** until each version cut. Linear epic [THI-461](https://linear.app/thicclatka/issue/THI-461) / cut [THI-476](https://linear.app/thicclatka/issue/THI-476).
+
+**Hygiene before protocol (on `dev`):** same pattern as 0.3.8 before 0.4 plan changes.
+
+| Cut | Status |
+| --- | ------ |
+| Wire split + shared Zarr dtype ([THI-597](https://linear.app/thicclatka/issue/THI-597)) | ✅ on `dev` |
+| Decode / `ValueAccum` / GPU host API ([THI-598](https://linear.app/thicclatka/issue/THI-598)) | next |
+| Typed convert/export errors + CLI gate ([THI-599](https://linear.app/thicclatka/issue/THI-599)) | next |
+
 **Direction:** a coordinator splits a single query’s read plan across workers (chunk shards), merges associative partials (tier-A/B folds already compose), and handles spill/export policy cluster-wide.
 
 **Trade-off:** at that point Tetration competes with distributed analytics engines, not only file formats. The open question is whether to stay a **format + embeddable library** with a thin cluster protocol, or grow a full execution service.

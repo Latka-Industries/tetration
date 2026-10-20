@@ -1,7 +1,6 @@
 //! On-disk element dtype tags for query execution.
 
 use crate::catalog::DATASET_DTYPE_TAG_V1;
-use crate::query::TetError;
 
 /// Supported element types in the v1 query engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,31 +18,10 @@ pub enum ElementDtype {
 }
 
 impl ElementDtype {
-    /// Parse a catalog wire `dtype` tag.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TetError::Validation`] for unsupported tags.
-    pub fn from_wire(dtype: u32) -> Result<Self, TetError> {
-        Self::try_from_wire_tag(dtype).ok_or_else(|| {
-            let tags = DATASET_DTYPE_TAG_V1;
-            TetError::Validation(format!(
-                "unsupported dataset dtype {dtype} (supported: f32={}, f64={}, i32={}, i64={}, u8={}, u16={}, i16={}, u32={}, f16={}, u64={})",
-                tags.f32,
-                tags.f64,
-                tags.i32,
-                tags.i64,
-                tags.u8,
-                tags.u16,
-                tags.i16,
-                tags.u32,
-                tags.f16,
-                tags.u64
-            ))
-        })
-    }
-
     /// Parse a wire tag, returning `None` for unsupported values.
+    ///
+    /// Query code maps failures to [`crate::query::TetError`] via `ElementDtype::from_wire`
+    /// in `query::dtype_from_wire`.
     #[must_use]
     pub fn try_from_wire_tag(dtype: u32) -> Option<Self> {
         let tags = DATASET_DTYPE_TAG_V1;

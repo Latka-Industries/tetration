@@ -7,3 +7,4 @@ pub(crate) use le_pod::{f16_le, f64_le, i16_le, i32_le, i64_le, u8_le, u16_le, u
 pub mod fs_device;
 pub mod host_memory;
 pub(crate) mod wire;
+pub(crate) mod zarr_dtype;

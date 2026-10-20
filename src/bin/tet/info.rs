@@ -5,27 +5,64 @@ use std::path::PathBuf;
 use tetration::catalog::read_tet_summary_v1;
 use tetration::layout::mmap_file_read;
 use tetration::query::cli::{
-    DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, format_info_json,
-    format_info_quiet, format_info_text, info_view_sections_from_flags,
+    DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, InfoSection,
+    InfoSectionRequest, format_info_json, format_info_quiet, format_info_text,
+    info_view_sections_from_flags,
 };
 
 use crate::package_ops::resolve_tet_read_path;
 use crate::util::cli_error;
-#[allow(clippy::struct_excessive_bools)]
+
+/// Output mode for `tet info`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InfoOutputMode {
+    Text,
+    Json,
+    Quiet,
+}
+
 pub(crate) struct InfoRunOpts {
     pub path: PathBuf,
-    pub json: bool,
-    pub quiet: bool,
-    pub all: bool,
-    pub layout: bool,
-    pub execution: bool,
-    pub datasets: bool,
-    pub chunks: bool,
-    pub show_footer_history: bool,
+    pub output: InfoOutputMode,
+    pub sections: InfoSectionRequest,
     pub limit: Option<usize>,
     pub dataset: Option<String>,
     pub grep: Option<String>,
     pub metadata: bool,
+}
+
+impl InfoRunOpts {
+    /// Build section request from clap bools.
+    #[must_use]
+    pub(crate) fn sections_from_flags(
+        all: bool,
+        layout: bool,
+        execution: bool,
+        datasets: bool,
+        chunks: bool,
+        show_footer_history: bool,
+    ) -> InfoSectionRequest {
+        let mut req = InfoSectionRequest::default();
+        if all {
+            req = req.with_all();
+        }
+        if layout {
+            req = req.enable(InfoSection::Layout);
+        }
+        if execution {
+            req = req.enable(InfoSection::Execution);
+        }
+        if datasets {
+            req = req.enable(InfoSection::Datasets);
+        }
+        if chunks {
+            req = req.enable(InfoSection::Chunks);
+        }
+        if show_footer_history {
+            req = req.enable(InfoSection::History);
+        }
+        req
+    }
 }
 
 pub(crate) fn run_info(opts: InfoRunOpts) -> Result<(), String> {
@@ -37,34 +74,29 @@ pub(crate) fn run_info(opts: InfoRunOpts) -> Result<(), String> {
     let filter = build_info_filter(opts.dataset, opts.grep);
     let path_ref = Some(opts.path.as_path());
 
-    let out = if opts.json {
-        format_info_json(path_ref, file_len, &summary, filter.as_ref()).map_err(cli_error)?
-    } else if opts.quiet {
-        format_info_quiet(path_ref, file_len, &summary, filter.as_ref())
-    } else {
-        let sections = info_view_sections_from_flags(
-            opts.all,
-            opts.layout,
-            opts.execution,
-            opts.datasets,
-            opts.chunks,
-            opts.show_footer_history,
-        );
-        let chunk_limit = opts.limit.unwrap_or(DEFAULT_INFO_CHUNK_TABLE_LIMIT);
-        let metadata_display = if opts.metadata {
-            InfoMetadataDisplay::Verbose
-        } else {
-            InfoMetadataDisplay::WhenPresent
-        };
-        format_info_text(
-            path_ref,
-            file_len,
-            &summary,
-            filter.as_ref(),
-            sections,
-            chunk_limit,
-            metadata_display,
-        )
+    let out = match opts.output {
+        InfoOutputMode::Json => {
+            format_info_json(path_ref, file_len, &summary, filter.as_ref()).map_err(cli_error)?
+        }
+        InfoOutputMode::Quiet => format_info_quiet(path_ref, file_len, &summary, filter.as_ref()),
+        InfoOutputMode::Text => {
+            let sections = info_view_sections_from_flags(opts.sections);
+            let chunk_limit = opts.limit.unwrap_or(DEFAULT_INFO_CHUNK_TABLE_LIMIT);
+            let metadata_display = if opts.metadata {
+                InfoMetadataDisplay::Verbose
+            } else {
+                InfoMetadataDisplay::WhenPresent
+            };
+            format_info_text(
+                path_ref,
+                file_len,
+                &summary,
+                filter.as_ref(),
+                sections,
+                chunk_limit,
+                metadata_display,
+            )
+        }
     };
     print!("{out}");
     Ok(())

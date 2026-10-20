@@ -11,6 +11,7 @@ use crate::catalog::{
     CHUNK_PAYLOAD_CODEC_V1, CatalogError, ChunkIndexEntryV1, DatasetRecordV1, TetFileSummaryV1,
 };
 use crate::utils::dtype::ElementDtype;
+use crate::utils::zarr_dtype::element_dtype_zarr_v3_name;
 
 use super::common::{
     ExportError, ExportProgress, ExportReport, chunks_for_dataset, dataset_footer_attrs,
@@ -145,28 +146,13 @@ fn dataset_export_attrs(
     attrs
 }
 
-fn element_dtype_zarr_name(elem: ElementDtype) -> &'static str {
-    match elem {
-        ElementDtype::F32 => "float32",
-        ElementDtype::F64 => "float64",
-        ElementDtype::I32 => "int32",
-        ElementDtype::I64 => "int64",
-        ElementDtype::U8 => "uint8",
-        ElementDtype::U16 => "uint16",
-        ElementDtype::I16 => "int16",
-        ElementDtype::U32 => "uint32",
-        ElementDtype::F16 => "float16",
-        ElementDtype::U64 => "uint64",
-    }
-}
-
 fn array_zarr_json(
     ds: &DatasetRecordV1,
     elem: ElementDtype,
     zstd: bool,
     attributes: &BTreeMap<String, serde_json::Value>,
 ) -> serde_json::Value {
-    let data_type = element_dtype_zarr_name(elem);
+    let data_type = element_dtype_zarr_v3_name(elem);
     let fill_value: serde_json::Value = if elem.is_integer() {
         json!(0)
     } else {
