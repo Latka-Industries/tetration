@@ -155,11 +155,12 @@ Hosts **SHOULD** fail fast when a required capability is missing rather than par
 
 ---
 
-## 6. Relationship to conformance (THI-592)
+## 6. Relationship to conformance
 
-The conformance pack encodes this policy as fixtures:
+The conformance pack encodes this policy as fixtures ([`conformance/`](../conformance/README.md)):
 
 - **Accept** — files a 0.5.x-compatible reader must open; queries whose answers must match.
-- **Reject** — unknown version / codec / query key / malformed framing.
+- **Reject verify** — malformed framing / codec faults.
+- **Reject query** — unknown top-level keys and nested `operation` (refuse-unknown).
 
-Until the pack lands, use [`fixtures/small/tet/`](../fixtures/small/tet/) and the reject corpus as the informal gate.
+Reference gate: `cargo test --lib conformance`.

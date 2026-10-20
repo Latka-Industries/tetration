@@ -17,6 +17,10 @@ run = "uv run generate-fixtures small"
 description = "Regenerate tracked fixtures/small/tet/*.tet (verify/repair/query manual smoke)"
 run = "cargo run --example gen_small_tet_fixtures"
 
+[tasks.conformance]
+description = "Run SPEC conformance pack (THI-592)"
+run = "cargo test --lib conformance"
+
 [tasks."fixtures:large"]
 description = "Generate gitignored large suite (~20 GiB total: h5 + nc + zarr)"
 depends = ["fixtures:sync"]
