@@ -1,6 +1,6 @@
 # Compatibility and capability-flag policy
 
-**Status:** normative for the **0.5.2** cut (THI-587).  
+**Status:** normative since the **0.5.2** cut (THI-587); pack coverage grew in **0.5.3**.  
 **Parent:** [`SPEC/README.md`](README.md) §5.  
 **Goal:** say what a reader written today must tolerate in **2046**, and how unknown features are negotiated.
 

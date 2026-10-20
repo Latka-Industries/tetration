@@ -205,8 +205,33 @@ fn conformance_reject_query_files_exist() {
     for rel in [
         "conformance/reject/queries/unknown_top_level_key.json",
         "conformance/reject/queries/nested_operation.json",
+        "conformance/reject/queries/nested_output.json",
         "conformance/reject/queries/unknown_filter_key.json",
+        "conformance/reject/queries/empty_dataset.json",
+        "conformance/reject/queries/dual_sum_mean.json",
+        "conformance/reject/queries/invalid_axis_label.json",
+        "conformance/reject/queries/unknown_write_field.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
+}
+
+#[test]
+fn conformance_accept_query_files_exist() {
+    assert!(
+        Path::new(&resolve(
+            "conformance/accept/queries/mean_strided_sample.json"
+        ))
+        .is_file()
+    );
+}
+
+#[test]
+fn conformance_spec_milestone_is_0_5_3() {
+    let path = repo_root().join("conformance/manifest.v1.json");
+    let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(
+        v.get("spec_milestone").and_then(|x| x.as_str()),
+        Some("0.5.3")
+    );
 }
