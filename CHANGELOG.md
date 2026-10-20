@@ -10,7 +10,7 @@
 
 ### Notes
 
-- Semver patch: conformance coverage grow only. Layout / query ABI unchanged. PyPI **tet-py** stays on **0.5.1** until after crates.io shows 0.5.3 (then pin).
+- Semver patch: conformance coverage grow only. Layout / query ABI unchanged. PyPI **tet-py 0.5.3** pins this crate.
 
 ## [0.5.2] - 2026-10-20
 
