@@ -92,14 +92,17 @@ fn assert_expect_number(ex: &crate::query::QueryExecutionPreview, key: &str, wan
 fn run_accept(case: &AcceptCase) {
     let tet = resolve(&case.tet);
     if let Some(v) = case.verify.as_deref() {
-        assert_eq!(v, "ok", "{}: only verify=\"ok\" is supported in pack_version 1", case.id);
+        assert_eq!(
+            v, "ok",
+            "{}: only verify=\"ok\" is supported in pack_version 1",
+            case.id
+        );
     }
     let report = verify_tet_file(&tet).unwrap_or_else(|e| panic!("{}: verify err {e}", case.id));
     assert!(
         report.ok,
         "{}: verify must succeed, findings={:?}",
-        case.id,
-        report.findings
+        case.id, report.findings
     );
 
     let Some(query_rel) = case.query.as_ref() else {
@@ -112,7 +115,9 @@ fn run_accept(case: &AcceptCase) {
     validate_query(&doc).unwrap_or_else(|e| panic!("{}: validate: {e}", case.id));
 
     let mmap = mmap_file_read(&tet).unwrap();
-    let tet_str = tet.to_str().unwrap_or_else(|| panic!("{}: non-UTF-8 path", case.id));
+    let tet_str = tet
+        .to_str()
+        .unwrap_or_else(|| panic!("{}: non-UTF-8 path", case.id));
     let resp = plan_query_with_tet_mmap(&doc, Some(tet_str), &mmap, Some(0))
         .unwrap_or_else(|e| panic!("{}: execute: {e}", case.id));
     let ex = resp
@@ -140,15 +145,11 @@ fn run_reject_verify(case: &RejectVerifyCase) {
     assert!(
         !report.ok,
         "{}: expected verify failure, findings={:?}",
-        case.id,
-        report.findings
+        case.id, report.findings
     );
     if let Some(check) = case.expect_check.as_deref() {
         assert!(
-            report
-                .findings
-                .iter()
-                .any(|f| f.check == check && !f.ok),
+            report.findings.iter().any(|f| f.check == check && !f.ok),
             "{}: expected failing check `{check}`, findings={:?}",
             case.id,
             report.findings
