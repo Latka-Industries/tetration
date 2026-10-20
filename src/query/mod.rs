@@ -10,6 +10,7 @@ mod dispatch;
 mod document;
 mod document_toml;
 mod document_wire;
+mod dtype_from_wire;
 pub mod embed_materialize;
 pub(crate) mod engine;
 mod execute;
