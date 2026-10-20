@@ -1,0 +1,9 @@
+{
+  "layout_version": 1,
+  "dataset": "temperature",
+  "selection": [
+    { "start": 0, "stop": 100, "step": 2 },
+    { "start": null, "stop": null, "step": 1 }
+  ],
+  "mean": []
+}
