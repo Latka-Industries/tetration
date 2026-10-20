@@ -2,17 +2,23 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-20
+
 ### Added
 
-- Normative SPEC draft at [`SPEC/README.md`](SPEC/README.md): layout v1, writer protocol v2, query JSON/TOML wire (closed keys / limits / tiers), and C ABI versioning, with a one-paragraph “compatible reader” definition. Detailed tables remain in `docs/` (THI-586; ships in 0.5.2).
-- Compatibility / capability-flag policy at [`SPEC/COMPATIBILITY.md`](SPEC/COMPATIBILITY.md): frozen vs evolvable bits, refuse vs may-ignore, independent version axes (layout / query / package / ABI), and 2046-reader examples (THI-587; ships in 0.5.2).
-- Conformance pack [`conformance/`](conformance/README.md) (`manifest.v1.json` accept + reject_verify + reject_query) with CI gate `cargo test --lib conformance` (THI-592; ships in 0.5.2).
-- Optional Python stdlib smoke reader [`conformance/smoke/read_catalog_chunk.py`](conformance/smoke/read_catalog_chunk.py) — catalog + one raw `f32` chunk without the Rust crate (THI-589; ships in 0.5.2).
+- Normative SPEC draft at [`SPEC/README.md`](SPEC/README.md): layout v1, writer protocol v2, query JSON/TOML wire (closed keys / limits / tiers), and C ABI versioning, with a one-paragraph “compatible reader” definition. Detailed tables remain in `docs/` (THI-586).
+- Compatibility / capability-flag policy at [`SPEC/COMPATIBILITY.md`](SPEC/COMPATIBILITY.md): frozen vs evolvable bits, refuse vs may-ignore, independent version axes (layout / query / package / ABI), and 2046-reader examples (THI-587).
+- Conformance pack [`conformance/`](conformance/README.md) (`manifest.v1.json` accept + reject_verify + reject_query) with CI gate `cargo test --lib conformance` (THI-592).
+- Optional Python stdlib smoke reader [`conformance/smoke/read_catalog_chunk.py`](conformance/smoke/read_catalog_chunk.py) — catalog + one raw `f32` chunk without the Rust crate (THI-589).
 
 ### Changed
 
-- `tet semantics scaffold` (empty attrs) emits a single docs URL — `https://docs.tetration.sh/guides/semantics/` — matching the site guide that now includes worked examples. Removed `SEMANTICS_EXAMPLES_URL` (THI-600; ships in 0.5.2).
-- Scaffold policy stubs use bare keys (`[profiles.media_v1]`, JSON map keyed the same way) instead of `[profiles."dotted.key"]` or a spare `id` field. Recommended profile ids are `media_v1` / `timeseries_v1` / `climate_v1` (THI-601; ships in 0.5.2).
+- `tet semantics scaffold` (empty attrs) emits a single docs URL — `https://docs.tetration.sh/guides/semantics/` — matching the site guide that now includes worked examples. Removed `SEMANTICS_EXAMPLES_URL` (THI-600).
+- Scaffold policy stubs use bare keys (`[profiles.media_v1]`, JSON map keyed the same way) instead of `[profiles."dotted.key"]` or a spare `id` field. Recommended profile ids are `media_v1` / `timeseries_v1` / `climate_v1` (THI-601).
+
+### Notes
+
+- Semver patch: SPEC + conformance milestone. Query engine answers unchanged. PyPI **tet-py** stays on **0.5.1** until THI-591 (pin after crates.io shows 0.5.2).
 
 ## [0.5.1] - 2026-10-20
 
