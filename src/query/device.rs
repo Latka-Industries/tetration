@@ -5,7 +5,11 @@
 use crate::query::fold::reduction::ReductionKind;
 use crate::query::types::{ExecutionDeviceHint, ExecutionHints, Operation, ReadPlan};
 use crate::utils::dtype::ElementDtype;
-#[cfg(any(feature = "tetration-gpu", feature = "tetration-metal"))]
+#[cfg(any(
+    feature = "tetration-gpu",
+    feature = "tetration-rocm",
+    feature = "tetration-metal"
+))]
 use crate::utils::host_memory;
 
 /// Minimum logical selection size for `device: auto` to consider GPU (when enabled).
@@ -29,7 +33,11 @@ pub fn host_materialize_exceeds(logical_bytes: u64, host_available: Option<u64>)
 
 /// Whether the GPU dense path may allocate a full-selection host buffer (streaming fold when false).
 #[must_use]
-#[cfg(any(feature = "tetration-gpu", feature = "tetration-metal"))]
+#[cfg(any(
+    feature = "tetration-gpu",
+    feature = "tetration-rocm",
+    feature = "tetration-metal"
+))]
 pub(crate) fn host_materialize_fits(logical_bytes: u64) -> bool {
     !host_materialize_exceeds(logical_bytes, host_memory::available_memory_bytes())
 }

@@ -38,7 +38,17 @@ use crate::query::materialize::{self, parallel};
 use crate::query::types::{ReadPlan, TetError};
 
 #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
-use super::cuda;
+use super::host::CudaDevice;
+#[cfg(any(
+    feature = "tetration-gpu",
+    feature = "tetration-rocm",
+    feature = "tetration-metal"
+))]
+use super::host::GpuScalarReduce;
+#[cfg(all(feature = "tetration-metal", target_os = "macos"))]
+use super::host::MetalDevice;
+#[cfg(feature = "tetration-rocm")]
+use super::host::RocmDevice;
 
 #[cfg(any(
     feature = "tetration-gpu",
@@ -46,9 +56,6 @@ use super::cuda;
     feature = "tetration-metal"
 ))]
 use super::streaming_fold::{StreamingFoldRequest, StreamingGpuBackend, try_streaming_f32_fold};
-
-#[cfg(all(feature = "tetration-metal", target_os = "macos"))]
-use super::metal;
 
 #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
 pub(crate) fn try_scalar_f32_fold_cuda(
@@ -89,7 +96,8 @@ pub(crate) fn try_scalar_f32_fold_cuda(
     }
     let logical_bytes_usize =
         usize::try_from(logical_bytes).map_err(|_| "gpu_logical_bytes_overflow")?;
-    if let Err(reason) = cuda::vram_check(device_index, logical_bytes_usize) {
+    let device = CudaDevice(device_index);
+    if let Err(reason) = device.vram_check(logical_bytes_usize) {
         if reason == "gpu_vram_exceeded" {
             return try_streaming_f32_fold(StreamingFoldRequest {
                 backend: StreamingGpuBackend::Cuda(device_index),
@@ -110,8 +118,7 @@ pub(crate) fn try_scalar_f32_fold_cuda(
     let total_bytes_read_from_disk = materialize_host_f32(mmap, plan, &mut host, f16_input)
         .map_err(|_| "gpu_host_decode_failed")?;
 
-    let scalar =
-        cuda::reduce_f32_scalar(&host, kind, device_index).map_err(|_| "gpu_runtime_error")?;
+    let scalar = device.reduce_f32_scalar(&host, kind)?;
 
     build_gpu_fold_outcome(DenseGpuFoldResult {
         route,
@@ -165,7 +172,8 @@ pub(crate) fn try_scalar_f32_fold_rocm(
     }
     let logical_bytes_usize =
         usize::try_from(logical_bytes).map_err(|_| "gpu_logical_bytes_overflow")?;
-    if let Err(reason) = cuda::vram_check(device_index, logical_bytes_usize) {
+    let device = RocmDevice(device_index);
+    if let Err(reason) = device.vram_check(logical_bytes_usize) {
         if reason == "gpu_vram_exceeded" {
             return try_streaming_f32_fold(StreamingFoldRequest {
                 backend: StreamingGpuBackend::Rocm(device_index),
@@ -186,8 +194,7 @@ pub(crate) fn try_scalar_f32_fold_rocm(
     let total_bytes_read_from_disk = materialize_host_f32(mmap, plan, &mut host, f16_input)
         .map_err(|_| "gpu_host_decode_failed")?;
 
-    let scalar =
-        cuda::reduce_f32_scalar(&host, kind, device_index).map_err(|_| "gpu_runtime_error")?;
+    let scalar = device.reduce_f32_scalar(&host, kind)?;
 
     build_gpu_fold_outcome(DenseGpuFoldResult {
         route,
@@ -229,7 +236,8 @@ pub(crate) fn try_scalar_f32_fold_metal(
     }
     let logical_bytes_usize =
         usize::try_from(logical_bytes).map_err(|_| "gpu_logical_bytes_overflow")?;
-    if let Err(reason) = metal::vram_check(logical_bytes_usize) {
+    let device = MetalDevice;
+    if let Err(reason) = device.vram_check(logical_bytes_usize) {
         if reason == "gpu_vram_exceeded" {
             return try_streaming_f32_fold(StreamingFoldRequest {
                 backend: StreamingGpuBackend::Metal,
@@ -250,7 +258,7 @@ pub(crate) fn try_scalar_f32_fold_metal(
     let total_bytes_read_from_disk = materialize_host_f32(mmap, plan, &mut host, f16_input)
         .map_err(|_| "gpu_host_decode_failed")?;
 
-    let scalar = metal::reduce_f32_scalar(&host, kind).map_err(|_| "gpu_runtime_error")?;
+    let scalar = device.reduce_f32_scalar(&host, kind)?;
 
     build_gpu_fold_outcome(DenseGpuFoldResult {
         route,
