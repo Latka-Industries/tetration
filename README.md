@@ -72,7 +72,7 @@ Prefer the site; repo docs are the normative deep dive for contributors.
 | Conversions | — | [`docs/conversions.md`](docs/conversions.md) |
 | Roadmap | [/roadmap](https://docs.tetration.sh/roadmap) | [`docs/roadmap.md`](docs/roadmap.md) |
 | Optional secondary indexes | — | [`docs/secondary_indexes.md`](docs/secondary_indexes.md) |
-| Declared semantics + caller policy (0.5.1) | — | [`docs/semantics.md`](docs/semantics.md) |
+| Declared semantics + caller policy (0.5.1) | [`/guides/semantics/`](https://docs.tetration.sh/guides/semantics/) | [`docs/semantics.md`](docs/semantics.md) |
 | Changelog | — | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Library sketch

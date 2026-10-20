@@ -121,23 +121,25 @@ GROUP BY region
 
 ---
 
-### 5. Scientific semantics (prospective Phase 16)
+### 5. Scientific semantics (Phase 16)
 
-**Today:** users think in **chunk coordinates** and **axis indices**; footer metadata carries labels and attrs but not full domain semantics.
+**Shipped in 0.5.1 (declared + policy split):** optional **declared** science/media facts in footer `metadata.datasets[<name>].attrs` and append-only history, plus caller **policy** outside the file (`tet-semantics.toml` / `.json`). Helpers and CLI: `tet semantics set` / `scaffold`. Spec: [`semantics.md`](semantics.md). Worked recording fixture: `fixtures/small/tet/recording.tet`. Climate appears only as attrs / a doc profile id — **not** a climate runtime in the crate. Declared attrs do **not** change fold/query answers by themselves.
 
-**Direction:** first-class **meaning** alongside bytes:
+**Still prospective:** full CF / PROV suites, UCUM conversion graphs inside `packed.tet`, package `SEMANTICS.json` sidecar, plugin / dynamic code load, required in-tree policy interpreter.
+
+**Direction (remaining):** richer meaning alongside bytes — convertible units on read, geospatial CRS bindings, richer uncertainty, domain vocabularies — without becoming a plugin host.
 
 | Capability | Example |
 | ---------- | ------- |
-| Physical units | `celsius`, `pascal`, convertible on read |
-| Coordinate reference systems | geospatial bindings on lat/lon axes |
-| Provenance | pipeline steps, parent datasets, tool versions |
-| Uncertainty | per-element or per-chunk error bars |
-| Domain vocabularies | cell type, patient id, instrument channel |
+| Physical units | `K`, `uV` as declared string tokens; display convert in caller policy |
+| Coordinate reference systems | `crs` attr (e.g. `EPSG:4326`); geo crops stay caller-side |
+| Provenance | history rows (`op`, `source`, `at`, `params`) |
+| Uncertainty | `uncertainty_kind` + `uncertainty_sibling` flat attrs |
+| Domain vocabularies | `semantics_profile` doc ids (`tetration.media.v1`, …) |
 
-**Why it may beat another 10% decode speed:** many scientific workflows fail on **metadata and lineage**, not raw throughput. NetCDF and CF conventions are partial precedents; Tetration could embed a subset in footer history + dataset attrs with spec’d invariants.
+**Why it may beat another 10% decode speed:** many scientific workflows fail on **metadata and lineage**, not raw throughput. NetCDF and CF conventions are partial precedents; Tetration embeds a small declared subset with spec’d invariants.
 
-**Relation to v1:** optional history footer ([`layout_v1.md`](layout_v1.md)) is a seed for provenance; Phase 7 metadata is a seed for named science dimensions.
+**Relation to v1:** optional history footer ([`layout_v1.md`](layout_v1.md)) holds provenance; Phase 7 metadata holds declared attrs.
 
 ---
 
