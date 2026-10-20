@@ -9,6 +9,26 @@ pub(crate) struct WelfordAccum {
 }
 
 impl WelfordAccum {
+    #[must_use]
+    pub(crate) fn from_parts(count_f: f64, mean: f64, m2: f64) -> Self {
+        Self { count_f, mean, m2 }
+    }
+
+    #[must_use]
+    pub(crate) fn count_f(&self) -> f64 {
+        self.count_f
+    }
+
+    #[must_use]
+    pub(crate) fn mean(&self) -> f64 {
+        self.mean
+    }
+
+    #[must_use]
+    pub(crate) fn m2(&self) -> f64 {
+        self.m2
+    }
+
     pub fn push(&mut self, x: f64) {
         self.count_f += 1.0;
         let delta = x - self.mean;

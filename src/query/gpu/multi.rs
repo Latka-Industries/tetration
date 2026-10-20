@@ -26,8 +26,7 @@ use super::rocm;
 /// Indices `shard`, `shard + n_shards`, … covering `0..total` exactly once across shards.
 #[must_use]
 pub(crate) fn shard_chunk_indices(shard: usize, n_shards: usize, total: usize) -> Vec<usize> {
-    debug_assert!(shard < n_shards);
-    (shard..total).step_by(n_shards).collect()
+    crate::query::distributed::interleaved_chunk_indices(shard, n_shards, total)
 }
 
 #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]

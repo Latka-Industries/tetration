@@ -14,6 +14,7 @@ mod convert;
 mod convert_s3;
 mod covariance;
 mod device;
+mod distributed;
 mod embed_materialize;
 mod export;
 #[cfg(feature = "tetration-ffi")]

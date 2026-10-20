@@ -5,6 +5,9 @@ mod helpers;
 mod merge;
 mod push;
 mod slab;
+mod wire;
+
+pub(crate) use wire::ValueAccumWire;
 
 use super::WelfordAccum;
 

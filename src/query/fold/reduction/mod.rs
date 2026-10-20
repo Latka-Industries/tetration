@@ -71,6 +71,6 @@ mod welford;
 
 #[allow(unused_imports)]
 // `ScalarReductionResult` / `WelfordAccum` mainly used under `#[cfg(test)]` or GPU features
-pub(crate) use scalar::{ArgIndexAccum, ScalarReductionResult};
-pub(crate) use value_accum::ValueAccum;
+pub(crate) use scalar::{ArgIndexAccum, ArgIndexAccumWire, ScalarReductionResult};
+pub(crate) use value_accum::{ValueAccum, ValueAccumWire};
 pub(crate) use welford::WelfordAccum;
