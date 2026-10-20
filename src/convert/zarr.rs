@@ -13,6 +13,7 @@ use serde::Deserialize;
 use super::zarr_io::{LocalZarrDir, ZarrObjects, join_rel, zarr_chunk_key, zarr_objects_v2};
 
 use crate::utils::dtype::ElementDtype;
+use crate::utils::zarr_dtype::{ZarrV2DtypeParse, element_dtype_from_zarr_v3, parse_zarr_v2_dtype};
 
 use super::import_metadata::{finish_convert_footer, zarr_array_attrs};
 use super::numpy::numpy_chunk_shape;
@@ -493,30 +494,25 @@ fn map_zarr_dtype(
     name: &str,
     data_type: Option<&serde_json::Value>,
 ) -> Result<ElementDtype, ConvertError> {
-    let tag = data_type
-        .and_then(|v| v.as_str().map(str::to_owned))
-        .or_else(|| {
-            data_type
-                .and_then(|v| v.get("name"))
-                .and_then(|v| v.as_str().map(str::to_owned))
-        })
-        .ok_or_else(|| ConvertError::Zarr(format!("array `{name}` missing data_type")))?;
-    match tag.as_str() {
-        "float16" => Ok(ElementDtype::F16),
-        "float32" => Ok(ElementDtype::F32),
-        "float64" => Ok(ElementDtype::F64),
-        "uint8" | "bool" | "int8" => Ok(ElementDtype::U8),
-        "uint16" => Ok(ElementDtype::U16),
-        "int16" => Ok(ElementDtype::I16),
-        "int32" => Ok(ElementDtype::I32),
-        "int64" => Ok(ElementDtype::I64),
-        "uint32" => Ok(ElementDtype::U32),
-        "uint64" => Ok(ElementDtype::U64),
-        other => Err(ConvertError::UnsupportedDtype {
-            name: name.to_owned(),
-            detail: format!("zarr data_type `{other}`"),
-        }),
+    if data_type.is_none() {
+        return Err(ConvertError::Zarr(format!(
+            "array `{name}` missing data_type"
+        )));
     }
+    element_dtype_from_zarr_v3(data_type).ok_or_else(|| {
+        let tag = data_type
+            .and_then(|v| v.as_str())
+            .or_else(|| {
+                data_type
+                    .and_then(|v| v.get("name"))
+                    .and_then(|v| v.as_str())
+            })
+            .unwrap_or("<missing>");
+        ConvertError::UnsupportedDtype {
+            name: name.to_owned(),
+            detail: format!("zarr data_type `{tag}`"),
+        }
+    })
 }
 
 fn zarr_chunk_payload_zstd(meta: &ZarrNodeMeta) -> bool {
@@ -801,25 +797,16 @@ fn finish_zarr_plan(build: ZarrPlanBuild<'_>) -> ImportPlan {
 }
 
 fn map_zarr_v2_dtype(name: &str, dtype: &str) -> Result<ElementDtype, ConvertError> {
-    let unsupported = |detail: String| ConvertError::UnsupportedDtype {
-        name: name.to_owned(),
-        detail,
-    };
-    if dtype.starts_with('>') {
-        return Err(unsupported(format!("big-endian zarr dtype `{dtype}`")));
-    }
-    match dtype {
-        "<f2" => Ok(ElementDtype::F16),
-        "<f4" => Ok(ElementDtype::F32),
-        "<f8" => Ok(ElementDtype::F64),
-        "|u1" | "<u1" | "|b1" | "|i1" | "<i1" => Ok(ElementDtype::U8),
-        "<u2" => Ok(ElementDtype::U16),
-        "<i2" => Ok(ElementDtype::I16),
-        "<i4" => Ok(ElementDtype::I32),
-        "<i8" => Ok(ElementDtype::I64),
-        "<u4" => Ok(ElementDtype::U32),
-        "<u8" => Ok(ElementDtype::U64),
-        other => Err(unsupported(format!("zarr dtype `{other}`"))),
+    match parse_zarr_v2_dtype(dtype) {
+        ZarrV2DtypeParse::Ok(elem) => Ok(elem),
+        ZarrV2DtypeParse::BigEndian => Err(ConvertError::UnsupportedDtype {
+            name: name.to_owned(),
+            detail: format!("big-endian zarr dtype `{dtype}`"),
+        }),
+        ZarrV2DtypeParse::Unsupported => Err(ConvertError::UnsupportedDtype {
+            name: name.to_owned(),
+            detail: format!("zarr dtype `{dtype}`"),
+        }),
     }
 }
 
