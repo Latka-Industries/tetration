@@ -13,6 +13,7 @@ Full flag reference: [`docs/cli.md`](../../docs/cli.md).
 | `tet/repair.rs`  | `tet repair`             | `repair`                          |
 | `tet/query.rs`   | `tet query` (`q`)        | `query::execute_*`, `cli::output` |
 | `tet/qhist.rs`   | `tet qhist` (`hist`)     | `query::cli::history`             |
+| `tet/semantics.rs` | `tet semantics`        | `catalog::semantics`              |
 | `tet/convert.rs` | `tet convert`            | `convert::convert_to_tet_*`       |
 | `tet/export.rs`  | `tet export`             | `export::export_tet_*`            |
 | `tet/args.rs`    | clap `Cli` / `Commands`  | —                                 |

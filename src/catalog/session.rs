@@ -104,6 +104,13 @@ impl TetDatasetWrite {
             coords: None,
         })
     }
+
+    /// Insert one footer attr (declare semantics / CF-style facts).
+    #[must_use]
+    pub fn with_attr(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.attrs.insert(key.into(), value.into());
+        self
+    }
 }
 
 /// Streaming dataset spec: geometry + footer metadata only (tile bytes supplied at commit).

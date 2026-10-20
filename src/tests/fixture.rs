@@ -428,6 +428,8 @@ pub fn write_repair_plan_fixture(path: &Path, dataset_name: &str) {
 
 /// Regenerate tracked files under `fixtures/small/tet/` (see `fixtures/small/tet/README.md`).
 pub fn write_tracked_small_tet_fixtures(dir: &Path) {
+    use crate::catalog::write_recording_fixture;
+
     std::fs::create_dir_all(dir).unwrap();
     write_multichunk_2x3_tiles(&dir.join("sample.tet"), "temperature");
     write_verify_large_f32(&dir.join("large.tet"), "a");
@@ -435,6 +437,7 @@ pub fn write_tracked_small_tet_fixtures(dir: &Path) {
     write_multichunk_2x3_u8_tiles(&dir.join("multichunk_u8.tet"), "a");
     write_multichunk_2x3_u32_tiles(&dir.join("multichunk_u32.tet"), "a");
     write_multichunk_2x3_f16_tiles(&dir.join("multichunk_f16.tet"), "a");
+    write_recording_fixture(&dir.join("recording.tet")).unwrap();
 }
 
 /// Path to committed manual fixtures: `fixtures/small/tet/`.
