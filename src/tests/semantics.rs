@@ -81,7 +81,7 @@ fn scaffold_empty_vs_declared() {
         assert!(empty.contains("No declared semantics attrs"));
         assert!(empty.contains("docs.tetration.sh/guides/semantics/"));
         assert!(!empty.contains("guides/semantics/examples"));
-        assert!(!empty.contains("[profiles."));
+        assert!(!empty.contains("[[profiles]]"));
     }
 
     set_dataset_attrs(
@@ -98,12 +98,14 @@ fn scaffold_empty_vs_declared() {
     let mmap = mmap_file_read(&bare).unwrap();
     let summary = read_tet_summary_v1(&mmap).unwrap();
     let stub = scaffold_policy(&summary, ScaffoldFormat::Toml);
-    assert!(stub.contains("[profiles.\"tetration.media.v1\"]"));
+    assert!(stub.contains("[[profiles]]"));
+    assert!(stub.contains("id = \"tetration.media.v1\""));
+    assert!(!stub.contains("[profiles.\""));
     assert!(stub.contains("index_to_seconds"));
     assert!(stub.contains("[units.Hz]"));
 
     let json = scaffold_policy(&summary, ScaffoldFormat::Json);
-    assert!(json.contains("tetration.media.v1"));
+    assert!(json.contains("\"id\": \"tetration.media.v1\""));
     assert!(json.contains("declared"));
 }
 

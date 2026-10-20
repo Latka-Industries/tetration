@@ -69,7 +69,8 @@ File name convention: **`tet-semantics.toml`** (JSON equivalent allowed). The cr
 ```toml
 # tet-semantics.toml — outside the .tet
 
-[profiles."tetration.media.v1"]
+[[profiles]]
+id = "tetration.media.v1"
 index_to_seconds = "index / frame_rate"
 seconds_to_index = "floor(seconds * frame_rate)"
 
