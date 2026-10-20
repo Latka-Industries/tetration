@@ -2,69 +2,31 @@
 //!
 //! When `chunk_count > 1`, decode runs on a worker thread while the main thread
 //! reduces the previous chunk on GPU (overlap / async pipeline).
+//!
+//! This module is only compiled when a GPU feature is enabled (`gpu/mod.rs`).
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use std::sync::mpsc;
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use std::thread;
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use crate::query::decode::chunk_decode::{visit_planned_chunk, visit_planned_chunk_f16};
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use crate::query::device::DeviceRoute;
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use crate::query::fold::reduction::{
     ArgIndexAccum, ReductionKind, ScalarReductionResult, ValueAccum,
 };
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use crate::query::fold::{self, FoldPlanOutcome};
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 use crate::query::types::{PlannedChunkIo, ReadPlan, TetError};
 
-#[cfg(feature = "tetration-gpu")]
-use super::cuda;
-
-#[cfg(feature = "tetration-rocm")]
-use super::rocm;
-
+#[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
+use super::host::CudaDevice;
+use super::host::GpuScalarReduce;
 #[cfg(all(feature = "tetration-metal", target_os = "macos"))]
-use super::metal;
+use super::host::MetalDevice;
+#[cfg(feature = "tetration-rocm")]
+use super::host::RocmDevice;
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 pub(crate) enum StreamingGpuBackend {
-    #[cfg(feature = "tetration-gpu")]
+    /// Shared cudarc path for `tetration-gpu` and the `cuda` route under `tetration-rocm`.
+    #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
     Cuda(usize),
     #[cfg(feature = "tetration-rocm")]
     Rocm(usize),
@@ -72,20 +34,15 @@ pub(crate) enum StreamingGpuBackend {
     Metal,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 impl StreamingGpuBackend {
     fn vram_check_chunk(&self, bytes: usize) -> Result<(), &'static str> {
         match self {
-            #[cfg(feature = "tetration-gpu")]
-            Self::Cuda(idx) => cuda::vram_check(*idx, bytes),
+            #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
+            Self::Cuda(idx) => CudaDevice(*idx).vram_check(bytes),
             #[cfg(feature = "tetration-rocm")]
-            Self::Rocm(idx) => rocm::vram_check(*idx, bytes),
+            Self::Rocm(idx) => RocmDevice(*idx).vram_check(bytes),
             #[cfg(all(feature = "tetration-metal", target_os = "macos"))]
-            Self::Metal => metal::vram_check(bytes),
+            Self::Metal => MetalDevice.vram_check(bytes),
         }
     }
 
@@ -95,25 +52,16 @@ impl StreamingGpuBackend {
         kind: ReductionKind,
     ) -> Result<ScalarReductionResult, &'static str> {
         match self {
-            #[cfg(feature = "tetration-gpu")]
-            Self::Cuda(idx) => {
-                cuda::reduce_f32_scalar(vals, kind, *idx).map_err(|_| "gpu_runtime_error")
-            }
+            #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
+            Self::Cuda(idx) => CudaDevice(*idx).reduce_f32_scalar(vals, kind),
             #[cfg(feature = "tetration-rocm")]
-            Self::Rocm(idx) => {
-                rocm::reduce_f32_scalar(vals, kind, *idx).map_err(|_| "gpu_runtime_error")
-            }
+            Self::Rocm(idx) => RocmDevice(*idx).reduce_f32_scalar(vals, kind),
             #[cfg(all(feature = "tetration-metal", target_os = "macos"))]
-            Self::Metal => metal::reduce_f32_scalar(vals, kind).map_err(|_| "gpu_runtime_error"),
+            Self::Metal => MetalDevice.reduce_f32_scalar(vals, kind),
         }
     }
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 pub(crate) struct StreamingFoldRequest<'a> {
     pub backend: StreamingGpuBackend,
     pub used: &'static str,
@@ -126,22 +74,12 @@ pub(crate) struct StreamingFoldRequest<'a> {
     pub f16_input: bool,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 pub(crate) struct StreamingFoldSubsetRequest<'a> {
     pub fold: StreamingFoldRequest<'a>,
     pub chunk_indices: Option<&'a [usize]>,
     pub pipeline: bool,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 pub(crate) fn try_streaming_f32_fold(
     fold: StreamingFoldRequest<'_>,
 ) -> Result<(FoldPlanOutcome, DeviceRoute), &'static str> {
@@ -154,11 +92,6 @@ pub(crate) fn try_streaming_f32_fold(
 }
 
 /// Fold a subset of planned chunks (or all when `chunk_indices` is `None`).
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 pub(crate) fn streaming_fold_chunk_subset(
     req: StreamingFoldSubsetRequest<'_>,
 ) -> Result<(FoldPlanOutcome, DeviceRoute), &'static str> {
@@ -267,21 +200,11 @@ pub(crate) fn streaming_fold_chunk_subset(
     Ok((outcome, ok_route))
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 struct ChunkPayload {
     bytes: u64,
     vals: Vec<f32>,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 struct ChunkFoldIo<'a> {
     mmap: &'a [u8],
     plan: &'a ReadPlan,
@@ -293,11 +216,6 @@ struct ChunkFoldIo<'a> {
     f16_input: bool,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 struct ChunkFoldAccum<'a> {
     gpu_acc: &'a mut ScalarReductionResult,
     cpu_value: &'a mut ValueAccum,
@@ -305,21 +223,11 @@ struct ChunkFoldAccum<'a> {
     total_bytes: &'a mut u64,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 struct ChunkFoldPass<'a, 'b> {
     io: ChunkFoldIo<'a>,
     accum: ChunkFoldAccum<'b>,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 struct ReadPlanGeom {
     dataset_shape: Vec<u64>,
     chunk_shape: Vec<u64>,
@@ -331,11 +239,6 @@ struct ReadPlanGeom {
     chunk_touch_policy: &'static str,
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 impl ReadPlanGeom {
     fn from_plan(plan: &ReadPlan) -> Self {
         Self {
@@ -351,11 +254,6 @@ impl ReadPlanGeom {
     }
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 fn fold_chunks_sequential(pass: &mut ChunkFoldPass<'_, '_>) -> Result<(), &'static str> {
     let ChunkFoldPass { io, accum } = pass;
     for &i in io.indices {
@@ -386,11 +284,6 @@ fn fold_chunks_sequential(pass: &mut ChunkFoldPass<'_, '_>) -> Result<(), &'stat
     Ok(())
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 fn fold_chunks_pipelined(pass: &mut ChunkFoldPass<'_, '_>) -> Result<(), &'static str> {
     let ChunkFoldPass { io, accum } = pass;
     let (work_tx, work_rx) = mpsc::sync_channel::<Result<ChunkPayload, TetError>>(2);
@@ -448,11 +341,6 @@ fn fold_chunks_pipelined(pass: &mut ChunkFoldPass<'_, '_>) -> Result<(), &'stati
     Ok(())
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> ReadPlan {
     ReadPlan {
         chunk_touch_policy: geom.chunk_touch_policy,
@@ -472,11 +360,6 @@ fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> Rea
     }
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 fn reduce_chunk_payload(
     vals: &[f32],
     _chunk_bytes: u64,
@@ -502,11 +385,6 @@ fn reduce_chunk_payload(
     Ok(())
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 fn streaming_cpu_value_fold(
     fold: &StreamingFoldRequest<'_>,
     chunk_indices: Option<&[usize]>,
@@ -579,11 +457,6 @@ fn streaming_cpu_value_fold(
     Ok((outcome, ok_route))
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 pub(crate) fn collect_planned_chunk_values(
     mmap: &[u8],
     plan: &ReadPlan,
@@ -614,11 +487,6 @@ pub(crate) fn collect_planned_chunk_values(
     Ok((bytes, vals))
 }
 
-#[cfg(any(
-    feature = "tetration-gpu",
-    feature = "tetration-metal",
-    feature = "tetration-rocm"
-))]
 fn fold_values_into_cpu_accum(
     vals: &[f32],
     kind: ReductionKind,

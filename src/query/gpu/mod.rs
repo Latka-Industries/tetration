@@ -14,6 +14,13 @@ mod scalar_fold;
     feature = "tetration-rocm",
     feature = "tetration-metal"
 ))]
+mod host;
+
+#[cfg(any(
+    feature = "tetration-gpu",
+    feature = "tetration-rocm",
+    feature = "tetration-metal"
+))]
 mod streaming_fold;
 
 #[cfg(any(feature = "tetration-gpu", feature = "tetration-rocm"))]
