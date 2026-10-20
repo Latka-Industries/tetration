@@ -259,6 +259,48 @@ pub enum Commands {
     },
     /// Recent `tet query` log (platform cache; not in `.tet` footer). Default: `list`.
     Qhist(QhistArgs),
+    /// Declared science/media attrs and caller-policy stubs (not a plugin host).
+    Semantics(SemanticsArgs),
+}
+
+/// `tet semantics` — declare footer attrs / scaffold `tet-semantics.toml|json`.
+#[derive(Args)]
+#[command(
+    name = "semantics",
+    about = "Declare science/media attrs or scaffold caller policy (docs/semantics.md)"
+)]
+pub struct SemanticsArgs {
+    #[command(subcommand)]
+    pub cmd: SemanticsCmd,
+}
+
+#[derive(Subcommand)]
+pub enum SemanticsCmd {
+    /// Emit caller-policy stubs from declared attrs (or catalog + doc links when none).
+    Scaffold {
+        /// Path to `.tet` file.
+        path: PathBuf,
+        /// Write to this path instead of stdout.
+        #[arg(short = 'o', long = "output", value_name = "FILE")]
+        output: Option<PathBuf>,
+        /// `toml` (default) or `json`.
+        #[arg(long, default_value = "toml", value_name = "toml|json")]
+        format: String,
+    },
+    /// Declare or clear dataset attrs in the history footer (does not reinterpret values).
+    Set {
+        /// Path to `.tet` file.
+        path: PathBuf,
+        /// Dataset catalog name.
+        #[arg(long)]
+        dataset: String,
+        /// Set `KEY=VAL` (repeatable).
+        #[arg(long = "set", value_name = "KEY=VAL")]
+        set: Vec<String>,
+        /// Remove attr `KEY` (repeatable).
+        #[arg(long = "clear", value_name = "KEY")]
+        clear: Vec<String>,
+    },
 }
 
 /// `tet qhist` — platform query history (not `tet info --history` footer).

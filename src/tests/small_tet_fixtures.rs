@@ -60,7 +60,8 @@ fn tracked_small_tet_verify_and_query() {
     let u8 = fixture("multichunk_u8.tet");
     let u32 = fixture("multichunk_u32.tet");
     let f16 = fixture("multichunk_f16.tet");
-    for p in [&sample, &large, &u8, &u32, &f16] {
+    let recording = fixture("recording.tet");
+    for p in [&sample, &large, &u8, &u32, &f16, &recording] {
         assert_fixture_exists(p);
     }
     assert_fixture_exists(&plan);

@@ -15,6 +15,7 @@ mod index;
 pub mod metadata;
 pub mod package;
 pub(crate) mod secondary_index;
+pub mod semantics;
 pub mod session;
 pub mod shard;
 pub mod store;
@@ -59,6 +60,12 @@ pub use secondary_index::{
     SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, SECONDARY_INDEX_VERSION, SecondaryIndexEntry,
     VALUE_POSTINGS_KIND, VALUE_POSTINGS_MAX_CARDINALITY, ValuePosting, encode_secondary_index,
     prepare_secondary_index, read_secondary_index_file, secondary_index_for_packed, value_postings,
+};
+pub use semantics::{
+    DECLARED_ATTR_KEYS, SEMANTICS_EXAMPLES_URL, SEMANTICS_GUIDE_URL, ScaffoldFormat,
+    declared_attrs, declared_attrs_for_dataset, get_dataset_attr, is_declared_key,
+    metadata_has_declared_attrs, scaffold_policy, scaffold_policy_from_path, set_dataset_attrs,
+    write_recording_fixture,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,

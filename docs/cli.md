@@ -9,6 +9,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet repair`](#tet-repair) `<path.tet\|.tet.d>`   | —      | Plan or apply safe in-place fixes (footer, stale publish)   |
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
+| [`tet semantics`](#tet-semantics) `scaffold\|set`  | —      | Declare science/media attrs / scaffold caller policy         |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet`              |
 | [`tet export`](#tet-export) `<in.tet> <out>`       | —      | `.tet` → Zarr v3 / HDF5 / NetCDF (from output path)         |
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
@@ -110,6 +111,17 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 | `run N`                                                          | Re-run saved row (`1` = newest in filtered view); honors today's `--format` / `-q`; `-t` / `-x` / `--plan` override |
 | `--clear`                                                        | Remove the history file                                                                                             |
 | `list --all`, `--dataset`, `--tet`, `--mode`, `--grep`, `--json` | Filters / full JSON export on `list`                                                                                |
+
+## `tet semantics`
+
+Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spec: [semantics.md](semantics.md). Not a plugin host; attrs do not change query answers by themselves.
+
+| Subcommand | Effect |
+| ---------- | ------ |
+| `scaffold <path.tet>` | Emit `tet-semantics.toml` (default) or `--format json`. With declared attrs → real stubs; with none → catalog lines + doc URLs only (no fake config). `-o FILE` writes instead of stdout. |
+| `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
+
+Worked recording fixture: `fixtures/small/tet/recording.tet` (`frame_rate`, `time_axis`, provenance).
 
 ## `tet convert`
 

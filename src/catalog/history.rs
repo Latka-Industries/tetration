@@ -309,7 +309,12 @@ fn encode_footer_json(blob: &FooterBlobV1) -> Result<Vec<u8>, CatalogError> {
     serde_json::to_vec(blob).map_err(|_| CatalogError::InvalidWriteSpec("footer JSON"))
 }
 
-fn read_footer_blob_from_path(path: &Path) -> Result<FooterBlobV1, CatalogError> {
+/// Read the `THST` footer from a file path (empty blob when absent).
+///
+/// # Errors
+///
+/// Returns [`CatalogError`] when the file cannot be read or the footer is malformed.
+pub(crate) fn read_footer_blob_from_path(path: &Path) -> Result<FooterBlobV1, CatalogError> {
     let data = std::fs::read(path)?;
     let sb = SuperblockV1::from_bytes(
         data.get(..SUPERBLOCK_V1_LEN)
