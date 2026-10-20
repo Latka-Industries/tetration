@@ -280,7 +280,9 @@ fn scaffold_toml(summary: &TetFileSummaryV1) -> String {
 
     let profiles = collect_profile_ids(&declared);
     for profile in &profiles {
-        out.push_str(&format!("[profiles.\"{profile}\"]\n"));
+        // Array-of-tables + `id` so dotted profile ids need no quoted TOML keys.
+        out.push_str("[[profiles]]\n");
+        out.push_str(&format!("id = \"{profile}\"\n"));
         if profile_uses_rate(profile, &declared) {
             out.push_str("index_to_seconds = \"index / frame_rate\"\n");
             out.push_str("seconds_to_index = \"floor(seconds * frame_rate)\"\n");
@@ -321,27 +323,32 @@ fn scaffold_json(summary: &TetFileSummaryV1) -> String {
     }
 
     #[derive(Serialize)]
+    struct ProfileStub {
+        id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        index_to_seconds: Option<&'static str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        seconds_to_index: Option<&'static str>,
+    }
+
+    #[derive(Serialize)]
     struct PolicyScaffold {
-        profiles: BTreeMap<String, BTreeMap<String, String>>,
+        profiles: Vec<ProfileStub>,
         units: BTreeMap<String, BTreeMap<String, String>>,
         declared: BTreeMap<String, BTreeMap<String, String>>,
     }
 
-    let mut profiles = BTreeMap::new();
-    for profile in collect_profile_ids(&declared) {
-        let mut entry = BTreeMap::new();
-        if profile_uses_rate(&profile, &declared) {
-            entry.insert(
-                "index_to_seconds".to_owned(),
-                "index / frame_rate".to_owned(),
-            );
-            entry.insert(
-                "seconds_to_index".to_owned(),
-                "floor(seconds * frame_rate)".to_owned(),
-            );
-        }
-        profiles.insert(profile, entry);
-    }
+    let profiles = collect_profile_ids(&declared)
+        .into_iter()
+        .map(|id| {
+            let rate = profile_uses_rate(&id, &declared);
+            ProfileStub {
+                id,
+                index_to_seconds: rate.then_some("index / frame_rate"),
+                seconds_to_index: rate.then_some("floor(seconds * frame_rate)"),
+            }
+        })
+        .collect();
 
     let mut units = BTreeMap::new();
     for unit in collect_unit_tokens(&declared) {

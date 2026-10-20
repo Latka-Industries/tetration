@@ -66,7 +66,9 @@ fn cli_semantics_set_then_info_and_scaffold() {
         String::from_utf8_lossy(&scaffold.stderr)
     );
     let stub = String::from_utf8_lossy(&scaffold.stdout);
-    assert!(stub.contains("[profiles.\"tetration.media.v1\"]"), "{stub}");
+    assert!(stub.contains("[[profiles]]"), "{stub}");
+    assert!(stub.contains("id = \"tetration.media.v1\""), "{stub}");
+    assert!(!stub.contains("[profiles.\""), "{stub}");
 
     let out_path = dir.path().join("tet-semantics.json");
     let scaffold_json = tet_command(&[
