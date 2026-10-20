@@ -16,7 +16,8 @@ pub use history::{
     list_cli_query_history, parse_history_execute_filter,
 };
 pub use info::{
-    DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, InfoViewSections,
-    format_info_json, format_info_quiet, format_info_text, info_view_sections_from_flags,
+    DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, InfoSection,
+    InfoSectionRequest, InfoViewSections, format_info_json, format_info_quiet, format_info_text,
+    info_view_sections_from_flags,
 };
 pub use output::{QueryOutputFormat, format_query_response, format_query_stderr_hints};

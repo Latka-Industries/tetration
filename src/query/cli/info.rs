@@ -28,40 +28,104 @@ pub enum InfoMetadataDisplay {
     Verbose,
 }
 
+/// One optional text section for `tet info`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum InfoSection {
+    Layout = 1 << 0,
+    Execution = 1 << 1,
+    Datasets = 1 << 2,
+    Chunks = 1 << 3,
+    History = 1 << 4,
+}
+
 /// Which sections to print in text mode (`tet info` without `--json`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct InfoViewSections {
-    pub layout: bool,
-    pub execution: bool,
-    pub datasets: bool,
-    pub chunks: bool,
-    pub history: bool,
+    bits: u8,
 }
 
 impl InfoViewSections {
+    const fn with(bits: u8) -> Self {
+        Self { bits }
+    }
+
+    /// Whether `section` is enabled.
+    #[must_use]
+    pub const fn contains(self, section: InfoSection) -> bool {
+        self.bits & (section as u8) != 0
+    }
+
+    #[must_use]
+    pub const fn layout(self) -> bool {
+        self.contains(InfoSection::Layout)
+    }
+
+    #[must_use]
+    pub const fn execution(self) -> bool {
+        self.contains(InfoSection::Execution)
+    }
+
+    #[must_use]
+    pub const fn datasets(self) -> bool {
+        self.contains(InfoSection::Datasets)
+    }
+
+    #[must_use]
+    pub const fn chunks(self) -> bool {
+        self.contains(InfoSection::Chunks)
+    }
+
+    #[must_use]
+    pub const fn history(self) -> bool {
+        self.contains(InfoSection::History)
+    }
+
     /// Default text view: dataset catalog table only (plus file header).
     #[must_use]
     pub const fn default_table() -> Self {
-        Self {
-            layout: false,
-            execution: false,
-            datasets: true,
-            chunks: false,
-            history: false,
-        }
+        Self::with(InfoSection::Datasets as u8)
     }
 
     /// All text sections (chunk table still obeys `chunk_limit`).
     #[must_use]
     pub const fn all() -> Self {
-        Self {
-            layout: true,
-            execution: true,
-            datasets: true,
-            chunks: true,
-            history: true,
-        }
+        Self::with(
+            (InfoSection::Layout as u8)
+                | (InfoSection::Execution as u8)
+                | (InfoSection::Datasets as u8)
+                | (InfoSection::Chunks as u8)
+                | (InfoSection::History as u8),
+        )
+    }
+}
+
+/// CLI section toggles for [`info_view_sections_from_flags`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct InfoSectionRequest {
+    all: bool,
+    bits: u8,
+}
+
+impl InfoSectionRequest {
+    /// Enable `--all` (every section).
+    #[must_use]
+    pub const fn with_all(mut self) -> Self {
+        self.all = true;
+        self
+    }
+
+    /// Enable one section flag (`--layout`, `--chunks`, …).
+    #[must_use]
+    pub const fn enable(mut self, section: InfoSection) -> Self {
+        self.bits |= section as u8;
+        self
+    }
+
+    /// True when any individual section flag is set.
+    #[must_use]
+    pub const fn any_section(self) -> bool {
+        self.bits != 0
     }
 }
 
@@ -118,27 +182,12 @@ impl InfoListFilter {
 
 /// Resolve text sections from CLI flags (`--all`, `--layout`, …).
 #[must_use]
-#[allow(clippy::fn_params_excessive_bools)]
-pub fn info_view_sections_from_flags(
-    all: bool,
-    layout: bool,
-    execution: bool,
-    datasets: bool,
-    chunks: bool,
-    history: bool,
-) -> InfoViewSections {
-    if all {
+pub fn info_view_sections_from_flags(req: InfoSectionRequest) -> InfoViewSections {
+    if req.all {
         return InfoViewSections::all();
     }
-    let any = layout || execution || datasets || chunks || history;
-    if any {
-        InfoViewSections {
-            layout,
-            execution,
-            datasets,
-            chunks,
-            history,
-        }
+    if req.any_section() {
+        InfoViewSections::with(req.bits)
     } else {
         InfoViewSections::default_table()
     }
@@ -211,15 +260,15 @@ pub fn format_info_text(
     if let Some(f) = filter.filter(|f| !f.is_empty()) {
         let _ = writeln!(out, "filter: {}", f.summary());
     }
-    if sections.layout {
+    if sections.layout() {
         out.push('\n');
         out.push_str(&format_layout_section(&summary.superblock));
     }
-    if sections.execution {
+    if sections.execution() {
         out.push('\n');
         out.push_str(&format_execution_section(summary.file_execution));
     }
-    if sections.datasets {
+    if sections.datasets() {
         out.push('\n');
         if let Some(file_meta) = &filtered.metadata.file {
             out.push_str(&format_file_metadata_section(file_meta));
@@ -233,7 +282,7 @@ pub fn format_info_text(
             metadata_display,
         ));
     }
-    if sections.chunks {
+    if sections.chunks() {
         out.push('\n');
         out.push_str(&format_chunks_table(
             &filtered.datasets,
@@ -241,7 +290,7 @@ pub fn format_info_text(
             chunk_limit,
         ));
     }
-    if sections.history {
+    if sections.history() {
         out.push('\n');
         out.push_str(&format_history_section(&filtered.history));
     }

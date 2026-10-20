@@ -113,16 +113,26 @@ fn attach_budget_fields(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn fold_outcome_to_preview(
+struct FoldPreviewInput<'a> {
     folded: fold::FoldPlanOutcome,
     strategy: budget::MemoryStrategy,
     budget: budget::ExecutionBudget,
-    plan: &types::ReadPlan,
+    plan: &'a types::ReadPlan,
     dtype: ElementDtype,
     fold_policy: fold::fold_policy::FoldIoPolicy,
     device_route: device::DeviceRoute,
-) -> types::QueryExecutionPreview {
+}
+
+fn fold_outcome_to_preview(input: FoldPreviewInput<'_>) -> types::QueryExecutionPreview {
+    let FoldPreviewInput {
+        folded,
+        strategy,
+        budget,
+        plan,
+        dtype,
+        fold_policy,
+        device_route,
+    } = input;
     let mut preview = preview_from_bundle(
         folded.total_bytes_read_from_disk,
         materialize::DecodePreviewBundle {
@@ -208,17 +218,30 @@ fn try_gpu_scalar_fold_or_cpu(
     Ok((folded, route))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn run_materialize_required_operation(
-    mmap: &[u8],
-    plan: &types::ReadPlan,
-    op: &types::Operation,
+struct MaterializeRequiredInput<'a> {
+    mmap: &'a [u8],
+    plan: &'a types::ReadPlan,
+    op: &'a types::Operation,
     max_preview: usize,
-    budget: &budget::ExecutionBudget,
-    allowlist: &spill_policy::SpillPathAllowlist,
+    budget: &'a budget::ExecutionBudget,
+    allowlist: &'a spill_policy::SpillPathAllowlist,
     dtype: ElementDtype,
-    execution: Option<&types::ExecutionHints>,
+    execution: Option<&'a types::ExecutionHints>,
+}
+
+fn run_materialize_required_operation(
+    input: &MaterializeRequiredInput<'_>,
 ) -> Result<types::QueryExecutionPreview, types::TetError> {
+    let MaterializeRequiredInput {
+        mmap,
+        plan,
+        op,
+        max_preview,
+        budget,
+        allowlist,
+        dtype,
+        execution,
+    } = *input;
     let materialized =
         materialize::materialize_logical_selection(mmap, plan, budget, allowlist, dtype)?;
     let bundle = materialize::preview_from_materialized(
@@ -290,16 +313,16 @@ pub(super) fn build_execution_preview(
     let elem_dtype = ElementDtype::from_wire(dtype)?;
 
     match operation {
-        None => build_decode_preview(
+        None => build_decode_preview(&DecodePreviewInput {
             mmap,
             plan,
             output,
-            max_f32,
+            max_preview: max_f32,
             budget,
             spill_allowlist,
-            elem_dtype,
+            dtype: elem_dtype,
             execution,
-        ),
+        }),
         Some(op) => build_operation_preview(&OperationPreviewInput {
             mmap,
             plan,
@@ -330,17 +353,30 @@ struct OperationPreviewInput<'a> {
     tet_path: Option<&'a Path>,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build_decode_preview(
-    mmap: &[u8],
-    plan: &types::ReadPlan,
-    output: Option<&types::OutputHints>,
+struct DecodePreviewInput<'a> {
+    mmap: &'a [u8],
+    plan: &'a types::ReadPlan,
+    output: Option<&'a types::OutputHints>,
     max_preview: usize,
     budget: budget::ExecutionBudget,
-    spill_allowlist: Option<&spill_policy::SpillPathAllowlist>,
+    spill_allowlist: Option<&'a spill_policy::SpillPathAllowlist>,
     dtype: ElementDtype,
-    execution: Option<&types::ExecutionHints>,
+    execution: Option<&'a types::ExecutionHints>,
+}
+
+fn build_decode_preview(
+    input: &DecodePreviewInput<'_>,
 ) -> Result<types::QueryExecutionPreview, types::TetError> {
+    let DecodePreviewInput {
+        mmap,
+        plan,
+        output,
+        max_preview,
+        budget,
+        spill_allowlist,
+        dtype,
+        execution,
+    } = *input;
     if let Some(spill_path) = spill_requested(output) {
         let path = Path::new(spill_path);
         let policy = spill_allowlist.ok_or_else(|| {
@@ -488,15 +524,15 @@ fn build_fold_operation_preview(
             execution,
             op,
         })?;
-        return Ok(fold_outcome_to_preview(
+        return Ok(fold_outcome_to_preview(FoldPreviewInput {
             folded,
-            budget::MemoryStrategy::StreamingFold,
+            strategy: budget::MemoryStrategy::StreamingFold,
             budget,
             plan,
             dtype,
             fold_policy,
             device_route,
-        ));
+        }));
     }
     let kind = fold::reduction::ReductionKind::from(op);
     let folded = dispatch::partial_fold(
@@ -509,15 +545,15 @@ fn build_fold_operation_preview(
         &fold_policy,
     )?;
     let device_route = device::resolve_device_route(execution, plan, dtype, Some(op));
-    Ok(fold_outcome_to_preview(
+    Ok(fold_outcome_to_preview(FoldPreviewInput {
         folded,
-        budget::MemoryStrategy::StreamingFold,
+        strategy: budget::MemoryStrategy::StreamingFold,
         budget,
         plan,
         dtype,
         fold_policy,
         device_route,
-    ))
+    }))
 }
 
 fn build_operation_preview(
@@ -540,16 +576,16 @@ fn build_operation_preview(
             ..
         } = *input;
         let policy = require_spill_allowlist(spill_allowlist, "materialize-required operation")?;
-        return run_materialize_required_operation(
+        return run_materialize_required_operation(&MaterializeRequiredInput {
             mmap,
             plan,
             op,
             max_preview,
-            &budget,
-            policy,
+            budget: &budget,
+            allowlist: policy,
             dtype,
             execution,
-        );
+        });
     }
     build_fold_operation_preview(input)
 }

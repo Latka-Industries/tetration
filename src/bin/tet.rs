@@ -32,7 +32,7 @@ use tetration::query::parse_query_text;
 use args::{Cli, Commands};
 use convert::run_convert;
 use export::run_export;
-use info::{InfoRunOpts, run_info};
+use info::{InfoOutputMode, InfoRunOpts, run_info};
 use package_ops::{
     GcOpts, IngestOpts, PackOpts, PublishOpts, run_compact, run_gc, run_ingest, run_pack,
     run_publish,
@@ -41,7 +41,7 @@ use qhist::run_qhist;
 use query::{QueryRunOpts, run_query};
 use repair::{RepairRunOpts, run_repair};
 use util::{cli_error, query_input_format, read_query_payload, resolve_stdout};
-use verify::{VerifyRunOpts, run_verify};
+use verify::{VerifyOutputMode, VerifyRunOpts, run_verify};
 
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
@@ -72,14 +72,21 @@ fn run_read(cmd: Commands) -> Result<(), String> {
             metadata,
         } => run_info(InfoRunOpts {
             path,
-            json,
-            quiet,
-            all,
-            layout,
-            execution,
-            datasets,
-            chunks,
-            show_footer_history,
+            output: if json {
+                InfoOutputMode::Json
+            } else if quiet {
+                InfoOutputMode::Quiet
+            } else {
+                InfoOutputMode::Text
+            },
+            sections: InfoRunOpts::sections_from_flags(
+                all,
+                layout,
+                execution,
+                datasets,
+                chunks,
+                show_footer_history,
+            ),
             limit,
             dataset,
             grep,
@@ -113,8 +120,13 @@ fn run_read(cmd: Commands) -> Result<(), String> {
             deep,
         } => run_verify(&VerifyRunOpts {
             path,
-            json,
-            quiet,
+            output: if json {
+                VerifyOutputMode::Json
+            } else if quiet {
+                VerifyOutputMode::Quiet
+            } else {
+                VerifyOutputMode::Text
+            },
             repair,
             deep,
         }),
