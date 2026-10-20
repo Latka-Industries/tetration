@@ -48,6 +48,8 @@ pub(super) struct StatsReadPlan<'a> {
     chunk_count: usize,
     #[serde(skip_serializing_if = "usize_is_zero")]
     zone_filter_skipped_chunks: usize,
+    #[serde(skip_serializing_if = "usize_is_zero")]
+    index_filter_skipped_chunks: usize,
     total_stored_bytes: u64,
     logical_selection_shape: &'a Vec<u64>,
     logical_element_count: usize,
@@ -80,6 +82,7 @@ pub(super) fn stats_read_plan(p: &ReadPlan) -> StatsReadPlan<'_> {
         chunk_touch_policy: p.chunk_touch_policy,
         chunk_count: p.chunk_count,
         zone_filter_skipped_chunks: p.zone_filter_skipped_chunks,
+        index_filter_skipped_chunks: p.index_filter_skipped_chunks,
         total_stored_bytes: p.total_stored_bytes,
         logical_selection_shape: &p.logical_selection_shape,
         logical_element_count: p.logical_element_count,

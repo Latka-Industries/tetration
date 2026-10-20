@@ -38,9 +38,15 @@ pub struct ReadPlan {
     pub chunk_count: usize,
     /// Chunks dropped by value-filter zone pushdown (0 when no `filter` or no zone stats).
     ///
-    /// Geometric touch count is `chunk_count + zone_filter_skipped_chunks`.
+    /// Geometric touch count is `chunk_count + zone_filter_skipped_chunks + index_filter_skipped_chunks`.
     #[serde(default)]
     pub zone_filter_skipped_chunks: usize,
+    /// Chunks dropped by an equality posting list after zone-map pushdown.
+    ///
+    /// Stays 0 when the index is missing, unusable, or does not apply. Those drops are
+    /// not included in [`Self::zone_filter_skipped_chunks`].
+    #[serde(default)]
+    pub index_filter_skipped_chunks: usize,
     pub total_stored_bytes: u64,
     pub chunks: Vec<PlannedChunkIo>,
     /// Dataset global shape (same rank as selection).
@@ -72,6 +78,8 @@ struct ReadPlanWire {
     chunk_count: usize,
     #[serde(default)]
     zone_filter_skipped_chunks: usize,
+    #[serde(default)]
+    index_filter_skipped_chunks: usize,
     total_stored_bytes: u64,
     chunks: Vec<PlannedChunkIo>,
     dataset_shape: Vec<u64>,
@@ -96,6 +104,7 @@ impl<'de> Deserialize<'de> for ReadPlan {
             chunk_touch_policy,
             chunk_count: wire.chunk_count,
             zone_filter_skipped_chunks: wire.zone_filter_skipped_chunks,
+            index_filter_skipped_chunks: wire.index_filter_skipped_chunks,
             total_stored_bytes: wire.total_stored_bytes,
             chunks: wire.chunks,
             dataset_shape: wire.dataset_shape,

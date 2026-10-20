@@ -13,6 +13,7 @@ fn sample_plan(chunks: Vec<PlannedChunkIo>, shape: u64) -> ReadPlan {
         chunk_touch_policy: "dense",
         chunk_count: chunks.len(),
         zone_filter_skipped_chunks: 0,
+        index_filter_skipped_chunks: 0,
         total_stored_bytes: 0,
         chunks,
         dataset_shape: vec![shape],

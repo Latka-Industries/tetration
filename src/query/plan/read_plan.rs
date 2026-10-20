@@ -1,8 +1,10 @@
 //! Build [`ReadPlan`] from catalog summary and chunk coordinate list.
 
 use crate::catalog::{
-    ChunkIndexEntryV1, ChunkZoneStat, GenerationZoneMaps, MAX_NDIM, TetFileSummaryV1,
+    ChunkIndexEntryV1, ChunkZoneStat, GenerationSecondaryIndex, GenerationZoneMaps, MAX_NDIM,
+    TetFileSummaryV1,
 };
+use crate::query::plan::index_pushdown::eq_chunk_allowlist;
 use crate::query::plan::zone_pushdown::zone_may_match_filter;
 use crate::query::types::{CellPredicate, PlannedChunkIo, ReadPlan, TetError, ValueFilter};
 
@@ -39,6 +41,8 @@ pub(crate) struct ZonePushdown<'a> {
     pub filter: Option<&'a ValueFilter>,
     /// Dataset fill (`_FillValue` / `missing_value` / `fill_value`) for cell-null tests.
     pub fill: Option<f64>,
+    /// Sealed value-posting index, when the open generation has a usable one.
+    pub index: Option<&'a GenerationSecondaryIndex>,
 }
 
 pub(crate) fn selection_logical_shape_u64(
@@ -133,9 +137,15 @@ pub(crate) fn build_read_plan(
     let logical_selection_shape =
         selection_logical_shape_u64(geom.g0, geom.g1_exclusive, geom.step)?;
     let logical_element_count = shape_product_usize(&logical_selection_shape)?;
+    let allowlist = pushdown.filter.and_then(|filter| {
+        pushdown
+            .index
+            .and_then(|index| eq_chunk_allowlist(index, dataset_idx as u64, pushdown.dtype, filter))
+    });
     let mut chunks = Vec::with_capacity(coords.len());
     let mut total_stored: u64 = 0;
     let mut zone_filter_skipped_chunks = 0usize;
+    let mut index_filter_skipped_chunks = 0usize;
     for coord in coords {
         let entry = find_chunk_entry(summary, dataset_idx, ndim, coord).ok_or_else(|| {
             TetError::Validation(format!(
@@ -151,6 +161,12 @@ pub(crate) fn build_read_plan(
             zone_filter_skipped_chunks = zone_filter_skipped_chunks.saturating_add(1);
             continue;
         }
+        if let Some(allowed) = allowlist.as_ref()
+            && !allowed.contains(&coord[..ndim].to_vec())
+        {
+            index_filter_skipped_chunks = index_filter_skipped_chunks.saturating_add(1);
+            continue;
+        }
         total_stored = total_stored
             .checked_add(entry.stored_byte_len)
             .ok_or_else(|| {
@@ -162,6 +178,7 @@ pub(crate) fn build_read_plan(
         chunk_touch_policy,
         chunk_count: chunks.len(),
         zone_filter_skipped_chunks,
+        index_filter_skipped_chunks,
         total_stored_bytes: total_stored,
         chunks,
         dataset_shape: geom.dataset_shape.to_vec(),
