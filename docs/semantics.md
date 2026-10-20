@@ -86,13 +86,10 @@ Policy miss or missing file → behave as today (indices and raw dtype).
 
 ## CLI (this cut)
 
-- **`tet semantics scaffold`**: read declared attrs. If present, emit policy stubs keyed off them. If absent, emit catalog summary plus links to the semantics guide / examples — **no invented commented config**.
+- **`tet semantics scaffold`**: read declared attrs. If present, emit policy stubs keyed off them. If absent, emit catalog summary plus a link to the semantics guide — **no invented commented config**.
 - **`tet semantics set`**: declare or clear attrs on a dataset (rewrites the history footer metadata; does not reinterpret values).
 
-Doc link targets for scaffold (site):
-
-- `https://docs.tetration.sh/guides/semantics/`
-- `https://docs.tetration.sh/guides/semantics/examples`
+Doc link target for scaffold (site): `https://docs.tetration.sh/guides/semantics/`
 
 ## Cold start
 
@@ -149,4 +146,4 @@ tet semantics set grid.tet --dataset tas \
   --set crs=EPSG:4326 --set semantics_profile=tetration.climate.v1
 ```
 
-Site guides (scaffold link targets): [semantics](https://docs.tetration.sh/guides/semantics/) · [examples](https://docs.tetration.sh/guides/semantics/examples).
+Site guide (scaffold link target): [semantics](https://docs.tetration.sh/guides/semantics/).
