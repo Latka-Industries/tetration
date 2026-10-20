@@ -13,7 +13,7 @@ This tree is the **canonical contract index**. Byte layouts, package roles, quer
 | Query JSON/TOML wire | [`docs/query_engine.md`](../docs/query_engine.md) | §3 |
 | C ABI | [`docs/ffi.md`](../docs/ffi.md), [`include/tetration.h`](../include/tetration.h) | §4 |
 | Compatibility / capability flags | [`COMPATIBILITY.md`](COMPATIBILITY.md) | §5 |
-| Conformance pack | *lands in THI-592* | §6 (stub) |
+| Conformance pack | [`conformance/`](../conformance/README.md) | §6 |
 
 **Informative (not required to claim “compatible reader”):** convert/export, GPU routing, CLI presentation, distributed fold harness, declared semantics interpretation ([`docs/semantics.md`](../docs/semantics.md)).
 
@@ -262,13 +262,15 @@ Layout, query wire, package protocol, and `TET_ABI_VERSION` bump **independently
 
 ---
 
-## 6. Conformance (stub — THI-592)
+## 6. Conformance
 
-A conformance pack (accept fixtures + expected results; reject malformed / policy violations) will gate CI for the reference Rust reader and document the pack format for external implementers. Until that lands, use:
+**Pack:** [`conformance/`](../conformance/README.md) · machine index [`conformance/manifest.v1.json`](../conformance/manifest.v1.json).
 
-- Accept / smoke: [`fixtures/small/tet/`](../fixtures/small/tet/)
-- Reject corpus: [`fixtures/small/tet/reject/`](../fixtures/small/tet/reject/)
-- Query profiles: [`fixtures/queries/`](../fixtures/queries/)
+- **Accept** — healthy `.tet` files + closed query documents with expected aggregate fields.
+- **Reject verify** — malformed layout / codec fixtures (stable `check` names).
+- **Reject query** — unknown keys / nested `operation` (closed-wire policy).
+
+Reference gate: `cargo test --lib conformance` ([`src/tests/conformance.rs`](../src/tests/conformance.rs)). Fixtures remain under [`fixtures/small/tet/`](../fixtures/small/tet/) and [`fixtures/queries/`](../fixtures/queries/); the pack references them by path.
 
 ---
 

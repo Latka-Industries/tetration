@@ -1,0 +1,5 @@
+{
+  "dataset": "temperature",
+  "mean": [],
+  "filter": { "between": [0, 10] }
+}

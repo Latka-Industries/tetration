@@ -196,7 +196,7 @@ A plausible north star: **scientific knowledge infrastructure** — not only a f
 | **15** | Group-by, pipelines, controlled joins | Axes + metadata | Avoid full SQL complexity |
 | **16** | Units, CRS, provenance, uncertainty | Footer history + attrs | Standards alignment (CF, PROV, etc.) |
 | **17** | Shards, generations, atomic publish | Writer protocol v2 | **Shipped** in 0.2 — [`writer_protocol_v2.md`](writer_protocol_v2.md); WORM per sealed `G` |
-| **18** | Normative spec + conformance suite | Layout + query wire frozen | **SPEC** [`SPEC/README.md`](../SPEC/README.md) + [`COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md) (THI-586/587); conformance pack THI-592 — ships as **0.5.2** |
+| **18** | Normative spec + conformance suite | Layout + query wire frozen | **SPEC** + [`COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md) + [`conformance/`](../conformance/README.md) (THI-586/587/592) — ships as **0.5.2** |
 
 Phases are **not ordered commitments** — e.g. formal spec (18) might parallelize early work on cloud reads (12).
 

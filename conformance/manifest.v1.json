@@ -1,0 +1,113 @@
+{
+  "pack_version": 1,
+  "spec_milestone": "0.5.2",
+  "description": "Layout v1 verify + closed query wire answers (THI-592)",
+  "accept": [
+    {
+      "id": "sample-verify",
+      "tet": "fixtures/small/tet/sample.tet",
+      "verify": "ok"
+    },
+    {
+      "id": "sample-mean",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "fixtures/queries/mean_temperature.json",
+      "expect": {
+        "execution.operation_mean": 3.5
+      }
+    },
+    {
+      "id": "multichunk-u8-sum",
+      "tet": "fixtures/small/tet/multichunk_u8.tet",
+      "query": "fixtures/queries/sum_a.json",
+      "expect": {
+        "execution.operation_sum": 21.0
+      }
+    },
+    {
+      "id": "multichunk-u8-var",
+      "tet": "fixtures/small/tet/multichunk_u8.tet",
+      "query": "fixtures/queries/var_a.json",
+      "expect": {
+        "execution.operation_var": 2.9166666666666665
+      }
+    },
+    {
+      "id": "multichunk-f16-sum",
+      "tet": "fixtures/small/tet/multichunk_f16.tet",
+      "query": "fixtures/queries/sum_a.json",
+      "expect": {
+        "execution.operation_sum": 21.0
+      }
+    },
+    {
+      "id": "recording-verify",
+      "tet": "fixtures/small/tet/recording.tet",
+      "verify": "ok"
+    }
+  ],
+  "reject_verify": [
+    {
+      "id": "payload_offset_past_eof",
+      "tet": "fixtures/small/tet/reject/payload_offset_past_eof.tet",
+      "expect_check": "parse"
+    },
+    {
+      "id": "duplicate_payload_offset",
+      "tet": "fixtures/small/tet/reject/duplicate_payload_offset.tet",
+      "expect_check": "payload_offsets"
+    },
+    {
+      "id": "raw_stored_len_mismatch",
+      "tet": "fixtures/small/tet/reject/raw_stored_len_mismatch.tet",
+      "expect_check": "parse"
+    },
+    {
+      "id": "chunk_coord_out_of_grid",
+      "tet": "fixtures/small/tet/reject/chunk_coord_out_of_grid.tet",
+      "expect_check": "dataset_tensor_bytes"
+    },
+    {
+      "id": "truncated_payload",
+      "tet": "fixtures/small/tet/reject/truncated_payload.tet",
+      "expect_check": "parse"
+    },
+    {
+      "id": "truncated_tidx",
+      "tet": "fixtures/small/tet/reject/truncated_tidx.tet",
+      "expect_check": "parse"
+    },
+    {
+      "id": "zstd_garbage_payload",
+      "tet": "fixtures/small/tet/reject/zstd_garbage_payload.tet",
+      "expect_check": "chunk_decode"
+    },
+    {
+      "id": "inflated_stored_past_eof",
+      "tet": "fixtures/small/tet/reject/inflated_stored_past_eof.tet",
+      "expect_check": "parse"
+    },
+    {
+      "id": "legacy-zero_chunk_shape",
+      "tet": "fixtures/small/tet/reject/zero_chunk_shape.tet",
+      "expect_check": null
+    }
+  ],
+  "reject_query": [
+    {
+      "id": "unknown_top_level_key",
+      "query": "conformance/reject/queries/unknown_top_level_key.json",
+      "expect_error_substr": "unknown field"
+    },
+    {
+      "id": "nested_operation",
+      "query": "conformance/reject/queries/nested_operation.json",
+      "expect_error_substr": "nested `operation`"
+    },
+    {
+      "id": "unknown_filter_key",
+      "query": "conformance/reject/queries/unknown_filter_key.json",
+      "expect_error_substr": "unknown"
+    }
+  ]
+}

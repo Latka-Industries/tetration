@@ -11,6 +11,7 @@ mod cli_output;
 mod cli_package;
 mod cli_semantics;
 mod concurrent_query;
+mod conformance;
 mod convert;
 mod convert_s3;
 mod covariance;
