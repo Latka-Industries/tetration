@@ -7,7 +7,9 @@ use crate::catalog::package::sha256_file_hex;
 use crate::catalog::zone::sha256_hex;
 use crate::catalog::{
     CatalogError, DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
-    TetPackage, ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, zone_maps_for_packed,
+    SECONDARY_INDEX_FILE, SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, TetPackage,
+    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, secondary_index_for_packed,
+    value_postings, zone_maps_for_packed,
 };
 
 use super::options::VerifyOptions;
@@ -210,6 +212,8 @@ fn verify_sealed_generation(
     let findings = check_packed_len(&packed, &manifest, is_current, &prefix, findings)?;
     let findings = check_packed_sha(&packed, &manifest, is_current, findings)?;
     let findings = check_zone_maps(package, generation, &manifest, &packed, opts, findings)?;
+    let findings =
+        check_secondary_indexes(package, generation, &manifest, &packed, opts, findings)?;
     check_packed_layout(&packed, opts, &prefix, findings)
 }
 
@@ -398,6 +402,175 @@ fn check_zone_maps(
             Ok(findings)
         }
     }
+}
+
+fn check_secondary_indexes(
+    package: &TetPackage,
+    generation: u64,
+    manifest: &GenerationManifest,
+    packed: &Path,
+    opts: VerifyOptions,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
+    let index_path = package
+        .generation_dir(generation)
+        .join(SECONDARY_INDEX_FILE);
+    match manifest.secondary_indexes.as_deref() {
+        Some(SECONDARY_INDEX_PRESENT) => {
+            check_present_secondary_index(generation, &index_path, manifest, packed, opts, findings)
+        }
+        Some(SECONDARY_INDEX_OMITTED) => {
+            if index_path.is_file() {
+                findings.push(err_finding(
+                    "secondary_indexes",
+                    format!(
+                        "generations/{}/{} present but MANIFEST secondary_indexes is omitted",
+                        format_generation_id(generation),
+                        SECONDARY_INDEX_FILE
+                    ),
+                ));
+                return Err(findings);
+            }
+            findings.push(ok_finding(
+                "secondary_indexes",
+                Some(SECONDARY_INDEX_OMITTED.to_owned()),
+            ));
+            Ok(findings)
+        }
+        Some(other) => {
+            findings.push(err_finding(
+                "secondary_indexes",
+                format!("unsupported MANIFEST secondary_indexes value {other:?}"),
+            ));
+            Err(findings)
+        }
+        None => {
+            findings.push(warn_finding(
+                "secondary_indexes",
+                "advisory: generation sealed without secondary indexes".to_owned(),
+            ));
+            Ok(findings)
+        }
+    }
+}
+
+fn check_present_secondary_index(
+    generation: u64,
+    index_path: &Path,
+    manifest: &GenerationManifest,
+    packed: &Path,
+    opts: VerifyOptions,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
+    if !index_path.is_file() {
+        findings.push(err_finding(
+            "secondary_indexes",
+            format!(
+                "generations/{}/{} missing (present)",
+                format_generation_id(generation),
+                SECONDARY_INDEX_FILE
+            ),
+        ));
+        return Err(findings);
+    }
+    let bytes = match fs::read(index_path) {
+        Ok(b) => b,
+        Err(e) => {
+            findings.push(err_finding("secondary_indexes", e.to_string()));
+            return Err(findings);
+        }
+    };
+    let actual = sha256_hex(&bytes);
+    match &manifest.secondary_indexes_sha256 {
+        Some(expected) if expected == &actual => {}
+        Some(expected) => {
+            findings.push(err_finding(
+                "secondary_indexes_sha256",
+                format!("{SECONDARY_INDEX_FILE} sha256 {actual} != MANIFEST {expected}"),
+            ));
+            return Err(findings);
+        }
+        None => {
+            findings.push(err_finding(
+                "secondary_indexes_sha256",
+                "MANIFEST secondary_indexes is present but secondary_indexes_sha256 is absent"
+                    .to_owned(),
+            ));
+            return Err(findings);
+        }
+    }
+    let value: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            findings.push(err_finding("secondary_indexes", e.to_string()));
+            return Err(findings);
+        }
+    };
+    let version = value.get("version").and_then(serde_json::Value::as_u64);
+    if version != Some(u64::from(crate::catalog::SECONDARY_INDEX_VERSION)) {
+        findings.push(warn_finding(
+            "secondary_indexes_version",
+            format!(
+                "advisory: {SECONDARY_INDEX_FILE} version {version:?} is not {}; query falls back",
+                crate::catalog::SECONDARY_INDEX_VERSION
+            ),
+        ));
+        return Ok(findings);
+    }
+    let doc = match serde_json::from_value::<crate::catalog::GenerationSecondaryIndex>(value) {
+        Ok(d) => d,
+        Err(e) => {
+            findings.push(err_finding("secondary_indexes", e.to_string()));
+            return Err(findings);
+        }
+    };
+    if doc.generation != generation {
+        findings.push(err_finding(
+            "secondary_indexes",
+            format!(
+                "{SECONDARY_INDEX_FILE} generation {} != directory {generation}",
+                doc.generation
+            ),
+        ));
+        return Err(findings);
+    }
+    if let Some(expected) = &manifest.packed_sha256
+        && expected != &doc.packed_sha256
+    {
+        findings.push(err_finding(
+            "secondary_indexes",
+            format!("{SECONDARY_INDEX_FILE} packed_sha256 does not match MANIFEST"),
+        ));
+        return Err(findings);
+    }
+    if opts.deep_decode
+        && let Err(detail) = secondary_index_matches_recompute(packed, generation, &doc)
+    {
+        findings.push(err_finding("secondary_indexes_stale", detail));
+        return Err(findings);
+    }
+    findings.push(ok_finding(
+        "secondary_indexes",
+        Some(SECONDARY_INDEX_PRESENT.to_owned()),
+    ));
+    Ok(findings)
+}
+
+fn secondary_index_matches_recompute(
+    packed: &Path,
+    generation: u64,
+    doc: &crate::catalog::GenerationSecondaryIndex,
+) -> Result<(), String> {
+    let packed_bytes = fs::read(packed).map_err(|e| e.to_string())?;
+    let fresh = secondary_index_for_packed(&packed_bytes, generation, doc.packed_sha256.as_str())
+        .map_err(|e| e.to_string())?;
+    let fresh_postings = fresh.as_ref().map(value_postings).unwrap_or_default();
+    if fresh_postings != value_postings(doc) {
+        return Err(format!(
+            "{SECONDARY_INDEX_FILE} does not match a recompute of packed.tet"
+        ));
+    }
+    Ok(())
 }
 
 fn check_packed_len(

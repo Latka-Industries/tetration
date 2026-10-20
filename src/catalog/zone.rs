@@ -171,7 +171,7 @@ struct Bounds {
     max: Option<Vec<u8>>,
 }
 
-fn stored_payload(packed: &[u8], offset: u64, len: u64) -> Result<&[u8], CatalogError> {
+pub(crate) fn stored_payload(packed: &[u8], offset: u64, len: u64) -> Result<&[u8], CatalogError> {
     let start = usize::try_from(offset).map_err(|_| CatalogError::TooLargeForPlatform {
         field: "payload_offset",
         value: offset,
@@ -192,7 +192,7 @@ fn stored_payload(packed: &[u8], offset: u64, len: u64) -> Result<&[u8], Catalog
         })
 }
 
-fn fill_le_bytes(
+pub(crate) fn fill_le_bytes(
     dtype: u32,
     attrs: Option<&std::collections::BTreeMap<String, String>>,
 ) -> Option<Vec<u8>> {
@@ -380,7 +380,7 @@ where
     bounds
 }
 
-fn hex_le(bytes: &[u8]) -> String {
+pub(crate) fn hex_le(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for b in bytes {

@@ -136,7 +136,7 @@ example.tet.d/
 1. **Freeze** an explicit **part-id list** (decision **C**). If using a staging scan, snapshot the list into memory/`MANIFEST` draft *before* building; parts sealed after the snapshot are not in this `G`.
 2. Exclusive-create `publishing/<G>/` (decision **G**). On collision: abort (not corruption). Heartbeat file while working; default stale threshold **1h**.
 3. Build **`packed.tet`** (layout v1) from the frozen parts (optional compact/merge first — decision **I**).
-4. Fsync `packed.tet`; recompute per-chunk zone maps into `ZONE.json` (do not edit staging); write `MANIFEST.json` with: `G`, frozen part ids, provenance checksums, catalog summary, checksum of `packed.tet`, and `zone_maps: "required"` plus the `ZONE.json` checksum.
+4. Fsync `packed.tet`; recompute per-chunk zone maps into `ZONE.json` and, when a dataset qualifies, value postings into `INDEX.json` (do not edit staging); write `MANIFEST.json` with: `G`, frozen part ids, provenance checksums, catalog summary, checksum of `packed.tet`, `zone_maps: "required"` plus the `ZONE.json` checksum, and `secondary_indexes` of `"present"` (plus the `INDEX.json` checksum) or `"omitted"` (no index file). See [`secondary_indexes.md`](secondary_indexes.md).
 5. Move/rename completed tree into `generations/<G>/` (must contain `packed.tet` + `MANIFEST`).
 6. Atomically set `CURRENT` → `G`.
 7. Staging GC optional afterward (decision **D**): sealed verify must **not** require staging files.
@@ -189,6 +189,11 @@ example.tet.d/
 | Checksum / length mismatch vs `MANIFEST` | **Error** | `manifest_sha256` / `manifest_byte_len` |
 | `MANIFEST.zone_maps = "required"` but `ZONE.json` missing, hash mismatch, or (`--deep`) stats ≠ recompute | **Error** | `zone_maps` / `zone_maps_sha256` / `zone_maps_stale` |
 | Generation sealed with no zone maps (pre-0.4 manifest) | **Warn** (advisory) | `zone_maps` |
+| `MANIFEST.secondary_indexes = "present"` but `INDEX.json` missing, hash mismatch, or (`--deep`) postings ≠ recompute | **Error** | `secondary_indexes` / `secondary_indexes_sha256` / `secondary_indexes_stale` |
+| `secondary_indexes = "omitted"` and `INDEX.json` is absent | **OK** | `secondary_indexes` |
+| `secondary_indexes = "omitted"` but `INDEX.json` is present | **Error** | `secondary_indexes` |
+| `INDEX.json` hash matches but `version` is not 1 | **Warn** (advisory; query falls back) | `secondary_indexes_version` |
+| Generation sealed with no secondary-index field (pre-0.4.5 manifest) | **Warn** (advisory) | `secondary_indexes` |
 | Overlapping claims with differing bytes at publish time | **Error** (publish reject) | — (never seals) |
 | Overlapping claims with identical bytes | **OK** (idempotent) | — |
 | Duplicate chunk coords inside sealed `packed.tet` | **Error** | `chunk_coords` |

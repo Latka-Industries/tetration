@@ -125,9 +125,18 @@ fn crash_after_rename_before_current_flip() {
     zone.generation = 2;
     let zone_bytes = crate::catalog::encode_zone_maps(&zone).unwrap();
     fs::write(g2.join(crate::catalog::ZONE_MAPS_FILE), &zone_bytes).unwrap();
+    let mut index = crate::catalog::read_secondary_index_file(
+        &pkg.generation_dir(1)
+            .join(crate::catalog::SECONDARY_INDEX_FILE),
+    )
+    .unwrap();
+    index.generation = 2;
+    let index_bytes = crate::catalog::encode_secondary_index(&index).unwrap();
+    fs::write(g2.join(crate::catalog::SECONDARY_INDEX_FILE), &index_bytes).unwrap();
     let mut manifest = pkg.read_manifest(1).unwrap();
     manifest.generation = 2;
     manifest.zone_maps_sha256 = Some(crate::catalog::zone::sha256_hex(&zone_bytes));
+    manifest.secondary_indexes_sha256 = Some(crate::catalog::zone::sha256_hex(&index_bytes));
     fs::write(
         g2.join("MANIFEST.json"),
         serde_json::to_string_pretty(&manifest).unwrap() + "\n",

@@ -41,6 +41,16 @@ pub fn zone_maps_key(generation: u64) -> String {
     )
 }
 
+/// `INDEX.json` key for a sealed generation (beside `packed.tet`).
+#[must_use]
+pub fn secondary_index_key(generation: u64) -> String {
+    format!(
+        "generations/{}/{}",
+        format_generation_id(generation),
+        crate::catalog::SECONDARY_INDEX_FILE
+    )
+}
+
 /// Manifest key for a sealed generation.
 #[must_use]
 pub fn generation_manifest_key(generation: u64) -> String {

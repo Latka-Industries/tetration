@@ -34,6 +34,7 @@ mod reject_corpus;
 mod repair;
 mod resolve_axes;
 mod resolve_selection;
+mod secondary_index;
 mod selective_query;
 mod session;
 mod shard;

@@ -40,7 +40,7 @@ pub use local::LocalStore;
 pub use memory::MemoryStore;
 pub use pin::{
     PinnedPackedTet, generation_manifest_key, packed_tet_key, pin_packed_tet,
-    read_generation_manifest, zone_maps_key,
+    read_generation_manifest, secondary_index_key, zone_maps_key,
 };
 pub use prune::{
     PruneOptions, PruneRefusal, PruneRefuseReason, PruneReport, PruneTarget, prune_store,
