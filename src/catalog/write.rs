@@ -9,6 +9,7 @@ use std::path::Path;
 use super::dataset::{self, RawArrayWrite};
 use super::index::ChunkIndexEntryV1;
 use super::{CHUNK_PAYLOAD_CODEC_V1, CatalogError, FileExecutionSettingsV1, OneChunkRawWrite};
+use crate::layout::SuperblockV1;
 
 /// Write a `.tet` with one dataset and any number of chunks (row-major `f32` or `f64` elements),
 /// each stored as [`CHUNK_PAYLOAD_CODEC_V1`].[`raw`](super::ChunkPayloadCodecV1::raw) or
@@ -43,11 +44,7 @@ pub fn write_multi_raw_array_file(
     write_multi_raw_array_file_inner(path, specs)
 }
 
-#[allow(clippy::too_many_lines)]
-fn write_multi_raw_array_file_inner(
-    path: &Path,
-    specs: &[RawArrayWrite<'_>],
-) -> Result<(), CatalogError> {
+fn encode_multi_dataset_blob(specs: &[RawArrayWrite<'_>]) -> Result<(Vec<u8>, u64), CatalogError> {
     let mut blob = Vec::new();
     for spec in specs {
         blob.extend_from_slice(&dataset::encode_dataset_blob(
@@ -58,11 +55,18 @@ fn write_multi_raw_array_file_inner(
         )?);
     }
     let dataset_blob_len = blob.len() as u64;
-    let n_chunks_total =
-        super::file_layout::sum_chunk_counts(specs.iter().map(|s| (s.shape, s.chunk_shape)))?;
-    let (index_base, chunk_index_length, payload_start) =
-        super::file_layout::chunk_index_layout(dataset_blob_len, n_chunks_total)?;
+    Ok((blob, dataset_blob_len))
+}
 
+struct MultiDatasetTiles {
+    entries: Vec<ChunkIndexEntryV1>,
+    payloads: Vec<Vec<u8>>,
+}
+
+fn build_multi_dataset_tiles(
+    specs: &[RawArrayWrite<'_>],
+    payload_start: u64,
+) -> Result<MultiDatasetTiles, CatalogError> {
     let mut entries: Vec<ChunkIndexEntryV1> = Vec::new();
     let mut payloads: Vec<Vec<u8>> = Vec::new();
     let mut cursor = payload_start;
@@ -77,10 +81,46 @@ fn write_multi_raw_array_file_inner(
             &mut payloads,
         )?;
     }
+    let _ = cursor;
+    Ok(MultiDatasetTiles { entries, payloads })
+}
+
+fn write_tet_file_bytes(
+    path: &Path,
+    sb: &SuperblockV1,
+    blob: &[u8],
+    index_base: u64,
+    index_bytes: &[u8],
+    payloads: &[Vec<u8>],
+) -> Result<(), CatalogError> {
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(path)?;
+    super::file_layout::write_file_preamble(&mut f, sb, blob, index_base, index_bytes)?;
+    for p in payloads {
+        f.write_all(p)?;
+    }
+    f.sync_all()?;
+    Ok(())
+}
+
+fn write_multi_raw_array_file_inner(
+    path: &Path,
+    specs: &[RawArrayWrite<'_>],
+) -> Result<(), CatalogError> {
+    let (blob, dataset_blob_len) = encode_multi_dataset_blob(specs)?;
+    let n_chunks_total =
+        super::file_layout::sum_chunk_counts(specs.iter().map(|s| (s.shape, s.chunk_shape)))?;
+    let (index_base, chunk_index_length, payload_start) =
+        super::file_layout::chunk_index_layout(dataset_blob_len, n_chunks_total)?;
+
+    let tiles = build_multi_dataset_tiles(specs, payload_start)?;
 
     let sb = super::file_layout::layout_superblock(specs.len(), index_base, chunk_index_length)?;
     let index_bytes = super::file_layout::build_chunk_index_bytes(
-        &entries,
+        &tiles.entries,
         n_chunks_total,
         chunk_index_length,
         specs[0]
@@ -88,20 +128,9 @@ fn write_multi_raw_array_file_inner(
             .unwrap_or_else(FileExecutionSettingsV1::default_engine),
     )?;
 
-    let mut f = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(path)?;
-    super::file_layout::write_file_preamble(&mut f, &sb, &blob, index_base, &index_bytes)?;
-    for p in payloads {
-        f.write_all(&p)?;
-    }
-    f.sync_all()?;
-    Ok(())
+    write_tet_file_bytes(path, &sb, &blob, index_base, &index_bytes, &tiles.payloads)
 }
 
-#[allow(clippy::too_many_lines)]
 fn write_raw_array_file_inner(path: &Path, spec: &RawArrayWrite<'_>) -> Result<(), CatalogError> {
     write_multi_raw_array_file_inner(path, std::slice::from_ref(spec))
 }
@@ -194,15 +223,5 @@ pub(crate) fn write_sparse_raw_array_file(
         chunk_index_length,
         FileExecutionSettingsV1::default_engine(),
     )?;
-    let mut f = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(path)?;
-    super::file_layout::write_file_preamble(&mut f, &sb, &blob, index_base, &index_bytes)?;
-    for p in payloads {
-        f.write_all(&p)?;
-    }
-    f.sync_all()?;
-    Ok(())
+    write_tet_file_bytes(path, &sb, &blob, index_base, &index_bytes, &payloads)
 }
