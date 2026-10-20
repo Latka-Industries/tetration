@@ -39,6 +39,10 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.5.2:** normative [`SPEC/`](../SPEC/README.md) (layout v1, writer v2, query wire, C ABI),
+//! compatibility policy, conformance pack + CI gate, and an optional Python stdlib smoke
+//! reader. Query answers unchanged.
+//!
 //! **0.5.1:** optional declared science/media attrs in the footer plus `tet semantics`
 //! scaffold/set. Interpretation is caller policy (`docs/semantics.md`); attrs do not change
 //! fold answers by themselves.

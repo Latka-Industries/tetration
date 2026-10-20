@@ -82,7 +82,9 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.5.0:** distributed fold library path — see [Phase 14](#3-distributed-execution-phase-14).
 
-**Shipped in 0.5.1:** declared science/media attrs + `tet semantics` CLI / helpers — see [Phase 16](#5-scientific-semantics-phase-16). PyPI tet-py stays on **0.5.0** until THI-585.
+**Shipped in 0.5.1:** declared science/media attrs + `tet semantics` CLI / helpers — see [Phase 16](#5-scientific-semantics-phase-16).
+
+**Shipped in 0.5.2:** normative SPEC + compatibility policy + conformance pack (+ optional Python smoke) — see [Phase 18](#prospective-phase-summary). PyPI tet-py stays on **0.5.1** until THI-591.
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
