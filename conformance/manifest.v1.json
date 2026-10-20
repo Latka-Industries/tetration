@@ -1,7 +1,7 @@
 {
   "pack_version": 1,
-  "spec_milestone": "0.5.2",
-  "description": "Layout v1 verify + closed query wire answers (THI-592)",
+  "spec_milestone": "0.5.3",
+  "description": "Layout v1 verify + closed query wire answers (THI-605 grow on THI-592)",
   "accept": [
     {
       "id": "sample-verify",
@@ -13,8 +13,23 @@
       "tet": "fixtures/small/tet/sample.tet",
       "query": "fixtures/queries/mean_temperature.json",
       "expect": {
-        "execution.operation_mean": 3.5
+        "execution.operation_mean": 3.5,
+        "execution.operation_element_count": 6
       }
+    },
+    {
+      "id": "sample-mean-strided",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "conformance/accept/queries/mean_strided_sample.json",
+      "expect": {
+        "execution.operation_mean": 2.0,
+        "execution.operation_element_count": 3
+      }
+    },
+    {
+      "id": "large-verify",
+      "tet": "fixtures/small/tet/large.tet",
+      "verify": "ok"
     },
     {
       "id": "multichunk-u8-sum",
@@ -22,6 +37,15 @@
       "query": "fixtures/queries/sum_a.json",
       "expect": {
         "execution.operation_sum": 21.0
+      }
+    },
+    {
+      "id": "multichunk-u8-mean",
+      "tet": "fixtures/small/tet/multichunk_u8.tet",
+      "query": "fixtures/queries/mean_a.json",
+      "expect": {
+        "execution.operation_mean": 3.5,
+        "execution.operation_element_count": 6
       }
     },
     {
@@ -33,11 +57,51 @@
       }
     },
     {
+      "id": "multichunk-u32-sum",
+      "tet": "fixtures/small/tet/multichunk_u32.tet",
+      "query": "fixtures/queries/sum_a.json",
+      "expect": {
+        "execution.operation_sum": 21.0
+      }
+    },
+    {
+      "id": "multichunk-u32-mean",
+      "tet": "fixtures/small/tet/multichunk_u32.tet",
+      "query": "fixtures/queries/mean_a.json",
+      "expect": {
+        "execution.operation_mean": 3.5
+      }
+    },
+    {
+      "id": "multichunk-u32-var",
+      "tet": "fixtures/small/tet/multichunk_u32.tet",
+      "query": "fixtures/queries/var_a.json",
+      "expect": {
+        "execution.operation_var": 2.9166666666666665
+      }
+    },
+    {
       "id": "multichunk-f16-sum",
       "tet": "fixtures/small/tet/multichunk_f16.tet",
       "query": "fixtures/queries/sum_a.json",
       "expect": {
         "execution.operation_sum": 21.0
+      }
+    },
+    {
+      "id": "multichunk-f16-mean",
+      "tet": "fixtures/small/tet/multichunk_f16.tet",
+      "query": "fixtures/queries/mean_a.json",
+      "expect": {
+        "execution.operation_mean": 3.5
+      }
+    },
+    {
+      "id": "multichunk-f16-var",
+      "tet": "fixtures/small/tet/multichunk_f16.tet",
+      "query": "fixtures/queries/var_a.json",
+      "expect": {
+        "execution.operation_var": 2.9166666666666665
       }
     },
     {
@@ -91,6 +155,16 @@
       "id": "legacy-zero_chunk_shape",
       "tet": "fixtures/small/tet/reject/zero_chunk_shape.tet",
       "expect_check": null
+    },
+    {
+      "id": "legacy-oom_dataset_count",
+      "tet": "fixtures/small/tet/reject/oom_dataset_count.tet",
+      "expect_check": null
+    },
+    {
+      "id": "legacy-overflow_tile_extent",
+      "tet": "fixtures/small/tet/reject/overflow_tile_extent.tet",
+      "expect_check": null
     }
   ],
   "reject_query": [
@@ -105,9 +179,34 @@
       "expect_error_substr": "nested `operation`"
     },
     {
+      "id": "nested_output",
+      "query": "conformance/reject/queries/nested_output.json",
+      "expect_error_substr": "nested `output`"
+    },
+    {
       "id": "unknown_filter_key",
       "query": "conformance/reject/queries/unknown_filter_key.json",
       "expect_error_substr": "unknown"
+    },
+    {
+      "id": "empty_dataset",
+      "query": "conformance/reject/queries/empty_dataset.json",
+      "expect_error_substr": "non-empty string"
+    },
+    {
+      "id": "dual_sum_mean",
+      "query": "conformance/reject/queries/dual_sum_mean.json",
+      "expect_error_substr": "at most one reduction key"
+    },
+    {
+      "id": "invalid_axis_label",
+      "query": "conformance/reject/queries/invalid_axis_label.json",
+      "expect_error_substr": "invalid axis label"
+    },
+    {
+      "id": "unknown_write_field",
+      "query": "conformance/reject/queries/unknown_write_field.json",
+      "expect_error_substr": "unknown field `write"
     }
   ]
 }

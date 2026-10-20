@@ -268,9 +268,9 @@ Layout, query wire, package protocol, and `TET_ABI_VERSION` bump **independently
 
 - **Accept** — healthy `.tet` files + closed query documents with expected aggregate fields.
 - **Reject verify** — malformed layout / codec fixtures (stable `check` names).
-- **Reject query** — unknown keys / nested `operation` (closed-wire policy).
+- **Reject query** — unknown keys / nested `operation` or `output`, empty dataset, dual reduction keys, and related closed-wire policy.
 
-Reference gate: `cargo test --lib conformance` ([`src/tests/conformance.rs`](../src/tests/conformance.rs)). Fixtures remain under [`fixtures/small/tet/`](../fixtures/small/tet/) and [`fixtures/queries/`](../fixtures/queries/); the pack references them by path.
+Reference gate: `cargo test --lib conformance` ([`src/tests/conformance.rs`](../src/tests/conformance.rs)). Fixtures remain under [`fixtures/small/tet/`](../fixtures/small/tet/) and [`fixtures/queries/`](../fixtures/queries/); the pack references them by path. Pack milestone **0.5.3** grows accept + reject coverage without changing layout or query ABI.
 
 Optional second-language smoke (catalog + one chunk, not a query engine): [`conformance/smoke/`](../conformance/smoke/README.md).
 
@@ -281,6 +281,7 @@ Optional second-language smoke (catalog + one chunk, not a query engine): [`conf
 | Field | Meaning |
 | ----- | ------- |
 | Crate **0.5.2** | First release that freezes this SPEC enough to claim “compatible” via conformance |
+| Pack **0.5.3** | Larger accept / reject surface (same layout + query wire; see [`conformance/`](../conformance/README.md)) |
 | `layout_version` | On-disk container (still **1**) |
 | `protocol_version` | Package roles (still **2**) |
 | `TET_ABI_VERSION` | C shared library (still **1** at 0.5.x) |

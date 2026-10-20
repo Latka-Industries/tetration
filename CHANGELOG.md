@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Conformance pack `spec_milestone` **0.5.3**: more accept cases (u32/f16 mean+var, sample strided mean, large verify, element_count), full legacy reject_verify set, and expanded closed-wire reject_query fixtures (THI-605).
+
 ## [0.5.2] - 2026-10-20
 
 ### Added

@@ -1,6 +1,6 @@
-# Tetration conformance pack (0.5.2)
+# Tetration conformance pack (0.5.3)
 
-**Status:** normative pack format for THI-592.  
+**Status:** normative pack format (THI-592; grown in THI-605).  
 **SPEC:** [`SPEC/README.md`](../SPEC/README.md) · [`SPEC/COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md).
 
 This directory is the **portable** description of “compatible”: accept fixtures with expected query answers, reject fixtures that must fail verify or query parse. The reference Rust reader gates CI by running [`src/tests/conformance.rs`](../src/tests/conformance.rs) against [`manifest.v1.json`](manifest.v1.json).
@@ -13,10 +13,11 @@ External implementers **SHOULD** consume the same manifest (or an equivalent gen
 conformance/
   README.md              # this file
   manifest.v1.json       # machine-readable case index (paths relative to repo root)
+  accept/queries/        # pack-local accept query docs (when fixtures/queries need shape tweaks)
   reject/queries/        # query documents that MUST fail parse/validate
 ```
 
-Binary `.tet` accept/reject files live under [`fixtures/small/tet/`](../fixtures/small/tet/) (already tracked). Query profiles under [`fixtures/queries/`](../fixtures/queries/). The manifest points at those paths so the pack does not duplicate payloads.
+Binary `.tet` accept/reject files live under [`fixtures/small/tet/`](../fixtures/small/tet/) (already tracked). Shared query profiles under [`fixtures/queries/`](../fixtures/queries/). The manifest points at those paths so the pack does not duplicate payloads when a fixture already fits.
 
 ## Manifest schema (`pack_version: 1`)
 
@@ -25,7 +26,7 @@ Top-level object:
 | Field | Type | Meaning |
 | ----- | ---- | ------- |
 | `pack_version` | `1` | This schema |
-| `spec_milestone` | string | e.g. `"0.5.2"` |
+| `spec_milestone` | string | e.g. `"0.5.3"` |
 | `accept` | array | Cases that must succeed |
 | `reject_verify` | array | `.tet` files that must fail `verify` |
 | `reject_query` | array | Query docs that must fail parse/validate |
@@ -49,15 +50,17 @@ Supported `expect` keys today (reference runner):
 
 Float compares use absolute tolerance `1e-5` unless `expect_tol` is set on the case.
 
+**0.5.3 accept surface (summary):** sample + large + recording verify; scalar sum/mean/var on `multichunk_{u8,u32,f16}` (sum **21**, mean **3.5**, var **17.5/6**); sample mean + strided mean on `temperature`; optional `operation_element_count` where stable.
+
 ### `reject_verify[]`
 
 | Field | Required | Meaning |
 | ----- | -------- | ------- |
 | `id` | yes | Stable case id |
 | `tet` | yes | Path to malformed `.tet` |
-| `expect_check` | yes | Verify finding `check` name that must fail (`ok == false`) |
+| `expect_check` | yes | Verify finding `check` name that must fail (`ok == false`), or `null` when only “must fail” is stable (legacy fixtures) |
 
-Finding names match the reference `tet verify` / `verify_tet_bytes` report (see reject corpus).
+Finding names match the reference `tet verify` / `verify_tet_bytes` report (see reject corpus). Legacy cases (`zero_chunk_shape`, `oom_dataset_count`, `overflow_tile_extent`) use `expect_check: null`.
 
 ### `reject_query[]`
 
@@ -67,7 +70,7 @@ Finding names match the reference `tet verify` / `verify_tet_bytes` report (see 
 | `query` | yes | Path to query JSON that must be rejected |
 | `expect_error_substr` | yes | Case-insensitive substring of the validation error |
 
-These encode the closed-key / refuse-unknown policy in [`SPEC/COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md).
+These encode the closed-key / refuse-unknown policy in [`SPEC/COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md) (unknown fields, nested `operation`/`output`, empty dataset, dual reduction keys, invalid axis labels, unknown `write.*`).
 
 ## Running (reference)
 
@@ -77,6 +80,8 @@ cargo test --lib conformance
 
 # Or mise (if configured)
 mise run check
+# or
+mise run conformance
 ```
 
 CI runs `cargo test` on non-markdown PRs; the conformance module is part of that gate.

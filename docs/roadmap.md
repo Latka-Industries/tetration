@@ -86,6 +86,8 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.5.2:** normative SPEC + compatibility policy + conformance pack (+ optional Python smoke) — see [Phase 18](#prospective-phase-summary). PyPI tet-py stays on **0.5.1** until THI-591.
 
+**0.5.3 (pack grow):** larger conformance accept / reject surface (`spec_milestone` **0.5.3**) — same layout + query wire; no ABI break.
+
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
 **Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**. The posting list does not change `packed.tet`.
