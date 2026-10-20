@@ -39,6 +39,11 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.5.0:** [`query::distributed`](query::distributed) shards a `ReadPlan` across workers
+//! (chunk ranges), merges associative tier-A/B fold partials, and proves merge with an
+//! in-process harness. Same pin rule as package reads. Not a cluster scheduler; spill write
+//! targets are refused on the distributed path.
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
