@@ -5,6 +5,7 @@
 ### Added
 
 - Declared science/media attrs helpers (`tetration::catalog::{set_dataset_attrs, scaffold_policy, …}`), `tet semantics scaffold` / `set`, and recording fixture `fixtures/small/tet/recording.tet`. Attrs do not change fold/query answers by themselves; interpretation stays in caller policy (`docs/semantics.md`) (THI-583).
+- Docs for declared vs caller policy: crate [`docs/semantics.md`](docs/semantics.md) examples, roadmap Phase 16 ship note, site guides at `docs.tetration.sh/guides/semantics/` (THI-582).
 
 ## [0.5.0] - 2026-10-20
 

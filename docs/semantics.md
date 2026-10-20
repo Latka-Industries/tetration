@@ -116,3 +116,37 @@ A bare `.tet` with no footer metadata is valid.
 ## Relation to query
 
 Declared semantics do not change chunk planning or fold answers by themselves. Cell `filter`, zone maps, and value postings are unchanged. Policy may later map “2.5s–4s” to indices before a query document is built; that mapping is caller-side.
+
+## Examples (docs only)
+
+### Video / recording
+
+Tracked fixture: `fixtures/small/tet/recording.tet` — dataset `frames`, shape `[6,2,2]`, attrs `frame_rate=30`, `frame_rate_unit=Hz`, `time_axis=0`, `media_kind=video`, `semantics_profile=tetration.media.v1`, plus a `semantics` history row.
+
+```bash
+tet info fixtures/small/tet/recording.tet
+tet semantics scaffold fixtures/small/tet/recording.tet -o tet-semantics.toml
+```
+
+### Timeseries
+
+Declare continuous-signal rates (no special crate mode):
+
+```bash
+tet semantics set signal.tet --dataset voltage \
+  --set sample_rate=30000 --set sample_rate_unit=Hz \
+  --set time_axis=0 --set media_kind=timeseries \
+  --set units=uV --set semantics_profile=tetration.timeseries.v1
+```
+
+### Climate as attrs only
+
+Use CF-style string attrs and a doc profile id. There is **no** climate engine in the crate:
+
+```bash
+tet semantics set grid.tet --dataset tas \
+  --set units=K --set standard_name=air_temperature \
+  --set crs=EPSG:4326 --set semantics_profile=tetration.climate.v1
+```
+
+Site guides (scaffold link targets): [semantics](https://docs.tetration.sh/guides/semantics/) · [examples](https://docs.tetration.sh/guides/semantics/examples).
