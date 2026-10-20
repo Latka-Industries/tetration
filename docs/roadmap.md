@@ -86,25 +86,17 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 ---
 
-### 3. Distributed execution (prospective Phase 14)
+### 3. Distributed execution (Phase 14)
 
-**Today:** one machine, many cores (Rayon), optional GPUs; scale-out is **N independent queries × N processes**, not one query sharded across nodes ([README — Concurrency](../README.md#concurrency-and-scale)).
+**Shipped in 0.5.0 (library):** [`query::distributed`](../src/query/distributed/mod.rs) — split a [`ReadPlan`](../src/query/types/plan.rs) into chunk shards (contiguous or interleaved), JSON worker job / partial shapes (`WorkerJobV1`), merge associative tier-A/B [`FoldPartialState`](../src/query/distributed/merge.rs) (same laws as parallel/GPU host merge), and an in-process multi-shard harness. Workers must share one **pinned** generation (never re-resolve `CURRENT`). Spill/sidecar/switch write targets are **refused** on the distributed path (RAM partials only; THI-577).
 
-**0.5.x integration:** work lands on Git branch **`dev`**. `main` stays on **0.4.5** until each version cut. Linear epic [THI-461](https://linear.app/thicclatka/issue/THI-461) / cut [THI-476](https://linear.app/thicclatka/issue/THI-476).
+**Not shipped:** RPC / cluster scheduler, distributed materialize or transform, worker-local spill files.
 
-**Hygiene before protocol (on `dev`):** same pattern as 0.3.8 before 0.4 plan changes.
+**Hygiene (before protocol):** THI-597 / THI-598 landed on `main` (squash [#112](https://github.com/Latka-Industries/tetration/pull/112)); THI-599 optional backlog.
 
-| Cut | Status |
-| --- | ------ |
-| Wire split + shared Zarr dtype ([THI-597](https://linear.app/thicclatka/issue/THI-597)) | ✅ on `dev` |
-| Decode / `ValueAccum` / GPU host API ([THI-598](https://linear.app/thicclatka/issue/THI-598)) | next |
-| Typed convert/export errors + CLI gate ([THI-599](https://linear.app/thicclatka/issue/THI-599)) | next |
+**Trade-off:** stay a **format + embeddable library** with a thin protocol — not Spark/Flink.
 
-**Direction:** a coordinator splits a single query’s read plan across workers (chunk shards), merges associative partials (tier-A/B folds already compose), and handles spill/export policy cluster-wide.
-
-**Trade-off:** at that point Tetration competes with distributed analytics engines, not only file formats. The open question is whether to stay a **format + embeddable library** with a thin cluster protocol, or grow a full execution service.
-
-**Relation to v1:** streaming fold + chunk-local partials are the right merge semantics; multi-GPU sharding (Phase 10) is a local prototype of the same pattern.
+**Relation to v1:** streaming fold + chunk-local partials are the merge semantics; multi-GPU sharding (Phase 10) is the local prototype of the same pattern.
 
 ---
 

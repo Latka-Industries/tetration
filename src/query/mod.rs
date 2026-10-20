@@ -7,6 +7,7 @@ pub mod cli;
 pub(crate) mod decode;
 mod device;
 mod dispatch;
+pub mod distributed;
 mod document;
 mod document_toml;
 mod document_wire;
@@ -28,6 +29,12 @@ pub use device::{
     DeviceRoute, GPU_AUTO_MIN_LOGICAL_BYTES, GPU_HOST_MATERIALIZE_RAM_FRACTION,
     GPU_HOST_MATERIALIZE_UNKNOWN_HOST_CAP_BYTES, cuda_backend_available, gpu_backend_available,
     host_materialize_exceeds, metal_backend_available, resolve_device_route,
+};
+pub use distributed::{
+    DistributedSpillPolicy, FoldPartialState, ShardPartition, ShardSpec, WORKER_PROTOCOL_V1,
+    WorkerJobV1, WorkerPartialV1, WorkerPinV1, execute_sharded_scalar_fold_local,
+    finish_fold_partial, interleaved_chunk_indices, merge_fold_partials,
+    operation_is_shard_mergeable, plan_chunk_shards, refuse_distributed_spill, split_read_plan,
 };
 pub use document::{
     QueryInputFormat, QueryLimits, detect_query_input_format, parse_query_json, parse_query_text,

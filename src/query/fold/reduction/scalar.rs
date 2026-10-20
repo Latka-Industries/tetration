@@ -1,6 +1,15 @@
 use super::ReductionKind;
 use crate::query::types::OperationPreviewFields;
 
+/// Wire twin of [`ArgIndexAccum`].
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ArgIndexAccumWire {
+    pub have: bool,
+    pub best_val: f64,
+    pub best_idx: u64,
+}
+
 /// Index of min/max in logical row-major order (scalar) or within reduced axes (partial).
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct ArgIndexAccum {
@@ -40,6 +49,26 @@ impl ArgIndexAccum {
 
     pub fn index(&self) -> u64 {
         self.best_idx
+    }
+
+    /// Wire snapshot for distributed merge.
+    #[must_use]
+    pub fn to_wire(self) -> ArgIndexAccumWire {
+        ArgIndexAccumWire {
+            have: self.have,
+            best_val: self.best_val,
+            best_idx: self.best_idx,
+        }
+    }
+
+    /// Restore from a wire snapshot.
+    #[must_use]
+    pub fn from_wire(w: &ArgIndexAccumWire) -> Self {
+        Self {
+            have: w.have,
+            best_val: w.best_val,
+            best_idx: w.best_idx,
+        }
     }
 
     /// Combine partial argmin/argmax state from disjoint chunk visits.
