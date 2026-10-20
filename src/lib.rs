@@ -39,6 +39,9 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.5.3:** larger SPEC conformance pack (`spec_milestone` 0.5.3) — more accept / reject
+//! fixtures. Layout and query answers unchanged.
+//!
 //! **0.5.2:** normative [`SPEC/`](../SPEC/README.md) (layout v1, writer v2, query wire, C ABI),
 //! compatibility policy, conformance pack + CI gate, and an optional Python stdlib smoke
 //! reader. Query answers unchanged.
