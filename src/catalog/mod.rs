@@ -14,6 +14,7 @@ mod history;
 mod index;
 pub mod metadata;
 pub mod package;
+pub(crate) mod secondary_index;
 pub mod session;
 pub mod shard;
 pub mod store;
@@ -53,6 +54,12 @@ pub use package::{
     DEFAULT_PUBLISH_LOCK_STALE, GcOptions, GcPlan, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
     PackGenerationOptions, PackageProtocol, TetPackage, TetPackagePin, format_generation_id,
 };
+pub use secondary_index::{
+    GenerationSecondaryIndex, PreparedSecondaryIndex, SECONDARY_INDEX_FILE,
+    SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, SECONDARY_INDEX_VERSION, SecondaryIndexEntry,
+    VALUE_POSTINGS_KIND, VALUE_POSTINGS_MAX_CARDINALITY, ValuePosting, encode_secondary_index,
+    prepare_secondary_index, read_secondary_index_file, secondary_index_for_packed, value_postings,
+};
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
 };
@@ -73,7 +80,8 @@ pub use store::{
     publish_lock_exists, publish_lock_is_stale, publish_staged_parts,
     publish_staged_parts_with_options, publishing_lock_key, quarantine_publish_lock,
     read_superblock_at, read_tet_summary_at_store, seal_staged_generation,
-    seal_staged_generation_with_options, stage_part, touch_publish_heartbeat, zone_maps_key,
+    seal_staged_generation_with_options, secondary_index_key, stage_part, touch_publish_heartbeat,
+    zone_maps_key,
 };
 #[cfg(feature = "tetration-s3")]
 pub use store::{OpenedS3Package, S3Config, S3OpenError, S3Store, open_s3_package};

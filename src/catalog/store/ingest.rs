@@ -161,6 +161,11 @@ pub fn seal_staged_generation_with_options(
     let packed_sha256 = sha256_hex(&packed);
     let (zone_bytes, zone_sha) =
         crate::catalog::zone::zone_maps_json_for_packed(&packed, generation, &packed_sha256)?;
+    let index = crate::catalog::secondary_index::prepare_secondary_index(
+        &packed,
+        generation,
+        &packed_sha256,
+    )?;
 
     publish_lock::begin_publish_store(store, generation, options)?;
     let lock = publish_lock::publishing_lock_key(generation);
@@ -172,6 +177,8 @@ pub fn seal_staged_generation_with_options(
         packed_sha256: Some(packed_sha256),
         zone_maps: Some(crate::catalog::ZONE_MAPS_REQUIRED.to_owned()),
         zone_maps_sha256: Some(zone_sha),
+        secondary_indexes: Some(index.status.to_owned()),
+        secondary_indexes_sha256: index.sha256.clone(),
     };
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|e| CatalogError::InvalidPackageProtocol(e.to_string()))?;
@@ -181,6 +188,12 @@ pub fn seal_staged_generation_with_options(
         &format!("{lock}/{}", crate::catalog::ZONE_MAPS_FILE),
         &zone_bytes,
     )?;
+    if let Some(bytes) = &index.bytes {
+        store.write_part(
+            &format!("{lock}/{}", crate::catalog::SECONDARY_INDEX_FILE),
+            bytes,
+        )?;
+    }
     let _ = publish_lock::touch_publish_heartbeat(store, generation);
     let _ = store.remove_object(&publish_lock::heartbeat_key(generation));
     let dest = format!("generations/{}", package::format_generation_id(generation));
