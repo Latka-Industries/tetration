@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Hygiene (THI-604 / THI-599): drop several `clippy::allow`s (wildcard SSE imports, float_cmp, int_plus_one); centralize `usize→f64` fold casts; `ExportError::Io` is transparent `std::io::Error`; HDF5/NetCDF convert/export map library errors via `From`; optional **`tetration-cli`** feature gates `clap` / `indicatif` (still in default; required for the `tet` binary).
+- Fuzz: new `parse_query_json` target + corpus seeds from fixtures / conformance reject queries (`mise fuzz-query`).
+
 ## [0.5.3] - 2026-10-20
 
 ### Changed

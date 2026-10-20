@@ -91,8 +91,12 @@ pub(crate) fn scalar_u8_sum_sumsq(vals: &[u8]) -> (f64, f64) {
 
 #[cfg(target_arch = "x86_64")]
 mod u8_arch {
-    #[allow(clippy::wildcard_imports)]
-    use std::arch::x86_64::*;
+    #[allow(unused_imports)] // shared SSE2 set; each *_arch uses a subset
+    use std::arch::x86_64::{
+        __m128i, _mm_cvtepi32_pd, _mm_cvtepu32_pd, _mm_cvtsi128_si64, _mm_loadu_si128,
+        _mm_setzero_si128, _mm_shuffle_epi32, _mm_storeu_pd, _mm_unpackhi_epi8, _mm_unpackhi_epi16,
+        _mm_unpackhi_epi64, _mm_unpacklo_epi8, _mm_unpacklo_epi16,
+    };
 
     #[inline]
     pub(super) unsafe fn accum_epi32_pd(sum: &mut f64, sumsq: &mut f64, reg: __m128i) {
@@ -234,8 +238,12 @@ pub(crate) fn scalar_u32_sum_sumsq(vals: &[u32]) -> (f64, f64) {
 
 #[cfg(target_arch = "x86_64")]
 mod u32_arch {
-    #[allow(clippy::wildcard_imports)]
-    use std::arch::x86_64::*;
+    #[allow(unused_imports)] // shared SSE2 set; each *_arch uses a subset
+    use std::arch::x86_64::{
+        __m128i, _mm_cvtepi32_pd, _mm_cvtepu32_pd, _mm_cvtsi128_si64, _mm_loadu_si128,
+        _mm_setzero_si128, _mm_shuffle_epi32, _mm_storeu_pd, _mm_unpackhi_epi8, _mm_unpackhi_epi16,
+        _mm_unpackhi_epi64, _mm_unpacklo_epi8, _mm_unpacklo_epi16,
+    };
 
     #[inline]
     unsafe fn accum_u32_pair(sum: &mut f64, sumsq: &mut f64, pair: u64) {
@@ -344,8 +352,12 @@ pub(crate) fn scalar_u16_sum_sumsq(vals: &[u16]) -> (f64, f64) {
 #[cfg(target_arch = "x86_64")]
 mod u16_arch {
     use super::u8_arch::accum_epi32_pd;
-    #[allow(clippy::wildcard_imports)]
-    use std::arch::x86_64::*;
+    #[allow(unused_imports)] // shared SSE2 set; each *_arch uses a subset
+    use std::arch::x86_64::{
+        __m128i, _mm_cvtepi32_pd, _mm_cvtepu32_pd, _mm_cvtsi128_si64, _mm_loadu_si128,
+        _mm_setzero_si128, _mm_shuffle_epi32, _mm_storeu_pd, _mm_unpackhi_epi8, _mm_unpackhi_epi16,
+        _mm_unpackhi_epi64, _mm_unpacklo_epi8, _mm_unpacklo_epi16,
+    };
 
     #[target_feature(enable = "sse2")]
     pub(super) unsafe fn u16_sum_sumsq_sse2(vals: &[u16]) -> (f64, f64) {

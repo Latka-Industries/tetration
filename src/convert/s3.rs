@@ -222,7 +222,7 @@ fn convert_s3_zarr_enabled(
     use crate::catalog::store::S3Store;
 
     let config = s3_config(bucket, prefix)?;
-    let store = S3Store::connect(config).map_err(|err| ConvertError::S3(err.to_string()))?;
+    let store = S3Store::connect(config)?;
     if !s3_prefix_is_zarr(&store)? {
         return Err(ConvertError::S3(format!(
             "{uri} is not a Zarr v2 or v3 store (no zarr.json, .zgroup, or .zarray at the prefix)"
@@ -343,7 +343,7 @@ fn convert_s3_object_to_tet_enabled(
     use crate::catalog::store::{ReadAt, S3Store};
 
     let config = s3_config(&object.bucket, "")?;
-    let store = S3Store::connect(config).map_err(|err| ConvertError::S3(err.to_string()))?;
+    let store = S3Store::connect(config)?;
     let bytes = store
         .read_all(&object.key)
         .map_err(|err| ConvertError::S3(err.to_string()))?;

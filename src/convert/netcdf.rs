@@ -57,7 +57,7 @@ pub(crate) fn convert_netcdf_inner(
     mut progress: Option<impl FnMut(ConvertProgress)>,
 ) -> Result<ConvertReport, ConvertError> {
     let started = Instant::now();
-    let file = netcdf::open(input).map_err(|e| ConvertError::Netcdf(e.to_string()))?;
+    let file = netcdf::open(input)?;
     let mut plans = Vec::new();
     let mut skipped = Vec::new();
     if let Some(root) = file.root() {

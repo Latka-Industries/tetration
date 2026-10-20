@@ -1,9 +1,15 @@
 use super::super::{ReductionKind, ScalarReductionResult};
 use super::ValueAccum;
 
+/// Population / count divisors are `usize`; fold answers are `f64` (intentional precision loss).
+#[inline]
+#[allow(clippy::cast_precision_loss)]
+fn usize_as_f64(n: usize) -> f64 {
+    n as f64
+}
+
 impl ValueAccum {
     #[must_use]
-    #[allow(clippy::cast_precision_loss)]
     pub fn finish_f64(&self, kind: ReductionKind) -> f64 {
         match kind {
             ReductionKind::Sum => self.sum,
@@ -11,19 +17,19 @@ impl ValueAccum {
                 if self.count == 0 {
                     0.0
                 } else {
-                    self.sum / self.count as f64
+                    self.sum / usize_as_f64(self.count)
                 }
             }
             ReductionKind::NanMean => {
                 if self.finite_count == 0 {
                     f64::NAN
                 } else {
-                    self.sum / self.finite_count as f64
+                    self.sum / usize_as_f64(self.finite_count)
                 }
             }
             ReductionKind::Min => self.min,
             ReductionKind::Max => self.max,
-            ReductionKind::Count => self.count as f64,
+            ReductionKind::Count => usize_as_f64(self.count),
             ReductionKind::Var => self.welford.population_variance(),
             ReductionKind::Std => self.welford.population_std(),
             ReductionKind::NanStd => {
@@ -40,7 +46,7 @@ impl ValueAccum {
             ReductionKind::AnyNan => f64::from(u8::from(self.any_nan)),
             ReductionKind::AnyInf => f64::from(u8::from(self.any_inf)),
             ReductionKind::NanCount | ReductionKind::InfCount | ReductionKind::NullCount { .. } => {
-                self.match_count as f64
+                usize_as_f64(self.match_count)
             }
             ReductionKind::ArgMin | ReductionKind::ArgMax => {
                 unreachable!("argmin/argmax use ArgIndexAccum")
@@ -85,7 +91,7 @@ impl ValueAccum {
                 mean_scalar = Some(if self.count == 0 {
                     0.0
                 } else {
-                    self.sum / self.count as f64
+                    self.sum / usize_as_f64(self.count)
                 });
             }
             ReductionKind::Min => min_scalar = Some(self.min),
@@ -100,9 +106,11 @@ impl ValueAccum {
             ReductionKind::AllFinite => all_finite_scalar = Some(self.all_finite),
             ReductionKind::AnyNan => any_nan_scalar = Some(self.any_nan),
             ReductionKind::AnyInf => any_inf_scalar = Some(self.any_inf),
-            ReductionKind::NanCount => nan_count_scalar = Some(self.match_count as f64),
-            ReductionKind::InfCount => inf_count_scalar = Some(self.match_count as f64),
-            ReductionKind::NullCount { .. } => null_count_scalar = Some(self.match_count as f64),
+            ReductionKind::NanCount => nan_count_scalar = Some(usize_as_f64(self.match_count)),
+            ReductionKind::InfCount => inf_count_scalar = Some(usize_as_f64(self.match_count)),
+            ReductionKind::NullCount { .. } => {
+                null_count_scalar = Some(usize_as_f64(self.match_count))
+            }
             ReductionKind::Count | ReductionKind::ArgMin | ReductionKind::ArgMax => {}
         }
         ScalarReductionResult {

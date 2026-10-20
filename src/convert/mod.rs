@@ -418,6 +418,20 @@ pub enum ConvertError {
     S3ConfigMissing(&'static str),
 }
 
+#[cfg(feature = "tetration-hdf5")]
+impl From<hdf5_metno::Error> for ConvertError {
+    fn from(e: hdf5_metno::Error) -> Self {
+        Self::Hdf5(e.to_string())
+    }
+}
+
+#[cfg(feature = "tetration-netcdf")]
+impl From<::netcdf::Error> for ConvertError {
+    fn from(e: ::netcdf::Error) -> Self {
+        Self::Netcdf(e.to_string())
+    }
+}
+
 fn report(
     path_in: &Path,
     path_out: &Path,

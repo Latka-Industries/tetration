@@ -52,8 +52,8 @@ pub enum ExportError {
         "unsupported export output for `{path}` (use a Zarr directory, .h5/.hdf5, or .nc/.netcdf)"
     )]
     UnsupportedOutput { path: String },
-    #[error("export I/O failed: {0}")]
-    Io(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     #[error("Zarr export failed: {0}")]
     Zarr(String),
     #[error("HDF5 export failed: {0}")]
@@ -105,7 +105,7 @@ impl ExportOutputFormat {
 }
 
 pub(crate) fn open_summary(input: &Path) -> Result<(Mmap, TetFileSummaryV1), ExportError> {
-    let mmap = mmap_file_read(input).map_err(|e| ExportError::Io(e.to_string()))?;
+    let mmap = mmap_file_read(input)?;
     let summary = read_tet_summary_v1(&mmap)?;
     if summary.datasets.is_empty() {
         return Err(ExportError::NoDatasets {
@@ -141,9 +141,23 @@ pub(crate) fn ensure_missing_file(path: &Path) -> Result<(), ExportError> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(parent).map_err(|e| ExportError::Io(e.to_string()))?;
+        std::fs::create_dir_all(parent)?;
     }
     Ok(())
+}
+
+#[cfg(feature = "tetration-hdf5")]
+impl From<hdf5_metno::Error> for ExportError {
+    fn from(e: hdf5_metno::Error) -> Self {
+        Self::Hdf5(e.to_string())
+    }
+}
+
+#[cfg(feature = "tetration-netcdf")]
+impl From<netcdf::Error> for ExportError {
+    fn from(e: netcdf::Error) -> Self {
+        Self::Netcdf(e.to_string())
+    }
 }
 
 pub(crate) fn element_dtype(ds: &DatasetRecordV1) -> Result<ElementDtype, ExportError> {

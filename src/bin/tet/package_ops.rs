@@ -135,9 +135,7 @@ pub(crate) fn run_publish(opts: &PublishOpts) -> Result<(), String> {
                 "aborted publish generation={} → {} (CURRENT={})",
                 generation,
                 opts.package.display(),
-                current_before
-                    .map(|g| g.to_string())
-                    .unwrap_or_else(|| "none".into())
+                current_before.map_or_else(|| "none".into(), |g| g.to_string())
             );
         }
         return Ok(());

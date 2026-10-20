@@ -76,8 +76,10 @@ macro_rules! with_f32_min_max_loop {
 
 #[cfg(target_arch = "x86_64")]
 pub(super) mod x86 {
-    #[allow(clippy::wildcard_imports)]
-    use std::arch::x86_64::*;
+    use std::arch::x86_64::{
+        __m128i, _mm_cvtepi32_pd, _mm_cvtps_pd, _mm_cvtsi128_si64, _mm_loadu_ps, _mm_loadu_si128,
+        _mm_movehl_ps, _mm_shuffle_epi32, _mm_storeu_pd, _mm_unpackhi_epi64,
+    };
 
     #[inline]
     fn accum_f64_quad(sum: &mut f64, sumsq: &mut f64, lo: [f64; 2], hi: [f64; 2]) {

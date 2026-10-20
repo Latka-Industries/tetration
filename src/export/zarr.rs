@@ -71,14 +71,14 @@ pub fn export_tet_to_zarr_with_progress(
 
 fn ensure_empty_output_dir(path: &Path) -> Result<(), ExportError> {
     if path.exists() {
-        let mut entries = fs::read_dir(path).map_err(|e| ExportError::Zarr(e.to_string()))?;
+        let mut entries = fs::read_dir(path)?;
         if entries.next().is_some() {
             return Err(ExportError::OutputNotEmpty {
                 path: path.display().to_string(),
             });
         }
     } else {
-        fs::create_dir_all(path).map_err(|e| ExportError::Zarr(e.to_string()))?;
+        fs::create_dir_all(path)?;
     }
     Ok(())
 }
@@ -105,7 +105,7 @@ fn export_dataset(
     let ndim = ds.shape.len();
     ensure_group_chain(store, &ds.name)?;
     let array_dir = array_dir_for_name(store, &ds.name);
-    fs::create_dir_all(&array_dir).map_err(|e| ExportError::Zarr(e.to_string()))?;
+    fs::create_dir_all(&array_dir)?;
 
     let zstd = chunks
         .first()
@@ -217,9 +217,9 @@ fn write_chunk_file(
         path.push(entry.chunk_index[d].to_string());
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| ExportError::Zarr(e.to_string()))?;
+        fs::create_dir_all(parent)?;
     }
-    fs::write(&path, payload).map_err(|e| ExportError::Zarr(e.to_string()))?;
+    fs::write(&path, payload)?;
     Ok(())
 }
 
@@ -234,7 +234,7 @@ fn ensure_group_chain(store: &Path, catalog_name: &str) -> Result<(), ExportErro
         if dir.join("zarr.json").is_file() {
             continue;
         }
-        fs::create_dir_all(&dir).map_err(|e| ExportError::Zarr(e.to_string()))?;
+        fs::create_dir_all(&dir)?;
         let meta = json!({
             "zarr_format": 3,
             "node_type": "group",
@@ -254,7 +254,8 @@ fn array_dir_for_name(store: &Path, catalog_name: &str) -> PathBuf {
 
 fn write_json_file(path: &Path, value: &serde_json::Value) -> Result<(), ExportError> {
     let raw = serde_json::to_string_pretty(value).map_err(|e| ExportError::Zarr(e.to_string()))?;
-    fs::write(path, raw).map_err(|e| ExportError::Zarr(e.to_string()))
+    fs::write(path, raw)?;
+    Ok(())
 }
 
 fn usize_from_u64(field: &'static str, v: u64) -> Result<usize, ExportError> {
