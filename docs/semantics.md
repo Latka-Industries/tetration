@@ -43,7 +43,7 @@ Recommended attr names on a dataset. Values are strings; numeric rates are decim
 | `color_space` | Soft label when pixels are color | `"sRGB"` |
 | `pixel_unit` | Soft label for spatial pixel axes | `"px"` |
 | `start_time` | ISO-8601 or epoch string for time origin | `"2026-10-20T15:00:00Z"` |
-| `semantics_profile` | Doc profile id (not a Rust enum) | `"tetration.media.v1"` |
+| `semantics_profile` | Doc profile id (not a Rust enum) | `"media_v1"` |
 | `uncertainty_kind` | How uncertainty is attached | `"1sigma"` |
 | `uncertainty_sibling` | Catalog name of an error / σ dataset | `"tas_err"` |
 | `standard_name` | Optional CF-style name (string only) | `"air_temperature"` |
@@ -60,7 +60,7 @@ Not enforced on decode. Prefer these spellings when declaring:
 
 - Units: `K`, `degC`, `uV`, `mV`, `Hz`, `1`, `px`
 - CRS: `EPSG:####` when an EPSG code exists; otherwise a short WKT or authority string
-- Profile ids: `tetration.media.v1`, `tetration.climate.v1`, `tetration.timeseries.v1` (documentation anchors)
+- Profile ids: `media_v1`, `timeseries_v1`, `climate_v1` (documentation anchors; TOML-safe bare keys)
 
 ## Caller policy
 
@@ -69,8 +69,7 @@ File name convention: **`tet-semantics.toml`** (JSON equivalent allowed). The cr
 ```toml
 # tet-semantics.toml — outside the .tet
 
-[[profiles]]
-id = "tetration.media.v1"
+[profiles.media_v1]
 index_to_seconds = "index / frame_rate"
 seconds_to_index = "floor(seconds * frame_rate)"
 
@@ -119,7 +118,7 @@ Declared semantics do not change chunk planning or fold answers by themselves. C
 
 ### Video / recording
 
-Tracked fixture: `fixtures/small/tet/recording.tet` — dataset `frames`, shape `[6,2,2]`, attrs `frame_rate=30`, `frame_rate_unit=Hz`, `time_axis=0`, `media_kind=video`, `semantics_profile=tetration.media.v1`, plus a `semantics` history row.
+Tracked fixture: `fixtures/small/tet/recording.tet` — dataset `frames`, shape `[6,2,2]`, attrs `frame_rate=30`, `frame_rate_unit=Hz`, `time_axis=0`, `media_kind=video`, `semantics_profile=media_v1`, plus a `semantics` history row.
 
 ```bash
 tet info fixtures/small/tet/recording.tet
@@ -134,7 +133,7 @@ Declare continuous-signal rates (no special crate mode):
 tet semantics set signal.tet --dataset voltage \
   --set sample_rate=30000 --set sample_rate_unit=Hz \
   --set time_axis=0 --set media_kind=timeseries \
-  --set units=uV --set semantics_profile=tetration.timeseries.v1
+  --set units=uV --set semantics_profile=timeseries_v1
 ```
 
 ### Climate as attrs only
@@ -144,7 +143,7 @@ Use CF-style string attrs and a doc profile id. There is **no** climate engine i
 ```bash
 tet semantics set grid.tet --dataset tas \
   --set units=K --set standard_name=air_temperature \
-  --set crs=EPSG:4326 --set semantics_profile=tetration.climate.v1
+  --set crs=EPSG:4326 --set semantics_profile=climate_v1
 ```
 
 Site guide (scaffold link target): [semantics](https://docs.tetration.sh/guides/semantics/).

@@ -280,9 +280,9 @@ fn scaffold_toml(summary: &TetFileSummaryV1) -> String {
 
     let profiles = collect_profile_ids(&declared);
     for profile in &profiles {
-        // Array-of-tables + `id` so dotted profile ids need no quoted TOML keys.
-        out.push_str("[[profiles]]\n");
-        out.push_str(&format!("id = \"{profile}\"\n"));
+        // Identity is the table key (TOML-safe; dots → underscores). No spare `id` field.
+        let key = profile_table_key(profile);
+        out.push_str(&format!("[profiles.{key}]\n"));
         if profile_uses_rate(profile, &declared) {
             out.push_str("index_to_seconds = \"index / frame_rate\"\n");
             out.push_str("seconds_to_index = \"floor(seconds * frame_rate)\"\n");
@@ -323,32 +323,28 @@ fn scaffold_json(summary: &TetFileSummaryV1) -> String {
     }
 
     #[derive(Serialize)]
-    struct ProfileStub {
-        id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        index_to_seconds: Option<&'static str>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        seconds_to_index: Option<&'static str>,
-    }
-
-    #[derive(Serialize)]
     struct PolicyScaffold {
-        profiles: Vec<ProfileStub>,
+        profiles: BTreeMap<String, BTreeMap<String, String>>,
         units: BTreeMap<String, BTreeMap<String, String>>,
         declared: BTreeMap<String, BTreeMap<String, String>>,
     }
 
-    let profiles = collect_profile_ids(&declared)
-        .into_iter()
-        .map(|id| {
-            let rate = profile_uses_rate(&id, &declared);
-            ProfileStub {
-                id,
-                index_to_seconds: rate.then_some("index / frame_rate"),
-                seconds_to_index: rate.then_some("floor(seconds * frame_rate)"),
-            }
-        })
-        .collect();
+    let mut profiles = BTreeMap::new();
+    for profile in collect_profile_ids(&declared) {
+        let key = profile_table_key(&profile);
+        let mut entry = BTreeMap::new();
+        if profile_uses_rate(&profile, &declared) {
+            entry.insert(
+                "index_to_seconds".to_owned(),
+                "index / frame_rate".to_owned(),
+            );
+            entry.insert(
+                "seconds_to_index".to_owned(),
+                "floor(seconds * frame_rate)".to_owned(),
+            );
+        }
+        profiles.insert(key, entry);
+    }
 
     let mut units = BTreeMap::new();
     for unit in collect_unit_tokens(&declared) {
@@ -363,6 +359,11 @@ fn scaffold_json(summary: &TetFileSummaryV1) -> String {
     serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_owned())
 }
 
+/// TOML/JSON map key for a profile id — dots become underscores (bare TOML keys).
+fn profile_table_key(profile: &str) -> String {
+    profile.replace('.', "_")
+}
+
 fn collect_profile_ids(declared: &BTreeMap<String, BTreeMap<String, String>>) -> BTreeSet<String> {
     let mut profiles = BTreeSet::new();
     for attrs in declared.values() {
@@ -372,18 +373,18 @@ fn collect_profile_ids(declared: &BTreeMap<String, BTreeMap<String, String>>) ->
         }
         if attrs.contains_key("frame_rate") || attrs.get("media_kind").is_some_and(|k| k == "video")
         {
-            profiles.insert("tetration.media.v1".to_owned());
+            profiles.insert("media_v1".to_owned());
         } else if attrs.contains_key("sample_rate")
             || attrs.get("media_kind").is_some_and(|k| k == "timeseries")
         {
-            profiles.insert("tetration.timeseries.v1".to_owned());
+            profiles.insert("timeseries_v1".to_owned());
         } else if attrs.contains_key("crs") || attrs.contains_key("standard_name") {
             // climate-as-attrs example only — doc profile id, not a runtime mode
-            profiles.insert("tetration.climate.v1".to_owned());
+            profiles.insert("climate_v1".to_owned());
         }
     }
     if profiles.is_empty() {
-        profiles.insert("tetration.media.v1".to_owned());
+        profiles.insert("media_v1".to_owned());
     }
     profiles
 }
@@ -448,7 +449,7 @@ pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
     attrs.insert("frame_rate_unit".into(), "Hz".into());
     attrs.insert("time_axis".into(), "0".into());
     attrs.insert("media_kind".into(), "video".into());
-    attrs.insert("semantics_profile".into(), "tetration.media.v1".into());
+    attrs.insert("semantics_profile".into(), "media_v1".into());
     attrs.insert("pixel_unit".into(), "px".into());
 
     let mut event = HistoryEvent::new("semantics", "fixtures/small/tet/recording.tet");

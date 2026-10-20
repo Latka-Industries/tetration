@@ -137,7 +137,7 @@ GROUP BY region
 | Coordinate reference systems | `crs` attr (e.g. `EPSG:4326`); geo crops stay caller-side |
 | Provenance | history rows (`op`, `source`, `at`, `params`) |
 | Uncertainty | `uncertainty_kind` + `uncertainty_sibling` flat attrs |
-| Domain vocabularies | `semantics_profile` doc ids (`tetration.media.v1`, …) |
+| Domain vocabularies | `semantics_profile` doc ids (`media_v1`, …) |
 
 **Why it may beat another 10% decode speed:** many scientific workflows fail on **metadata and lineage**, not raw throughput. NetCDF and CF conventions are partial precedents; Tetration embeds a small declared subset with spec’d invariants.
 

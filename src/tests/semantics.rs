@@ -81,7 +81,7 @@ fn scaffold_empty_vs_declared() {
         assert!(empty.contains("No declared semantics attrs"));
         assert!(empty.contains("docs.tetration.sh/guides/semantics/"));
         assert!(!empty.contains("guides/semantics/examples"));
-        assert!(!empty.contains("[[profiles]]"));
+        assert!(!empty.contains("[profiles."));
     }
 
     set_dataset_attrs(
@@ -90,7 +90,7 @@ fn scaffold_empty_vs_declared() {
         &[
             ("frame_rate", "30"),
             ("frame_rate_unit", "Hz"),
-            ("semantics_profile", "tetration.media.v1"),
+            ("semantics_profile", "media_v1"),
         ],
         &[] as &[&str],
     )
@@ -98,14 +98,16 @@ fn scaffold_empty_vs_declared() {
     let mmap = mmap_file_read(&bare).unwrap();
     let summary = read_tet_summary_v1(&mmap).unwrap();
     let stub = scaffold_policy(&summary, ScaffoldFormat::Toml);
-    assert!(stub.contains("[[profiles]]"));
-    assert!(stub.contains("id = \"tetration.media.v1\""));
+    assert!(stub.contains("[profiles.media_v1]"));
+    assert!(!stub.contains("[[profiles]]"));
+    assert!(!stub.contains("id = "));
     assert!(!stub.contains("[profiles.\""));
     assert!(stub.contains("index_to_seconds"));
     assert!(stub.contains("[units.Hz]"));
 
     let json = scaffold_policy(&summary, ScaffoldFormat::Json);
-    assert!(json.contains("\"id\": \"tetration.media.v1\""));
+    assert!(json.contains("\"media_v1\""));
+    assert!(!json.contains("\"id\""));
     assert!(json.contains("declared"));
 }
 
@@ -158,7 +160,7 @@ fn recording_fixture_has_media_attrs_and_history() {
     assert_eq!(attrs.get("time_axis").map(String::as_str), Some("0"));
     assert_eq!(
         attrs.get("semantics_profile").map(String::as_str),
-        Some("tetration.media.v1")
+        Some("media_v1")
     );
     assert!(summary.history.iter().any(|e| e.op == "semantics"));
 }

@@ -5,7 +5,7 @@
 ### Changed
 
 - `tet semantics scaffold` (empty attrs) emits a single docs URL — `https://docs.tetration.sh/guides/semantics/` — matching the site guide that now includes worked examples. Removed `SEMANTICS_EXAMPLES_URL` (THI-600; ships in 0.5.2).
-- Scaffold policy stubs use `[[profiles]]` + `id = "…"` (and JSON profile objects with `id`) instead of `[profiles."dotted.key"]` (THI-601; ships in 0.5.2).
+- Scaffold policy stubs use bare keys (`[profiles.media_v1]`, JSON map keyed the same way) instead of `[profiles."dotted.key"]` or a spare `id` field. Recommended profile ids are `media_v1` / `timeseries_v1` / `climate_v1` (THI-601; ships in 0.5.2).
 
 ## [0.5.1] - 2026-10-20
 

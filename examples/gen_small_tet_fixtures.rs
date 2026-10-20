@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use tetration::catalog::{
     CHUNK_PAYLOAD_CODEC_V1, DATASET_DTYPE_TAG_V1, FooterBlobV1, RawArrayWrite, TetMetadataV1,
-    write_footer_blob, write_raw_array_file,
+    write_footer_blob, write_raw_array_file, write_recording_fixture,
 };
 
 fn write_multichunk_2x3(path: &PathBuf, dtype: u32, data: &[u8]) {
@@ -130,6 +130,7 @@ fn main() {
         DATASET_DTYPE_TAG_V1.f16,
         &le_f16_1_to_6(),
     );
+    write_recording_fixture(&dir.join("recording.tet")).unwrap();
 
     println!("wrote {}", dir.display());
 }
