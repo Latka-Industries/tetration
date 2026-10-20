@@ -1,5 +1,7 @@
 # Query engine
 
+**Normative query wire for third-party readers:** also indexed from [`SPEC/README.md`](../SPEC/README.md) §3.
+
 The **query engine** (`src/query/`) turns a validated [`QueryDocument`](../src/query/types/document.rs) into a [`QueryResponse`](../src/query/types/response.rs): catalog resolution, a chunk-level **read plan**, and optionally mmap-backed decode plus **`operation`** aggregates.
 
 **Input:** flat **JSON** or **TOML** profiles (`parse_query_json`, [`parse_query_toml`](../src/query/document_toml.rs), [`parse_query_text`](../src/query/document.rs) with auto-detect). TOML is converted to a JSON value tree, then the same wire parser runs. The canonical wire shape is defined in **`document_wire.rs`**; size/depth limits and **`validate_query`** live in **`document.rs`**. Wire types live in **`types/`** (`document`, `plan`, `response`, `error`). Planning and decode live in **`plan/`** and **`decode/`**; materialize, fold, and dtype routing in **`materialize/`**, **`fold/`**, and **`dispatch.rs`**; orchestration in **`engine/`** (`run`, `operations`, `budget`, `spill_policy`). The engine assumes a parsed, validated document and a mmap’d `.tet` byte slice when planning against a file.

@@ -1,6 +1,7 @@
 # Writer protocol v2 — shards, generations, publish
 
 **Status:** shipped in tetration **0.2.0** — **decisions A–L locked** (2026-10-15); revise only by explicit amendment.  
+**Normative for third-party readers/packages:** also indexed from [`SPEC/README.md`](../SPEC/README.md) §2.  
 **Tracks:** [THI-462](https://linear.app/thicclatka/issue/THI-462) · series [THI-458](https://linear.app/thicclatka/issue/THI-458) · umbrella [THI-19](https://linear.app/thicclatka/issue/THI-19)  
 **Depends on:** sealed layout v1 ([`layout_v1.md`](layout_v1.md)) as the **reader-visible** byte image.
 

@@ -162,6 +162,8 @@ Many formats fail because the spec lives only in code. Independent readers (Juli
 - stated invariants (index bounds, dtype tags, footer mutual exclusion)
 - conformance tests shared across implementations
 
+**0.5.2 draft:** canonical contract index at [`SPEC/README.md`](../SPEC/README.md) (layout v1, writer v2, query wire, C ABI), incorporating [`layout_v1.md`](layout_v1.md) / [`writer_protocol_v2.md`](writer_protocol_v2.md) / [`query_engine.md`](query_engine.md) / [`ffi.md`](ffi.md) by reference. Compatibility flags and the CI conformance pack follow in the same cut.
+
 HDF5 and Parquet history suggests **spec quality** often outlasts any one implementation.
 
 ### Long-term compatibility
@@ -194,7 +196,7 @@ A plausible north star: **scientific knowledge infrastructure** — not only a f
 | **15** | Group-by, pipelines, controlled joins | Axes + metadata | Avoid full SQL complexity |
 | **16** | Units, CRS, provenance, uncertainty | Footer history + attrs | Standards alignment (CF, PROV, etc.) |
 | **17** | Shards, generations, atomic publish | Writer protocol v2 | **Shipped** in 0.2 — [`writer_protocol_v2.md`](writer_protocol_v2.md); WORM per sealed `G` |
-| **18** | Normative spec + conformance suite | Layout + query wire frozen | Enables third-party implementations |
+| **18** | Normative spec + conformance suite | Layout + query wire frozen | **SPEC draft** in [`SPEC/README.md`](../SPEC/README.md) (THI-586); compatibility policy THI-587; conformance pack THI-592 — ships as **0.5.2** |
 
 Phases are **not ordered commitments** — e.g. formal spec (18) might parallelize early work on cloud reads (12).
 
