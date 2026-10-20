@@ -34,26 +34,29 @@ fn set_and_clear_attrs_roundtrip_and_surface_in_summary() {
         Some("K")
     );
 
-    let mmap = mmap_file_read(&path).unwrap();
-    let summary = read_tet_summary_v1(&mmap).unwrap();
-    assert!(metadata_has_declared_attrs(&summary.metadata));
-    let attrs = declared_attrs(
-        &summary
-            .metadata
-            .datasets
-            .get("a")
-            .expect("dataset meta")
-            .attrs,
-    );
-    assert_eq!(attrs.get("units").map(String::as_str), Some("K"));
-    assert_eq!(attrs.get("frame_rate").map(String::as_str), Some("30"));
-    assert!(
-        summary
-            .history
-            .iter()
-            .any(|e| e.op == "semantics" && e.params.get("set").is_some())
-    );
+    {
+        let mmap = mmap_file_read(&path).unwrap();
+        let summary = read_tet_summary_v1(&mmap).unwrap();
+        assert!(metadata_has_declared_attrs(&summary.metadata));
+        let attrs = declared_attrs(
+            &summary
+                .metadata
+                .datasets
+                .get("a")
+                .expect("dataset meta")
+                .attrs,
+        );
+        assert_eq!(attrs.get("units").map(String::as_str), Some("K"));
+        assert_eq!(attrs.get("frame_rate").map(String::as_str), Some("30"));
+        assert!(
+            summary
+                .history
+                .iter()
+                .any(|e| e.op == "semantics" && e.params.get("set").is_some())
+        );
+    }
 
+    // Drop mmap before rewrite (Windows refuses writes with a user-mapped section open).
     set_dataset_attrs(&path, "a", &[] as &[(&str, &str)], &["frame_rate"]).unwrap();
     assert!(
         get_dataset_attr(&path, "a", "frame_rate")
@@ -71,12 +74,14 @@ fn scaffold_empty_vs_declared() {
     let dir = tempfile::tempdir().unwrap();
     let bare = dir.path().join("bare.tet");
     write_multichunk_2x3_tiles(&bare, "temperature");
-    let mmap = mmap_file_read(&bare).unwrap();
-    let summary = read_tet_summary_v1(&mmap).unwrap();
-    let empty = scaffold_policy(&summary, ScaffoldFormat::Toml);
-    assert!(empty.contains("No declared semantics attrs"));
-    assert!(empty.contains("docs.tetration.sh/guides/semantics"));
-    assert!(!empty.contains("[profiles."));
+    {
+        let mmap = mmap_file_read(&bare).unwrap();
+        let summary = read_tet_summary_v1(&mmap).unwrap();
+        let empty = scaffold_policy(&summary, ScaffoldFormat::Toml);
+        assert!(empty.contains("No declared semantics attrs"));
+        assert!(empty.contains("docs.tetration.sh/guides/semantics"));
+        assert!(!empty.contains("[profiles."));
+    }
 
     set_dataset_attrs(
         &bare,
@@ -108,13 +113,15 @@ fn query_unchanged_with_or_without_semantics() {
     write_multichunk_2x3_tiles(&path, "a");
 
     let doc: QueryDocument = serde_json::from_str(r#"{"dataset":"a","mean":[]}"#).unwrap();
-    let mmap = mmap_file_read(&path).unwrap();
-    let before = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0))
-        .unwrap()
-        .execution
-        .unwrap()
-        .operation_mean
-        .unwrap();
+    let before = {
+        let mmap = mmap_file_read(&path).unwrap();
+        plan_query_with_tet_mmap(&doc, None, &mmap, Some(0))
+            .unwrap()
+            .execution
+            .unwrap()
+            .operation_mean
+            .unwrap()
+    };
 
     set_dataset_attrs(
         &path,
@@ -123,13 +130,15 @@ fn query_unchanged_with_or_without_semantics() {
         &[] as &[&str],
     )
     .unwrap();
-    let mmap = mmap_file_read(&path).unwrap();
-    let after = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0))
-        .unwrap()
-        .execution
-        .unwrap()
-        .operation_mean
-        .unwrap();
+    let after = {
+        let mmap = mmap_file_read(&path).unwrap();
+        plan_query_with_tet_mmap(&doc, None, &mmap, Some(0))
+            .unwrap()
+            .execution
+            .unwrap()
+            .operation_mean
+            .unwrap()
+    };
     assert_eq!(before, after);
 }
 
