@@ -39,6 +39,9 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.5.4:** crate hygiene (clippy allows, typed convert/export I/O, optional `tetration-cli`)
+//! and `parse_query_json` fuzz. Layout / query answers / conformance pack milestone unchanged.
+//!
 //! **0.5.3:** larger SPEC conformance pack (`spec_milestone` 0.5.3) — more accept / reject
 //! fixtures. Layout and query answers unchanged.
 //!

@@ -281,7 +281,8 @@ Optional second-language smoke (catalog + one chunk, not a query engine): [`conf
 | Field | Meaning |
 | ----- | ------- |
 | Crate **0.5.2** | First release that freezes this SPEC enough to claim “compatible” via conformance |
-| Crate / pack **0.5.3** | Larger accept / reject surface (same layout + query wire; see [`conformance/`](../conformance/README.md)) |
+| Pack **0.5.3** | Larger accept / reject surface (same layout + query wire; see [`conformance/`](../conformance/README.md)) |
+| Crate **0.5.4** | Hygiene + `parse_query_json` fuzz (layout / query wire / pack milestone unchanged) |
 | `layout_version` | On-disk container (still **1**) |
 | `protocol_version` | Package roles (still **2**) |
 | `TET_ABI_VERSION` | C shared library (still **1** at 0.5.x) |
