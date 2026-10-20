@@ -70,19 +70,19 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 ### 2. Smarter indexing (prospective Phase 13)
 
-**Today:** organization is **geometric** — logical coordinates → chunk coordinates via the chunk index. Footer metadata supports `dim_names`, coordinate **labels**, and attrs, but there is no secondary index for value predicates.
+**Today:** organization is **geometric** — logical coordinates → chunk coordinates via the chunk index. Footer metadata supports `dim_names`, coordinate **labels**, and attrs. Value predicates also have optional sidecars beside `packed.tet`: zone maps, and value postings when a dataset qualifies.
 
 **Shipped in 0.4.0:** compact/publish writes per-chunk min/max/null zone maps to `generations/<G>/ZONE.json` and copies them onto `ReadPlan` chunks. Staging writers do not update those stats.
 
-**Shipped in 0.4.1:** query `filter` predicates skip chunks that cannot match those zone stats (conservative; missing zones → no skip). `zone_filter_skipped_chunks` is the chunk-skip stat.
+**Shipped in 0.4.1:** query `filter` predicates skip chunks that cannot match those zone stats (conservative; missing zones → no skip). `zone_filter_skipped_chunks` is that chunk-skip stat.
 
-**Shipped in 0.4.4:** the same predicate filters cells inside a kept chunk. A fold under `filter` ignores non-matches. Materialize and transform keep the selection shape and write NaN (floats) or the dataset fill (integers; refused when no fill is set). Chunk skip stays the I/O win.
+**Shipped in 0.4.4:** the same predicate filters cells inside a kept chunk. A fold under `filter` ignores non-matches. Materialize and transform keep the selection shape and write NaN (floats) or the dataset fill (integers; refused when no fill is set).
 
-**Direction:** richer indexes beyond per-chunk zone maps (e.g. sorted coord lookup) — analogous to database indexes or Parquet statistics.
+**This cut (crate not tagged yet; PyPI tet-py stays 0.4.4):** compact/publish may also write `generations/<G>/INDEX.json`, a value-posting list for exact `filter.eq` when a dataset has at most 64 distinct non-null values. Zone maps still run first. Posting drops are `index_filter_skipped_chunks`. A missing, unknown, or unverifiable index is ignored and the planner uses zone maps (or a full scan). Old readers ignore the new manifest keys. Sorted-axis range indexes and coordinate-label postings are later kinds.
 
-**Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Indexes must be optional, verifiable, and evolvable without breaking v1 readers.
+**Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
-**Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**.
+**Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**. The posting list does not change `packed.tet`.
 
 ---
 

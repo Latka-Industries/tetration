@@ -71,7 +71,7 @@ Prefer the site; repo docs are the normative deep dive for contributors.
 | Python (tet-py) | [/python/](https://docs.tetration.sh/python/) | [tet-py](https://github.com/Latka-Industries/tet-py) |
 | Conversions | — | [`docs/conversions.md`](docs/conversions.md) |
 | Roadmap | [/roadmap](https://docs.tetration.sh/roadmap) | [`docs/roadmap.md`](docs/roadmap.md) |
-| Secondary indexes (0.4.5 design) | — | [`docs/secondary_indexes.md`](docs/secondary_indexes.md) |
+| Optional secondary indexes | — | [`docs/secondary_indexes.md`](docs/secondary_indexes.md) |
 | Changelog | — | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Library sketch
