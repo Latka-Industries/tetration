@@ -39,7 +39,7 @@ cargo install tetration
 
 ```toml
 [dependencies]
-tetration = "0.3"
+tetration = "0.5"
 ```
 
 S3-compatible package stores are optional and off by default: `features = ["tetration-s3"]`.
