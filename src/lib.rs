@@ -39,6 +39,10 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.5.1:** optional declared science/media attrs in the footer plus `tet semantics`
+//! scaffold/set. Interpretation is caller policy (`docs/semantics.md`); attrs do not change
+//! fold answers by themselves.
+//!
 //! **0.5.0:** [`query::distributed`](query::distributed) shards a `ReadPlan` across workers
 //! (chunk ranges), merges associative tier-A/B fold partials, and proves merge with an
 //! in-process harness. Same pin rule as package reads. Not a cluster scheduler; spill write
