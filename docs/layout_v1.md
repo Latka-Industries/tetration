@@ -249,7 +249,7 @@ Normative when the bytes live in a package (local `.tet.d` or a store key), not 
 
 Writers publish a new generation under a new key. They do not rewrite a sealed `packed.tet`. Detail: [`query_engine.md` — Pin / consistency](query_engine.md#pin--consistency).
 
-Optional generation sidecars are not regions of this file. `ZONE.json` (0.4) and `INDEX.json` (0.4.5 secondary indexes) live beside `packed.tet` under `generations/<G>/`. They are not a superblock flag, dataset-directory field, or chunk-index change. `layout_version` stays **1**. A reader that only opens `packed.tet` still opens the package. The index decision is [`secondary_indexes.md`](secondary_indexes.md) (THI-568).
+Optional generation sidecars are not regions of this file. `ZONE.json` (0.4 zone maps) and `INDEX.json` (value postings) live beside `packed.tet` under `generations/<G>/`. They are not a superblock flag, dataset-directory field, or chunk-index change. `layout_version` stays **1**. A reader that only opens `packed.tet`, including 0.4.0–0.4.4, still opens the package: `GenerationManifest` ignores unknown keys, and a standalone `.tet` has no index. `INDEX.json` exists only when the manifest says `secondary_indexes: "present"`. Verify checks that blob by hash and, with `--deep`, against a recompute from the sealed payloads. A missing or bad index is not a layout break; query falls back to zone maps. Detail: [`secondary_indexes.md`](secondary_indexes.md).
 
 **Inside one query**, the engine already parallelizes chunk I/O on CPU when in-core (Rayon) or uses a sequential linear scan when out-of-core ([query engine — adaptive fold I/O](query_engine.md#adaptive-fold-io)).
 
