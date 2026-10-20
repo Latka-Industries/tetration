@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-10-20
+
 ### Added
 
 - Optional value-posting index at compact/publish (`generations/<G>/INDEX.json`) for an exact `filter.eq` on a dataset with at most 64 distinct non-null values. A missing or unusable index falls back to zone maps and does not change answers. Drops are `ReadPlan.index_filter_skipped_chunks`; `zone_filter_skipped_chunks` stays zone-map-only. Verify warns when the manifest omits the field, and errors when a claimed blob is missing, hashed wrong, or (`--deep`) stale (THI-568, THI-571, THI-570).

@@ -34,6 +34,11 @@
 //! non-matches. Materialize and transform keep the selection shape (NaN for floats, dataset fill
 //! for integers). `zone_filter_skipped_chunks` remains the chunk-skip stat.
 //!
+//! **0.4.5:** compact/publish may write `INDEX.json` value postings for an exact `filter.eq`
+//! on a low-cardinality dataset. Drops are
+//! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
+//! A missing or unusable index falls back to zone maps.
+//!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
