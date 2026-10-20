@@ -111,6 +111,10 @@ fn push_plan_table(out: &mut String, plan: &ReadPlan) {
                 plan.zone_filter_skipped_chunks.to_string(),
             ),
             (
+                "index_filter_skipped_chunks".to_string(),
+                plan.index_filter_skipped_chunks.to_string(),
+            ),
+            (
                 "total_stored_bytes".to_string(),
                 plan.total_stored_bytes.to_string(),
             ),

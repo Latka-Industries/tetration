@@ -458,6 +458,7 @@ fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> Rea
         chunk_touch_policy: geom.chunk_touch_policy,
         chunk_count: chunks.len(),
         zone_filter_skipped_chunks: 0,
+        index_filter_skipped_chunks: 0,
         total_stored_bytes: chunks.iter().map(|c| c.stored_byte_len).sum(),
         chunks: chunks.to_vec(),
         dataset_shape: geom.dataset_shape,

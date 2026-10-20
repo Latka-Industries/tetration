@@ -286,3 +286,52 @@ fn store_publish_writes_index_object() {
     .unwrap();
     assert!(resp.read_plan.is_some());
 }
+
+#[test]
+fn eq_posting_skips_chunks_zone_maps_keep() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("eq.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    // Three chunks whose ranges all contain 9, but only the middle chunk stores 9.
+    publish_f32(&pkg, 1, "s", "only", &[0.0, 10.0, 0.0, 9.0, 1.0, 10.0]);
+    let packed = pkg.packed_tet_path(1);
+    let bytes = fs::read(&packed).unwrap();
+    let query = r#"{"dataset":"a","filter":{"eq":9},"sum":[]}"#;
+
+    let hit = execute_sum(&packed, &bytes, query);
+    let plan = hit.read_plan.expect("plan");
+    assert_eq!(plan.zone_filter_skipped_chunks, 0);
+    assert_eq!(plan.index_filter_skipped_chunks, 2);
+    assert_eq!(plan.chunk_count, 1);
+    assert_eq!(plan.chunks[0].chunk_index, vec![1]);
+    assert_eq!(hit.execution.expect("execution").operation_sum, Some(9.0));
+    assert!(
+        hit.message.contains("index filter skipped 2"),
+        "{}",
+        hit.message
+    );
+
+    fs::remove_file(pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
+    let fallback = execute_sum(&packed, &bytes, query);
+    let fallback_plan = fallback.read_plan.expect("plan");
+    assert_eq!(fallback_plan.zone_filter_skipped_chunks, 0);
+    assert_eq!(fallback_plan.index_filter_skipped_chunks, 0);
+    assert_eq!(fallback_plan.chunk_count, 3);
+    assert_eq!(
+        fallback.execution.expect("execution").operation_sum,
+        Some(9.0)
+    );
+}
+
+fn execute_sum(packed: &std::path::Path, bytes: &[u8], query: &str) -> crate::query::QueryResponse {
+    let doc = crate::query::parse_query_json(query).unwrap();
+    crate::query::validate_query(&doc).unwrap();
+    crate::query::execute_query_document(
+        &doc,
+        packed,
+        bytes,
+        crate::query::ExecuteQueryOptions::execute_no_preview(),
+        None,
+    )
+    .unwrap()
+}

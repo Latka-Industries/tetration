@@ -80,6 +80,12 @@ fn plan_quiet_line(dataset: &str, plan: &ReadPlan) -> String {
             plan.zone_filter_skipped_chunks
         ));
     }
+    if plan.index_filter_skipped_chunks > 0 {
+        parts.push(format!(
+            "index_filter_skipped={}",
+            plan.index_filter_skipped_chunks
+        ));
+    }
     if plan.cell_filter.is_some() {
         parts.push("cell_filter=applied".to_string());
     }

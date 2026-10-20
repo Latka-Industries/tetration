@@ -1,11 +1,13 @@
 //! Query planning and execution entrypoints against mmap’d `.tet` files.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::catalog::{
-    CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1, GenerationZoneMaps, TetFileSummaryV1,
-    ZONE_MAPS_FILE, chunk_coords_intersecting_strided, read_tet_summary_v1, read_zone_maps_file,
-    tensor_bytes_from_shape,
+    CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1, GenerationManifest,
+    GenerationSecondaryIndex, GenerationZoneMaps, SECONDARY_INDEX_FILE, SECONDARY_INDEX_PRESENT,
+    TetFileSummaryV1, ZONE_MAPS_FILE, chunk_coords_intersecting_strided, read_tet_summary_v1,
+    read_zone_maps_file, tensor_bytes_from_shape,
 };
 use crate::query::resolve_axes::resolve_query_document_axes;
 use crate::query::resolve_selection::resolve_query_document_selection;
@@ -142,6 +144,7 @@ pub fn plan_query_with_tet_mmap_ex(
     spill_allowlist: Option<&SpillPathAllowlist>,
 ) -> Result<QueryResponse, TetError> {
     let zones = zone_maps_beside(tet_path)?;
+    let index = secondary_index_beside(tet_path, mmap);
     plan_query_with_zones(
         doc,
         tet_path,
@@ -149,6 +152,7 @@ pub fn plan_query_with_tet_mmap_ex(
         raw_f32_preview_max,
         spill_allowlist,
         zones.as_ref(),
+        index.as_ref(),
     )
 }
 
@@ -159,6 +163,7 @@ pub(crate) fn plan_query_with_zones(
     raw_f32_preview_max: Option<usize>,
     spill_allowlist: Option<&SpillPathAllowlist>,
     zones: Option<&GenerationZoneMaps>,
+    index: Option<&GenerationSecondaryIndex>,
 ) -> Result<QueryResponse, TetError> {
     let summary = read_tet_summary_v1(mmap)?;
     match summary.datasets.iter().position(|d| d.name == doc.dataset) {
@@ -172,6 +177,7 @@ pub(crate) fn plan_query_with_zones(
                 raw_f32_preview_max,
                 spill_allowlist,
                 zones,
+                index,
             },
         ),
         None => Ok(plan_query_unmatched_dataset(doc, tet_path, &summary)),
@@ -192,6 +198,33 @@ fn zone_maps_beside(tet_path: Option<&str>) -> Result<Option<GenerationZoneMaps>
     read_zone_maps_file(&zone)
         .map(Some)
         .map_err(TetError::Catalog)
+}
+
+/// Usable `INDEX.json` beside `packed.tet`, or `None` when the claim is missing or bad.
+///
+/// A bad blob is ignored. The query keeps the zone-map plan.
+fn secondary_index_beside(
+    tet_path: Option<&str>,
+    packed: &[u8],
+) -> Option<GenerationSecondaryIndex> {
+    let parent = Path::new(tet_path?).parent()?;
+    let manifest_path = parent.join("MANIFEST.json");
+    if !manifest_path.is_file() {
+        return None;
+    }
+    let manifest: GenerationManifest =
+        serde_json::from_slice(&fs::read(&manifest_path).ok()?).ok()?;
+    if manifest.secondary_indexes.as_deref() != Some(SECONDARY_INDEX_PRESENT) {
+        return None;
+    }
+    let sha = manifest.secondary_indexes_sha256.as_deref()?;
+    let bytes = fs::read(parent.join(SECONDARY_INDEX_FILE)).ok()?;
+    crate::query::plan::index_pushdown::usable_secondary_index(
+        &bytes,
+        sha,
+        manifest.packed_sha256.as_deref(),
+        Some(packed),
+    )
 }
 
 fn chunk_index_rows_for_dataset(summary: &TetFileSummaryV1, dataset_idx: usize) -> usize {
@@ -228,7 +261,7 @@ pub fn plan_read_for_document(doc: &QueryDocument, mmap: &[u8]) -> Result<Planne
     let dataset_meta = summary.metadata.datasets.get(&doc.dataset);
     resolve_query_document_axes(&mut doc, dataset_meta, rec.shape.len())?;
     resolve_query_document_selection(&mut doc, dataset_meta, &rec.shape)?;
-    let read_plan = build_matched_read_plan(&summary, dataset_idx, &doc, None)?;
+    let read_plan = build_matched_read_plan(&summary, dataset_idx, &doc, None, None)?;
     Ok(PlannedRead {
         read_plan,
         dtype: rec.dtype,
@@ -240,6 +273,7 @@ fn build_matched_read_plan(
     dataset_idx: usize,
     doc: &QueryDocument,
     zones: Option<&GenerationZoneMaps>,
+    index: Option<&GenerationSecondaryIndex>,
 ) -> Result<ReadPlan, TetError> {
     let rec = &summary.datasets[dataset_idx];
     let (g0, g1, steps) = resolved_dense_global_box(doc, &rec.shape)?;
@@ -267,6 +301,7 @@ fn build_matched_read_plan(
                 .datasets
                 .get(&doc.dataset)
                 .and_then(|meta| crate::query::resolve_axes::fill_from_attrs(&meta.attrs)),
+            index,
         },
     )
 }
@@ -366,6 +401,7 @@ struct PlanAttach<'a> {
     raw_f32_preview_max: Option<usize>,
     spill_allowlist: Option<&'a SpillPathAllowlist>,
     zones: Option<&'a GenerationZoneMaps>,
+    index: Option<&'a GenerationSecondaryIndex>,
 }
 
 fn plan_query_matched_dataset(
@@ -381,7 +417,8 @@ fn plan_query_matched_dataset(
     resolve_query_document_axes(&mut doc, dataset_meta, rec.shape.len())?;
     resolve_query_document_selection(&mut doc, dataset_meta, &rec.shape)?;
     let rows = chunk_index_rows_for_dataset(summary, dataset_idx);
-    let read_plan = build_matched_read_plan(summary, dataset_idx, &doc, attach.zones)?;
+    let read_plan =
+        build_matched_read_plan(summary, dataset_idx, &doc, attach.zones, attach.index)?;
     if doc.operation.is_some() && attach.raw_f32_preview_max.is_none() {
         return Err(TetError::Validation(
             "`operation` requires mmap execution with an explicit preview limit (e.g. `--execute --preview-f32 64`, or `--preview-f32 0` to omit preview floats)".into(),
@@ -399,6 +436,14 @@ fn plan_query_matched_dataset(
     };
     if read_plan.cell_filter.is_some() {
         message.push_str("; cell filter applied to kept chunks");
+    }
+    if read_plan.index_filter_skipped_chunks > 0 {
+        use std::fmt::Write as _;
+        let _ = write!(
+            message,
+            "; index filter skipped {}",
+            read_plan.index_filter_skipped_chunks
+        );
     }
     let mut execution = matched_dataset_execution(
         &MatchedExecutionCtx {
