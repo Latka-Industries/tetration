@@ -110,6 +110,10 @@ jobs:
         shell: bash
         run: ./.github/scripts/build-ffi-example.sh
 
+      - name: SPEC Python smoke reader (THI-589)
+        if: runner.os == 'Linux'
+        run: python3 conformance/smoke/read_catalog_chunk.py fixtures/small/tet/sample.tet
+
   msrv:
     name: MSRV Check
     runs-on: ubuntu-latest

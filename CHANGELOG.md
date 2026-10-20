@@ -7,6 +7,7 @@
 - Normative SPEC draft at [`SPEC/README.md`](SPEC/README.md): layout v1, writer protocol v2, query JSON/TOML wire (closed keys / limits / tiers), and C ABI versioning, with a one-paragraph “compatible reader” definition. Detailed tables remain in `docs/` (THI-586; ships in 0.5.2).
 - Compatibility / capability-flag policy at [`SPEC/COMPATIBILITY.md`](SPEC/COMPATIBILITY.md): frozen vs evolvable bits, refuse vs may-ignore, independent version axes (layout / query / package / ABI), and 2046-reader examples (THI-587; ships in 0.5.2).
 - Conformance pack [`conformance/`](conformance/README.md) (`manifest.v1.json` accept + reject_verify + reject_query) with CI gate `cargo test --lib conformance` (THI-592; ships in 0.5.2).
+- Optional Python stdlib smoke reader [`conformance/smoke/read_catalog_chunk.py`](conformance/smoke/read_catalog_chunk.py) — catalog + one raw `f32` chunk without the Rust crate (THI-589; ships in 0.5.2).
 
 ### Changed
 

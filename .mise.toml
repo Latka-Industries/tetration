@@ -21,6 +21,10 @@ run = "cargo run --example gen_small_tet_fixtures"
 description = "Run SPEC conformance pack (THI-592)"
 run = "cargo test --lib conformance"
 
+[tasks."smoke:py"]
+description = "Python stdlib SPEC smoke reader (THI-589)"
+run = "python3 conformance/smoke/read_catalog_chunk.py fixtures/small/tet/sample.tet"
+
 [tasks."fixtures:large"]
 description = "Generate gitignored large suite (~20 GiB total: h5 + nc + zarr)"
 depends = ["fixtures:sync"]
