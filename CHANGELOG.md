@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-20
+
 ### Added
 
 - Declared science/media attrs helpers (`tetration::catalog::{set_dataset_attrs, scaffold_policy, …}`), `tet semantics scaffold` / `set`, and recording fixture `fixtures/small/tet/recording.tet`. Attrs do not change fold/query answers by themselves; interpretation stays in caller policy (`docs/semantics.md`) (THI-583).
 - Docs for declared vs caller policy: crate [`docs/semantics.md`](docs/semantics.md) examples, roadmap Phase 16 ship note, site guides at `docs.tetration.sh/guides/semantics/` (THI-582).
+
+### Notes
+
+- Semver patch: additive metadata/CLI; query engine unchanged when semantics are missing. PyPI **tet-py** stays on **0.5.0** until THI-585.
 
 ## [0.5.0] - 2026-10-20
 
