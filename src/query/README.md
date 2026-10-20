@@ -62,6 +62,7 @@ Re-exported from [`prelude`](../lib.rs).
 | [`fold/`](fold/README.md)               | Scalar/partial reductions, parallel merge            |
 | [`transform/`](transform/README.md)     | Two-pass zscore, minmax, softmax, …                  |
 | [`gpu/`](gpu/README.md)                 | Optional CUDA / ROCm / Metal reductions              |
+| [`distributed/`](distributed/README.md) | Shard `ReadPlan` + merge tier-A/B partials (0.5.0)   |
 | [`cli/`](cli/README.md)                 | `tet query` / `tet info` / `qhist` formatting        |
 
 ## CLI mapping

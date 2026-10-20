@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
+### Added
+
+- Distributed fold library path (`tetration::query::distributed`): split a `ReadPlan` into contiguous or interleaved chunk shards, JSON worker job/partial types (`WorkerJobV1`, protocol v1), merge associative tier-A/B `FoldPartialState` (same combine laws as parallel/GPU host merge), and an in-process multi-shard harness. Workers must share one pinned generation. Spill/sidecar/switch write targets are refused on this path (RAM partials only) (THI-576, THI-575, THI-577).
+
+### Notes
+
+- No RPC cluster runtime. Tier-C ops (median/quantile/histogram/…) and transforms stay single-process. Semver minor: additive API; crate version was 0.4.5.
+
 ## [0.4.5] - 2026-10-20
 
 ### Added
