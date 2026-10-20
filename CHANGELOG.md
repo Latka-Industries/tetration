@@ -4,7 +4,8 @@
 
 ### Added
 
-- Normative SPEC draft at [`SPEC/README.md`](SPEC/README.md): layout v1, writer protocol v2, query JSON/TOML wire (closed keys / limits / tiers), and C ABI versioning, with a one-paragraph “compatible reader” definition. Detailed tables remain in `docs/`; compatibility policy and conformance pack follow in this cut (THI-586; ships in 0.5.2).
+- Normative SPEC draft at [`SPEC/README.md`](SPEC/README.md): layout v1, writer protocol v2, query JSON/TOML wire (closed keys / limits / tiers), and C ABI versioning, with a one-paragraph “compatible reader” definition. Detailed tables remain in `docs/` (THI-586; ships in 0.5.2).
+- Compatibility / capability-flag policy at [`SPEC/COMPATIBILITY.md`](SPEC/COMPATIBILITY.md): frozen vs evolvable bits, refuse vs may-ignore, independent version axes (layout / query / package / ABI), and 2046-reader examples (THI-587; ships in 0.5.2).
 
 ### Changed
 

@@ -12,7 +12,7 @@ This tree is the **canonical contract index**. Byte layouts, package roles, quer
 | Writer protocol v2 | [`docs/writer_protocol_v2.md`](../docs/writer_protocol_v2.md) | §2 |
 | Query JSON/TOML wire | [`docs/query_engine.md`](../docs/query_engine.md) | §3 |
 | C ABI | [`docs/ffi.md`](../docs/ffi.md), [`include/tetration.h`](../include/tetration.h) | §4 |
-| Compatibility / capability flags | *lands in THI-587* → [`COMPATIBILITY.md`](COMPATIBILITY.md) when present | §5 (stub) |
+| Compatibility / capability flags | [`COMPATIBILITY.md`](COMPATIBILITY.md) | §5 |
 | Conformance pack | *lands in THI-592* | §6 (stub) |
 
 **Informative (not required to claim “compatible reader”):** convert/export, GPU routing, CLI presentation, distributed fold harness, declared semantics interpretation ([`docs/semantics.md`](../docs/semantics.md)).
@@ -243,20 +243,22 @@ Callers **MUST** compare `tet_abi_version()` to the header they compiled against
 
 ---
 
-## 5. Compatibility / capability flags (stub — THI-587)
+## 5. Compatibility / capability flags
 
-**Full policy:** [`COMPATIBILITY.md`](COMPATIBILITY.md) (added by THI-587). Until then:
+**Normative policy:** [`COMPATIBILITY.md`](COMPATIBILITY.md) (THI-587).
+
+Summary:
 
 | Class | Reader behavior |
 | ----- | --------------- |
-| Unknown `layout_version` / `index_version` / `history_version` | **Refuse** |
-| Unknown chunk `codec` | **Refuse** (or advertise missing capability and refuse decode) |
+| Unknown `layout_version` / `index_version` / `history_version` / `protocol_version` | **Refuse** |
+| Unknown chunk `codec` | **Refuse** |
 | Unknown query top-level key / reduction op | **Refuse** document |
-| Unknown footer metadata keys / attrs | **MAY ignore** for open/query; **MUST NOT** invent answers from them |
-| Unknown `MANIFEST` keys | **MAY ignore** (`GenerationManifest` style) |
+| Unknown footer metadata keys / attrs | **MAY ignore**; **MUST NOT** invent answers from them |
+| Unknown `MANIFEST` keys | **MAY ignore** |
 | Missing `ZONE.json` / `INDEX.json` | **MUST** still open `packed.tet`; **MUST NOT** change answers |
 
-Frozen vs evolvable bits and “what a 2046 reader must tolerate” are specified in THI-587.
+Layout, query wire, package protocol, and `TET_ABI_VERSION` bump **independently**. Reserved fields stay zero until amended.
 
 ---
 
