@@ -272,6 +272,8 @@ Layout, query wire, package protocol, and `TET_ABI_VERSION` bump **independently
 
 Reference gate: `cargo test --lib conformance` ([`src/tests/conformance.rs`](../src/tests/conformance.rs)). Fixtures remain under [`fixtures/small/tet/`](../fixtures/small/tet/) and [`fixtures/queries/`](../fixtures/queries/); the pack references them by path.
 
+Optional second-language smoke (catalog + one chunk, not a query engine): [`conformance/smoke/`](../conformance/smoke/README.md).
+
 ---
 
 ## 7. Versioning of this SPEC

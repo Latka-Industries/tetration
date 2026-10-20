@@ -81,6 +81,10 @@ mise run check
 
 CI runs `cargo test` on non-markdown PRs; the conformance module is part of that gate.
 
+## Second-language smoke (optional)
+
+Python stdlib reader that opens a fixture and reads catalog + one chunk: [`smoke/`](smoke/README.md) (THI-589). Not part of pack_version answer equality; it proves the binary layout section of the SPEC is implementable without Rust.
+
 ## Extending the pack
 
 1. Add or reuse a fixture under `fixtures/`.
