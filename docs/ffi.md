@@ -1,5 +1,7 @@
 # C ABI (Phase 11)
 
+**Normative ABI versioning:** also indexed from [`SPEC/README.md`](../SPEC/README.md) §4.
+
 Stable **`extern "C"`** entry points for non-Rust runtimes. The Rust crate (`tetration`) remains the full API; the shared library exposes a **narrow** subset aligned with CLI parity where it matters.
 
 ## Python

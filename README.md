@@ -58,10 +58,11 @@ Packages (multi-writer): `tet ingest` → `tet publish` → query the `.tet.d` (
 
 ## Documentation
 
-Prefer the site; repo docs are the normative deep dive for contributors.
+Prefer the site for product docs. The **normative contract** for third-party readers is [`SPEC/`](SPEC/README.md); `docs/*.md` hold the detailed tables that SPEC incorporates by reference.
 
 | Topic | Site | Repo |
 | ----- | ---- | ---- |
+| **Normative SPEC (0.5.2)** | — | [`SPEC/README.md`](SPEC/README.md) |
 | Getting started | [docs.tetration.sh](https://docs.tetration.sh/getting-started) | — |
 | Format / layout | [/format/](https://docs.tetration.sh/format/) | [`docs/layout_v1.md`](docs/layout_v1.md) |
 | CLI | [/cli/](https://docs.tetration.sh/cli/) | [`docs/cli.md`](docs/cli.md) |

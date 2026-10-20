@@ -1,5 +1,7 @@
 # Tetration on-disk layout — version 1
 
+**Normative for third-party readers:** also indexed from [`SPEC/README.md`](../SPEC/README.md) §1.
+
 This document describes the **v1** `.tet` container: a fixed **32-byte superblock** at offset 0, followed (when `dataset_count > 0`) by a **dataset directory blob**, an **8-byte-aligned** **chunk index** region, and **raw chunk payloads**.
 
 ## File map

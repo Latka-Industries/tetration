@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Normative SPEC draft at [`SPEC/README.md`](SPEC/README.md): layout v1, writer protocol v2, query JSON/TOML wire (closed keys / limits / tiers), and C ABI versioning, with a one-paragraph “compatible reader” definition. Detailed tables remain in `docs/`; compatibility policy and conformance pack follow in this cut (THI-586; ships in 0.5.2).
+
 ### Changed
 
 - `tet semantics scaffold` (empty attrs) emits a single docs URL — `https://docs.tetration.sh/guides/semantics/` — matching the site guide that now includes worked examples. Removed `SEMANTICS_EXAMPLES_URL` (THI-600; ships in 0.5.2).
