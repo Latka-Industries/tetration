@@ -78,7 +78,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.4.4:** the same predicate filters cells inside a kept chunk. A fold under `filter` ignores non-matches. Materialize and transform keep the selection shape and write NaN (floats) or the dataset fill (integers; refused when no fill is set).
 
-**This cut (crate not tagged yet; PyPI tet-py stays 0.4.4):** compact/publish may also write `generations/<G>/INDEX.json`, a value-posting list for exact `filter.eq` when a dataset has at most 64 distinct non-null values. Zone maps still run first. Posting drops are `index_filter_skipped_chunks`. A missing, unknown, or unverifiable index is ignored and the planner uses zone maps (or a full scan). Old readers ignore the new manifest keys. Sorted-axis range indexes and coordinate-label postings are later kinds.
+**Shipped in 0.4.5:** compact/publish may also write `generations/<G>/INDEX.json`, a value-posting list for exact `filter.eq` when a dataset has at most 64 distinct non-null values. Zone maps still run first. Posting drops are `index_filter_skipped_chunks`. A missing, unknown, or unverifiable index is ignored and the planner uses zone maps (or a full scan). Old readers ignore the new manifest keys. Sorted-axis range indexes and coordinate-label postings are later kinds. PyPI tet-py stays **0.4.4** until that package is cut.
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
