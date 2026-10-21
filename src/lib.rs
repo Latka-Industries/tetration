@@ -39,8 +39,12 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
-//! **0.6.0:** closed `window` query wire (tumbling/sliding reductions along a named axis) and
-//! conformance pack milestone 0.6.0 (THI-595). Layout / package / C ABI unchanged.
+//! **0.6.1:** multi-dataset `align` checks and `window.mode` `bins`/`rolling` (reject-closed on
+//! legacy `tumbling`/`sliding`); conformance pack milestone 0.6.1 (THI-594). Layout / package /
+//! C ABI unchanged.
+//!
+//! **0.6.0:** closed `window` query wire (reductions along a named axis) and conformance pack
+//! milestone 0.6.0 (THI-595). Layout / package / C ABI unchanged.
 //!
 //! **0.5.4:** crate hygiene (clippy allows, typed convert/export I/O, optional `tetration-cli`)
 //! and `parse_query_json` fuzz. Layout / query answers / pack milestone unchanged from 0.5.3.
