@@ -12,7 +12,7 @@
 
 ### Notes
 
-- Semver patch: hygiene + benches + spill cleanup only. Layout / query wire / conformance pack milestone unchanged (**0.6.3**). PyPI **tet-py** stays on **0.6.3** until pin after crates.io shows 0.6.4.
+- Semver patch: hygiene + benches + spill cleanup only. Layout / query wire / conformance pack milestone unchanged (**0.6.3**). **tet-py 0.6.4** pins this crate.
 
 ## [0.6.3] - 2026-10-21
 
