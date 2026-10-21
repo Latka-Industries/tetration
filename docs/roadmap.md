@@ -90,7 +90,9 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.5.4:** crate hygiene (clippy allows, typed convert/export I/O, optional `tetration-cli`) + `parse_query_json` fuzz — no layout / query ABI / pack change. PyPI **tet-py 0.5.4** pins this crate.
 
-**Shipped in 0.6.0:** closed `window` query wire (tumbling/sliding stats along a named axis) + conformance pack milestone **0.6.0** (THI-595). Layout / package / C ABI unchanged. PyPI **tet-py 0.6.0** pins this crate.
+**Shipped in 0.6.0:** closed `window` query wire (stats along a named axis) + conformance pack milestone **0.6.0** (THI-595).
+
+**Shipped in 0.6.1:** `window.mode` → `bins` / `rolling` (reject-closed on `tumbling` / `sliding`); multi-dataset **`align`** checks; conformance pack milestone **0.6.1** (THI-594). Layout / package / C ABI unchanged. PyPI **tet-py 0.6.0** until the 0.6.1 pin cut.
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
@@ -127,7 +129,7 @@ GROUP BY region
 
 **Design tension:** scientists want expressive analytics; the format wants a small, auditable control plane. Any extension should declare **tiers** (scalar fold vs materialize-required) and stay JSON/TOML-serializable for agents and FFI.
 
-**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. **Windowed stats** along a named axis shipped in **0.6.0** (`window` wire). Multi-dataset alignment and label-value group-by remain later (0.6.1 / 0.6.2). Filter-by-value pushdown shipped in 0.4.1.
+**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. **Windowed stats** along a named axis shipped in **0.6.0** (`window` wire). Multi-dataset alignment shipped in **0.6.1**. Label-value group-by remains later (**0.6.2**). Filter-by-value pushdown shipped in 0.4.1.
 
 ---
 

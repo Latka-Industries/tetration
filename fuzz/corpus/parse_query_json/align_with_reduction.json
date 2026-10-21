@@ -1,0 +1,5 @@
+{
+  "dataset": "a",
+  "align": { "with": "b", "axes": ["0"] },
+  "sum": []
+}

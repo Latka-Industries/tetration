@@ -1,4 +1,4 @@
-//! Windowed reduction geometry along one axis (tumbling / sliding).
+//! Windowed reduction geometry along one axis (bins / rolling).
 
 use std::collections::BTreeSet;
 
@@ -49,12 +49,12 @@ pub(crate) fn window_axis_layout(
         )));
     }
     let window_count = match window.mode {
-        WindowMode::Tumbling => {
+        WindowMode::Bins => {
             let n = extent.div_ceil(window.size);
             usize::try_from(n)
                 .map_err(|_| TetError::Validation("window count overflows usize".into()))?
         }
-        WindowMode::Sliding => {
+        WindowMode::Rolling => {
             let n = extent - window.size + 1;
             usize::try_from(n)
                 .map_err(|_| TetError::Validation("window count overflows usize".into()))?
@@ -114,7 +114,7 @@ pub(crate) fn window_axis_layout(
     })
 }
 
-/// Output cell index for one tumbling/sliding window id and input coordinates.
+/// Output cell index for one bins/rolling window id and input coordinates.
 pub(crate) fn window_reduced_index(
     coords: &[usize],
     window_idx: usize,
@@ -144,19 +144,19 @@ pub(crate) fn windows_covering(
         .ok_or_else(|| TetError::Validation("coordinate rank mismatch for window fold".into()))?;
     let c = u64::try_from(c).map_err(|_| TetError::Validation("axis coord overflow".into()))?;
     match layout.mode {
-        WindowMode::Tumbling => {
+        WindowMode::Bins => {
             let w = c / layout.size;
             let w = usize::try_from(w)
                 .map_err(|_| TetError::Validation("window index overflow".into()))?;
             if w >= layout.window_count {
                 return Err(TetError::Validation(format!(
-                    "tumbling window index {w} out of range ({})",
+                    "bins window index {w} out of range ({})",
                     layout.window_count
                 )));
             }
             Ok(vec![w])
         }
-        WindowMode::Sliding => {
+        WindowMode::Rolling => {
             // Cell at c belongs to every window w with w <= c <= w+size-1.
             let size = layout.size;
             let first = c.saturating_sub(size - 1);

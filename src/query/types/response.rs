@@ -5,6 +5,39 @@ use serde::Serialize;
 use super::document::Operation;
 use crate::query::materialize::DecodePreviewBundle;
 
+/// Per-axis outcome inside [`AlignmentResult`].
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct AlignmentAxisResult {
+    /// Wire axis token from the query (`align.axes` entry).
+    pub axis: String,
+    /// True when extent, dim names, and coordinate labels agree for this axis.
+    pub ok: bool,
+    pub extent_left: u64,
+    pub extent_right: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dim_name_left: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dim_name_right: Option<String>,
+    /// True when both sides lack labels, or both have identical label vectors.
+    pub labels_ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Structured multi-dataset alignment check result (`execution.alignment`).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct AlignmentResult {
+    /// True when every compared axis agreed.
+    pub aligned: bool,
+    /// Left dataset (`dataset` wire key).
+    pub left: String,
+    /// Right dataset (`align.with`).
+    pub with: String,
+    pub axes: Vec<AlignmentAxisResult>,
+}
+
 /// Result of matching `QueryDocument::dataset` against a mmap’d `.tet` catalog.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -221,9 +254,12 @@ pub struct QueryExecutionPreview {
     /// Number of groups when `group_by` is set (product of those axes' logical extents).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_count: Option<usize>,
-    /// Number of windows when `window` is set (tumbling or sliding count along the axis).
+    /// Number of windows when `window` is set (bins or rolling count along the axis).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub window_count: Option<usize>,
+    /// Multi-dataset alignment check when `align` is set (metadata only; no cell fold).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alignment: Option<AlignmentResult>,
     /// When set, full logical selection was spilled as row-major `f32` LE to this path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spill_f32_path: Option<String>,

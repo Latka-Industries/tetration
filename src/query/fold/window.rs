@@ -76,8 +76,8 @@ fn fold_window_f32(
                     for w in window_geometry::windows_covering(&coords, layout)? {
                         let oi = window_geometry::window_reduced_index(&coords, w, layout)?;
                         let fiber = match layout.mode {
-                            WindowMode::Tumbling => axis_c % layout.size,
-                            WindowMode::Sliding => {
+                            WindowMode::Bins => axis_c % layout.size,
+                            WindowMode::Rolling => {
                                 axis_c.saturating_sub(u64::try_from(w).unwrap_or(0))
                             }
                         };

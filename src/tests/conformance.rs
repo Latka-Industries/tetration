@@ -74,6 +74,18 @@ fn resolve(rel: &str) -> PathBuf {
     p
 }
 
+fn assert_expect_bool(ex: &crate::query::QueryExecutionPreview, key: &str, want: bool) {
+    let got = match key {
+        "execution.alignment.aligned" => ex
+            .alignment
+            .as_ref()
+            .map(|a| a.aligned)
+            .unwrap_or_else(|| panic!("missing execution.alignment")),
+        other => panic!("unsupported bool expect key `{other}` — extend conformance runner"),
+    };
+    assert_eq!(got, want, "{key}: got {got} want {want}");
+}
+
 fn assert_expect_number(ex: &crate::query::QueryExecutionPreview, key: &str, want: f64, tol: f64) {
     let got = match key {
         "execution.operation_mean" => ex.operation_mean,
@@ -169,10 +181,15 @@ fn run_accept(case: &AcceptCase) {
                 })
                 .collect();
             assert_expect_f64_array(ex, key, &want, tol);
+        } else if let Some(want) = val.as_bool() {
+            assert_expect_bool(ex, key, want);
         } else {
-            let want = val
-                .as_f64()
-                .unwrap_or_else(|| panic!("{}: expect `{key}` must be a number or array", case.id));
+            let want = val.as_f64().unwrap_or_else(|| {
+                panic!(
+                    "{}: expect `{key}` must be a number, bool, or array",
+                    case.id
+                )
+            });
             assert_expect_number(ex, key, want, tol);
         }
     }
@@ -255,6 +272,10 @@ fn conformance_reject_query_files_exist() {
         "conformance/reject/queries/window_size_zero.json",
         "conformance/reject/queries/window_without_reduction.json",
         "conformance/reject/queries/window_with_group_by.json",
+        "conformance/reject/queries/window_mode_legacy.json",
+        "conformance/reject/queries/unknown_align_field.json",
+        "conformance/reject/queries/align_with_reduction.json",
+        "conformance/reject/queries/align_empty_axes.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
@@ -264,19 +285,20 @@ fn conformance_reject_query_files_exist() {
 fn conformance_accept_query_files_exist() {
     for rel in [
         "conformance/accept/queries/mean_strided_sample.json",
-        "conformance/accept/queries/window_tumbling_sum_col.json",
-        "conformance/accept/queries/window_sliding_sum_col.json",
+        "conformance/accept/queries/window_bins_sum_col.json",
+        "conformance/accept/queries/window_rolling_sum_col.json",
+        "conformance/accept/queries/align_pair_ok.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
 }
 
 #[test]
-fn conformance_spec_milestone_is_0_6_0() {
+fn conformance_spec_milestone_is_0_6_1() {
     let path = repo_root().join("conformance/manifest.v1.json");
     let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(
         v.get("spec_milestone").and_then(|x| x.as_str()),
-        Some("0.6.0")
+        Some("0.6.1")
     );
 }

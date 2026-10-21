@@ -343,7 +343,7 @@ pub struct ValueFilter {
     pub predicates: Vec<ValuePredicate>,
 }
 
-/// Sliding or tumbling window along one named axis (`window` wire key).
+/// Bins or rolling window along one named axis (`window` wire key).
 ///
 /// A window is a reduction over a span of one axis — not a new dataset, join, or SQL `OVER`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -359,19 +359,19 @@ pub struct WindowSpec {
 /// Window placement along the windowed axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowMode {
-    /// Non-overlapping spans of `size` (last window may be shorter when extent is not divisible).
-    Tumbling,
-    /// Overlapping spans of `size` advancing by one index each step.
-    Sliding,
+    /// Non-overlapping chunks of `size` (last window may be shorter when extent is not divisible).
+    Bins,
+    /// Overlapping spans of length `size` advancing by one index each step.
+    Rolling,
 }
 
 impl WindowMode {
-    /// Stable wire token (`tumbling` / `sliding`).
+    /// Stable wire token (`bins` / `rolling`).
     #[must_use]
     pub const fn as_wire_str(self) -> &'static str {
         match self {
-            Self::Tumbling => "tumbling",
-            Self::Sliding => "sliding",
+            Self::Bins => "bins",
+            Self::Rolling => "rolling",
         }
     }
 
@@ -379,16 +379,37 @@ impl WindowMode {
     ///
     /// # Errors
     ///
-    /// [`TetError::Validation`] when the token is not `tumbling` or `sliding`.
+    /// [`TetError::Validation`] when the token is not `bins` or `rolling`.
+    /// Legacy `tumbling` / `sliding` are rejected with a migration hint.
     pub fn parse(token: &str) -> Result<Self, TetError> {
         match token {
-            "tumbling" => Ok(Self::Tumbling),
-            "sliding" => Ok(Self::Sliding),
+            "bins" => Ok(Self::Bins),
+            "rolling" => Ok(Self::Rolling),
+            "tumbling" => Err(TetError::Validation(
+                "unknown window mode `tumbling` (renamed to `bins` in 0.6.1; use mode \"bins\")"
+                    .into(),
+            )),
+            "sliding" => Err(TetError::Validation(
+                "unknown window mode `sliding` (renamed to `rolling` in 0.6.1; use mode \"rolling\")"
+                    .into(),
+            )),
             _ => Err(TetError::Validation(format!(
-                "unknown window mode `{token}` (expected tumbling or sliding)"
+                "unknown window mode `{token}` (expected bins or rolling)"
             ))),
         }
     }
+}
+
+/// Multi-dataset alignment check (`align` wire key).
+///
+/// Compares named axes (extents, dimension names, coordinate labels) between [`QueryDocument::dataset`]
+/// and [`Self::with`]. Does not join, broadcast, or produce a new array.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlignSpec {
+    /// Second catalog dataset name in the same sealed package.
+    pub with: String,
+    /// Axes to compare (dimension names or decimal indices); must be non-empty.
+    pub axes: Vec<String>,
 }
 
 /// Top-level JSON query document accepted by the engine and `tet query`.
@@ -412,6 +433,11 @@ pub struct QueryDocument {
     /// Mutually exclusive with [`Self::group_by`]. Empty reduction axes mean reduce only within
     /// each window along the windowed axis (other axes are kept).
     pub window: Option<WindowSpec>,
+    /// Optional multi-dataset alignment check (`align` wire key); see [`AlignSpec`].
+    ///
+    /// Mutually exclusive with selection / filter / group_by / window / reduction / pipeline /
+    /// spill / write. Metadata-only; does not read cell payloads.
+    pub align: Option<AlignSpec>,
     /// Optional reduction over the logical selection.
     pub operation: Option<Operation>,
     /// Optional export spill (`spill` wire key); not used with transform ops.

@@ -4,8 +4,8 @@ use serde_json::Value;
 
 use super::super::types::{QueryDocument, TetError};
 use super::fields::{
-    parse_execution, parse_group_by, parse_selection, parse_spill, parse_u32_field, parse_window,
-    parse_write,
+    parse_align, parse_execution, parse_group_by, parse_selection, parse_spill, parse_u32_field,
+    parse_window, parse_write,
 };
 use super::filter::parse_filter;
 use super::keys::{OP_KEYS, is_allowed_key, is_flat_analytic_key};
@@ -76,6 +76,7 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
             filter: lowered.filter,
             group_by: lowered.group_by,
             window: lowered.window,
+            align: None,
             operation: lowered.operation,
             output: lowered.output,
             write: lowered.write,
@@ -102,6 +103,11 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
     let window = match obj.get("window") {
         None => None,
         Some(v) => Some(parse_window(v)?),
+    };
+
+    let align = match obj.get("align") {
+        None => None,
+        Some(v) => Some(parse_align(v)?),
     };
 
     let output = match obj.get("spill") {
@@ -133,6 +139,7 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
         filter,
         group_by,
         window,
+        align,
         operation,
         output,
         write,

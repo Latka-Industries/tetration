@@ -44,6 +44,7 @@ fn resolve_row_labels_to_indices() {
         filter: None,
         group_by: None,
         window: None,
+        align: None,
         operation: None,
         output: None,
         write: None,

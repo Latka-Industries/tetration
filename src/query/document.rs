@@ -7,8 +7,8 @@ use crate::catalog::MAX_NDIM;
 
 use super::document_wire::parse_query_value;
 use super::types::{
-    AxisSlice, Operation, QueryDocument, TetError, ValueCompareOp, ValueFilter, ValuePredicate,
-    WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AxisSlice, Operation, QueryDocument, TetError, ValueCompareOp, ValueFilter,
+    ValuePredicate, WindowSpec, WriteHints, WriteTarget,
 };
 
 /// How [`parse_query_text`] chooses a parser.
@@ -220,6 +220,9 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
             &limits,
         )?;
     }
+    if let Some(align) = &doc.align {
+        validate_align(align, doc, &limits)?;
+    }
     if let Some(op) = &doc.operation {
         validate_operation_axes_v1(op)?;
         validate_operation_params(op)?;
@@ -393,6 +396,58 @@ fn validate_group_by(
                 "`group_by` lists dimension `{key}` more than once"
             )));
         }
+    }
+    Ok(())
+}
+
+fn validate_align(
+    align: &AlignSpec,
+    doc: &QueryDocument,
+    limits: &QueryLimits,
+) -> Result<(), TetError> {
+    if align.with.trim().is_empty() {
+        return Err(TetError::Validation(
+            "`align.with` must be a non-empty string".into(),
+        ));
+    }
+    if align.with.len() > limits.max_dataset_name_len {
+        return Err(TetError::Validation(format!(
+            "`align.with` name exceeds maximum length ({} > {})",
+            align.with.len(),
+            limits.max_dataset_name_len
+        )));
+    }
+    if align.with == doc.dataset {
+        return Err(TetError::Validation(
+            "`align.with` must name a different dataset than `dataset`".into(),
+        ));
+    }
+    if align.axes.is_empty() {
+        return Err(TetError::Validation(
+            "`align.axes` must list at least one axis".into(),
+        ));
+    }
+    if align.axes.len() > MAX_NDIM {
+        return Err(TetError::Validation(format!(
+            "`align.axes` has {} entries; maximum is {MAX_NDIM}",
+            align.axes.len()
+        )));
+    }
+    for axis in &align.axes {
+        validate_operation_axis_token(axis)?;
+    }
+    if doc.selection.is_some()
+        || doc.filter.is_some()
+        || doc.group_by.is_some()
+        || doc.window.is_some()
+        || doc.operation.is_some()
+        || doc.output.is_some()
+        || doc.write.is_some()
+        || doc.pipeline.is_some()
+    {
+        return Err(TetError::Validation(
+            "`align` cannot be combined with selection, filter, group_by, window, reduction, pipeline, spill, or write".into(),
+        ));
     }
     Ok(())
 }
