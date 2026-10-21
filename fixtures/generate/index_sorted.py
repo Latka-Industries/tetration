@@ -82,7 +82,7 @@ def fixture_for(tier: IndexTier) -> IndexFixture:
     )
 
 
-def write_sorted_axis_h5(fix: IndexFixture, *, quiet: bool = False) -> None:
+def write_sorted_axis_h5(fx: IndexFixture, *, quiet: bool = False) -> None:
     """Write 2-D f32 HDF5: shape (time, width), chunk (1, width), CF time coords."""
     fx.h5.parent.mkdir(parents=True, exist_ok=True)
     if fx.h5.is_file():
