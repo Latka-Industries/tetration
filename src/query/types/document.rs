@@ -370,6 +370,66 @@ impl WindowSpec {
     pub fn effective_step(&self) -> u64 {
         self.step.unwrap_or(1)
     }
+
+    /// Cross-field wire invariants that do not need a [`ReadPlan`] or query limits.
+    ///
+    /// Shared by document parse / validate and window geometry so error strings stay one place.
+    /// `max_window_size` stays in [`Self::validate_size_limit`]; plan-only checks stay in layout.
+    ///
+    /// # Errors
+    ///
+    /// [`TetError::Validation`] when size/step/min_count or rolling/`align`/`pad` combos are invalid.
+    pub fn validate_cross_fields(&self) -> Result<(), TetError> {
+        if self.size == 0 {
+            return Err(TetError::Validation("`window.size` must be >= 1".into()));
+        }
+        if let Some(step) = self.step {
+            if step == 0 {
+                return Err(TetError::Validation("`window.step` must be >= 1".into()));
+            }
+            if self.mode == WindowMode::Bins {
+                return Err(TetError::Validation(
+                    "`window.step` is only valid with mode \"rolling\"".into(),
+                ));
+            }
+        }
+        if self.min_count == 0 {
+            return Err(TetError::Validation(
+                "`window.min_count` must be >= 1".into(),
+            ));
+        }
+        if self.min_count > self.size {
+            return Err(TetError::Validation(format!(
+                "`window.min_count` ({}) exceeds window.size ({})",
+                self.min_count, self.size
+            )));
+        }
+        if self.mode == WindowMode::Rolling
+            && self.pad == WindowPad::None
+            && self.align == WindowAlign::End
+        {
+            return Err(TetError::Validation(
+                "`window.align` \"end\" with mode \"rolling\" requires pad other than \"none\""
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Reject `size` above the active max-window limit.
+    ///
+    /// # Errors
+    ///
+    /// [`TetError::Validation`] when `size` exceeds `max_window_size`.
+    pub fn validate_size_limit(&self, max_window_size: u64) -> Result<(), TetError> {
+        if self.size > max_window_size {
+            return Err(TetError::Validation(format!(
+                "`window.size` exceeds maximum ({} > {max_window_size})",
+                self.size
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// Window placement along the windowed axis.
