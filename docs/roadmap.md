@@ -98,6 +98,8 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.6.3:** `window` `pad` / `step` / `align` / `min_count` + multi-dtype windowed folds; conformance pack milestone **0.6.3** (THI-606). Layout / package / C ABI unchanged. PyPI **tet-py 0.6.3** pins this crate.
 
+**Shipped in 0.6.4:** hygiene after the 0.6.x query wave — DRY window/fold paths, pedantic + window-edge fuzz, broader `mise bench:*` coverage (windows / transforms / scalar), and ephemeral `write: switch` spill cleanup (THI-607 / THI-608). Layout / package / C ABI / pack milestone unchanged (**0.6.3**). PyPI **tet-py** stays on **0.6.3** until pin after crates.io.
+
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
 **Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**. The posting list does not change `packed.tet`.
