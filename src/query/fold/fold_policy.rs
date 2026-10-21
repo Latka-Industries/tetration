@@ -94,6 +94,12 @@ impl FoldIoPolicy {
             linear_scan,
         })
     }
+
+    /// Prefer payload-offset chunk order (sequential fold or out-of-core linear scan).
+    #[must_use]
+    pub const fn prefer_ordered_chunk_io(self) -> bool {
+        self.sequential_io || self.linear_scan
+    }
 }
 
 #[must_use]

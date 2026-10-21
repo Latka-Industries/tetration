@@ -18,4 +18,17 @@ impl TransformWarnings {
             self.div_by_zero_indices.push(logical_index);
         }
     }
+
+    /// Merge per-chunk warning bags (parallel pass-2).
+    pub(crate) fn merge_from(&mut self, other: &Self) {
+        self.div_by_zero_count = self
+            .div_by_zero_count
+            .saturating_add(other.div_by_zero_count);
+        for &idx in &other.div_by_zero_indices {
+            if self.div_by_zero_indices.len() >= MAX_LISTED_DIV_BY_ZERO_INDICES {
+                break;
+            }
+            self.div_by_zero_indices.push(idx);
+        }
+    }
 }

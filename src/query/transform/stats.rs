@@ -7,10 +7,13 @@
 
 use std::path::Path;
 
-use crate::query::decode::chunk_decode::{visit_planned_chunk, visit_planned_chunk_f64};
+use rayon::prelude::*;
+
+use crate::query::decode::chunk_decode::visit_planned_chunk_float_as_f64;
 use crate::query::dispatch::{self, accumulate_chunk_read_bytes};
 use crate::query::fold::{
     fold_policy::FoldIoPolicy,
+    parallel::{self, with_fold_workers},
     partial_geometry::{self, PartialAxisLayout},
     reduction::ReductionKind,
 };
@@ -41,12 +44,6 @@ pub(crate) struct TransformStats {
     pub norm_l2: Vec<f64>,
     /// `sum(exp(x - max))` per cell after pass-1 max fold (`softmax`).
     pub sum_exp: Vec<f64>,
-}
-
-impl TransformStats {
-    fn cell_len(&self) -> usize {
-        self.layout.as_ref().map_or(1, |l| l.out_len)
-    }
 }
 
 /// Streaming fold pass over `plan` to collect transform statistics (no dense output buffer).
@@ -124,28 +121,66 @@ fn assign_first_scalar(target: &mut Option<f64>, values: &[f64]) {
     }
 }
 
-/// Visit every finite logical element in `plan`, promoting `f32` to `f64` for the callback.
-fn fold_transform_chunks<F>(
-    mmap: &[u8],
-    plan: &ReadPlan,
-    dtype: ElementDtype,
-    mut visit: F,
-) -> Result<u64, TetError>
-where
-    F: FnMut(usize, f64) -> Result<(), TetError>,
-{
-    let mut total = 0u64;
-    for c in &plan.chunks {
-        let n = match dtype {
-            ElementDtype::F32 => {
-                visit_planned_chunk(mmap, plan, c, |li, v| visit(li, f64::from(v)))?
-            }
-            ElementDtype::F64 => visit_planned_chunk_f64(mmap, plan, c, &mut visit)?,
-            _ => return Err(TetError::Validation(ERR_TRANSFORM_FLOAT.into())),
+/// Softmax pass-1: `sum(exp(x - max))` per reduced cell.
+///
+/// Uses the same Rayon chunk policy as scalar/partial folds when in-core.
+fn fold_softmax_sum_exp(
+    input: &CollectStatsInput<'_>,
+    max: &[f64],
+) -> Result<(Vec<f64>, u64), TetError> {
+    let ncells = max.len();
+    let shape = &input.plan.logical_selection_shape;
+    let layout = input.layout;
+    let mmap = input.mmap;
+    let plan = input.plan;
+    let dtype = input.dtype;
+
+    let fold_chunk =
+        |c: &crate::query::types::PlannedChunkIo| -> Result<(Vec<f64>, u64), TetError> {
+            let mut local = vec![0.0_f64; ncells];
+            let bytes = visit_planned_chunk_float_as_f64(mmap, plan, c, dtype, |li, v| {
+                if !v.is_finite() {
+                    return Ok(());
+                }
+                let cell = partial_geometry::reduced_cell_index_or_global(li, shape, layout)?;
+                local[cell] += (v - max[cell]).exp();
+                Ok(())
+            })?;
+            Ok((local, bytes))
         };
-        accumulate_chunk_read_bytes(&mut total, n)?;
+
+    if parallel::use_parallel_fold(plan, input.policy) {
+        let parts: Vec<(Vec<f64>, u64)> = with_fold_workers(input.policy.fold_workers, || {
+            plan.chunks
+                .par_iter()
+                .map(fold_chunk)
+                .collect::<Result<Vec<_>, TetError>>()
+        })?;
+        let mut sum_exp = vec![0.0_f64; ncells];
+        let mut total = 0u64;
+        for (local, bytes) in parts {
+            for (d, s) in sum_exp.iter_mut().zip(local) {
+                *d += s;
+            }
+            accumulate_chunk_read_bytes(&mut total, bytes)?;
+        }
+        return Ok((sum_exp, total));
     }
-    Ok(total)
+
+    let mut sum_exp = vec![0.0_f64; ncells];
+    let mut total = 0u64;
+    let order = crate::query::fold::fold_policy::chunk_indices_for_fold(
+        plan,
+        input.policy.prefer_ordered_chunk_io(),
+    );
+    for i in order {
+        let (local, bytes) = fold_chunk(&plan.chunks[i])?;
+        for (d, s) in sum_exp.iter_mut().zip(local) {
+            *d += s;
+        }
+        accumulate_chunk_read_bytes(&mut total, bytes)?;
+    }
+    Ok((sum_exp, total))
 }
 
 #[derive(Copy, Clone)]
@@ -201,14 +236,8 @@ fn fold_stat_vec(
 fn collect_stats_for_method(
     input: &CollectStatsInput<'_>,
 ) -> Result<(TransformStats, OperationPreviewFields, u64), TetError> {
-    let CollectStatsInput {
-        mmap,
-        plan,
-        method,
-        dtype,
-        layout,
-        ..
-    } = *input;
+    let method = input.method;
+    let layout = input.layout;
     let partial = layout.is_some();
     let mut stats = TransformStats {
         method,
@@ -243,40 +272,13 @@ fn collect_stats_for_method(
         TransformMethod::L2 => {
             stats.norm_l2 = fold_stat_vec(&mut total_bytes, input, ReductionKind::NormL2, partial)?;
         }
+        // Reuse scalar/partial fold policy (parallel / linear_scan) — same path as mean.
         TransformMethod::Log1p | TransformMethod::Sqrt => {
-            let ncells = layout.map_or(1, |l| l.out_len);
-            let mut out_min = vec![f64::INFINITY; ncells];
-            let shape = &plan.logical_selection_shape;
-            let bytes = fold_transform_chunks(mmap, plan, dtype, |li, v| {
-                if !v.is_finite() {
-                    return Ok(());
-                }
-                let cell = partial_geometry::reduced_cell_index_or_global(li, shape, layout)?;
-                out_min[cell] = out_min[cell].min(v);
-                Ok(())
-            })?;
-            accumulate_chunk_read_bytes(&mut total_bytes, bytes)?;
-            for m in &mut out_min {
-                if !m.is_finite() {
-                    *m = 0.0;
-                }
-            }
-            stats.min = out_min;
+            stats.min = fold_stat_vec(&mut total_bytes, input, ReductionKind::Min, partial)?;
         }
         TransformMethod::Softmax => {
             stats.max = fold_stat_vec(&mut total_bytes, input, ReductionKind::Max, partial)?;
-            let ncells = stats.cell_len();
-            let mut sum_exp = vec![0.0; ncells];
-            let shape = &plan.logical_selection_shape;
-            let max = stats.max.clone();
-            let bytes = fold_transform_chunks(mmap, plan, dtype, |li, v| {
-                if !v.is_finite() {
-                    return Ok(());
-                }
-                let cell = partial_geometry::reduced_cell_index_or_global(li, shape, layout)?;
-                sum_exp[cell] += (v - max[cell]).exp();
-                Ok(())
-            })?;
+            let (sum_exp, bytes) = fold_softmax_sum_exp(input, &stats.max)?;
             accumulate_chunk_read_bytes(&mut total_bytes, bytes)?;
             stats.sum_exp = sum_exp;
         }

@@ -1,11 +1,18 @@
 //! Streaming windowed reductions along one axis (tier-A/B, all wire dtypes).
+//!
+//! I/O policy mirrors scalar/partial folds (memory-conscious):
+//! - **In-core multi-chunk:** Rayon parallel chunk scan + merge (capped so huge
+//!   `window_count` does not multiply accumulator replicas past ~64 MiB).
+//! - **Out-of-core / single-chunk / oversize output:** one accumulator buffer,
+//!   offset-ordered chunk visits when `FoldIoPolicy::prefer_ordered_chunk_io`.
+//! - SIMD slab folds stay scalar-only for now (window scatter is multi-cell).
 
 use super::partial::{partial_arg_fields, partial_fields};
 use super::window_geometry::{self, WindowAxisLayout};
 use crate::query::{
     decode::{chunk_decode, indexing},
     dispatch,
-    fold::{fold_policy, reduction, shared},
+    fold::{fold_policy, parallel, reduction, shared},
     materialize::int::IntVisit,
     types::{ReadPlan, TetError, WindowPad, WindowSpec, fold_keeps_cell},
 };
@@ -115,10 +122,20 @@ impl WindowVisit {
         F: FnMut(usize, f64) -> Result<(), TetError>,
     {
         match self {
-            Self::F32 => {
-                chunk_decode::visit_planned_chunk(mmap, plan, c, |li, v| visit(li, f64::from(v)))
-            }
-            Self::F64 => chunk_decode::visit_planned_chunk_f64(mmap, plan, c, visit),
+            Self::F32 => chunk_decode::visit_planned_chunk_float_as_f64(
+                mmap,
+                plan,
+                c,
+                ElementDtype::F32,
+                visit,
+            ),
+            Self::F64 => chunk_decode::visit_planned_chunk_float_as_f64(
+                mmap,
+                plan,
+                c,
+                ElementDtype::F64,
+                visit,
+            ),
             Self::F16 => chunk_decode::visit_planned_chunk_f16(mmap, plan, c, |li, v| {
                 visit(li, f64::from(v))
             }),
@@ -129,6 +146,74 @@ impl WindowVisit {
 
 fn fold_window(ctx: &FoldWindowCtx<'_>) -> Result<shared::FoldPlanOutcome, TetError> {
     let n = ctx.plan.logical_element_count;
+    if parallel::use_parallel_fold(ctx.plan, ctx.policy)
+        && parallel::parallel_window_memory_ok(ctx.layout.out_len, ctx.policy.fold_workers)
+    {
+        return fold_window_parallel(ctx, n);
+    }
+    fold_window_sequential(ctx, n)
+}
+
+fn fold_window_parallel(
+    ctx: &FoldWindowCtx<'_>,
+    n: usize,
+) -> Result<shared::FoldPlanOutcome, TetError> {
+    let scan = parallel::scan_window_cells_parallel(
+        ctx.mmap,
+        ctx.plan,
+        ctx.max_preview,
+        ctx.kind,
+        ctx.layout,
+        ctx.dtype,
+        ctx.policy.fold_workers,
+    )?;
+    let operation = match ctx.kind {
+        reduction::ReductionKind::ArgMin | reduction::ReductionKind::ArgMax => {
+            let mut cells = scan.arg_cells.ok_or_else(|| {
+                TetError::Validation("internal: parallel window arg scan missing cells".into())
+            })?;
+            inject_pad_slots(ctx.layout, ctx.pad_value, cells.len(), |oi, fiber, pad| {
+                cells[oi].push_f64(fiber, pad, ctx.kind);
+                Ok(())
+            })?;
+            apply_min_count_arg(&mut cells, &scan.real_counts, ctx.layout);
+            partial_arg_fields(ctx.kind, n, &ctx.layout.out_shape, &cells)
+        }
+        _ => {
+            let mut cells = scan.value_cells.ok_or_else(|| {
+                TetError::Validation("internal: parallel window value scan missing cells".into())
+            })?;
+            inject_pad_slots(ctx.layout, ctx.pad_value, cells.len(), |oi, _fiber, pad| {
+                cells[oi].push_f64(pad);
+                Ok(())
+            })?;
+            let reduced: Vec<f64> = cells
+                .iter()
+                .enumerate()
+                .map(|(oi, c)| {
+                    if scan.real_counts[oi] < ctx.layout.min_count {
+                        f64::NAN
+                    } else {
+                        c.finish_f64(ctx.kind)
+                    }
+                })
+                .collect();
+            partial_fields(ctx.kind, n, &ctx.layout.out_shape, &reduced, &cells)
+        }
+    };
+    Ok(shared::build_fold_plan_outcome_typed(
+        scan.preview,
+        ctx.max_preview,
+        n,
+        scan.total_bytes,
+        operation,
+    ))
+}
+
+fn fold_window_sequential(
+    ctx: &FoldWindowCtx<'_>,
+    n: usize,
+) -> Result<shared::FoldPlanOutcome, TetError> {
     let mut preview = WindowPreview::new(ctx.dtype, ctx.max_preview.min(n));
 
     let (saw_any, total_bytes, operation) = match ctx.kind {
@@ -194,8 +279,13 @@ fn scan_window_cells(
     let visit = WindowVisit::from_dtype(ctx.dtype);
     let mut saw_any = false;
     let mut total_bytes: u64 = 0;
-    let chunk_order = fold_policy::chunk_indices_for_fold(ctx.plan, ctx.policy.sequential_io);
+    // Out-of-core linear_scan / sequential_io: one accumulator, payload-offset order.
+    let chunk_order =
+        fold_policy::chunk_indices_for_fold(ctx.plan, ctx.policy.prefer_ordered_chunk_io());
     let mut real_counts = vec![0_u64; ctx.layout.out_len];
+    // Rank-1 + full reduce: linear index *is* the window axis coord; output index is `w`.
+    let rank1_full =
+        shape.len() == 1 && ctx.layout.window_axis == 0 && ctx.layout.reduce_set.len() == 1;
 
     for i in chunk_order {
         let c = &ctx.plan.chunks[i];
@@ -205,10 +295,22 @@ fn scan_window_cells(
             if !fold_keeps_cell(ctx.plan.cell_filter, v) {
                 return Ok(());
             }
+            if rank1_full {
+                let axis_c = u64::try_from(li)
+                    .map_err(|_| TetError::Validation("axis coord overflow".into()))?;
+                let (w0, w1) = window_geometry::covering_window_bounds(axis_c, ctx.layout)?;
+                for (off, count) in real_counts[w0..w1].iter_mut().enumerate() {
+                    let w = w0 + off;
+                    on_window(w, axis_c, w, v)?;
+                    *count = count.saturating_add(1);
+                }
+                return Ok(());
+            }
             let coords = indexing::coords_from_linear_row_major(li, shape)?;
             let axis_c = u64::try_from(coords[ctx.layout.window_axis])
                 .map_err(|_| TetError::Validation("axis coord overflow".into()))?;
-            for w in window_geometry::windows_covering(&coords, ctx.layout)? {
+            let (w0, w1) = window_geometry::covering_window_bounds(axis_c, ctx.layout)?;
+            for w in w0..w1 {
                 let oi = window_geometry::window_reduced_index(&coords, w, ctx.layout)?;
                 on_window(oi, axis_c, w, v)?;
                 real_counts[oi] = real_counts[oi].saturating_add(1);

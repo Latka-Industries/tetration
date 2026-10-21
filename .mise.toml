@@ -117,6 +117,15 @@ description = "Benchmark large + extra_large HDF5 only (device auto; use bench:c
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large h5 --tet-device auto"
 
+[tasks."bench:windows"]
+description = "Window bins/rolling vs NumPy peer on large h5 only (THI-608); CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier large --ops windows --tet-device cpu"
+
+[tasks."bench:query06"]
+description = "Alias for bench:windows (THI-608)"
+depends = ["bench:windows"]
+
 [tasks."bench:netcdf"]
 description = "Benchmark large + extra_large NetCDF only (device auto)"
 depends = ["fixtures:sync"]

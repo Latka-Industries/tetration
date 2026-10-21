@@ -5,7 +5,14 @@ from __future__ import annotations
 import os
 
 from benchmark.case import cases_for
-from benchmark.constants import DEFAULT_FORMATS, DEFAULT_TET_DEVICE, FormatName
+from benchmark.constants import (
+    DEFAULT_FORMATS,
+    DEFAULT_TET_DEVICE,
+    DEFAULT_TIERS,
+    FormatName,
+    TierName,
+    parse_tiers,
+)
 from benchmark.log import log
 from benchmark.report import parse_ops, write_report
 from benchmark.runner import bench_case, cleanup_format_tree
@@ -16,6 +23,7 @@ def run_benchmark(
     *,
     formats: list[FormatName] | None = None,
     ops: list[str] | None = None,
+    tiers: str | None = None,
     skip_ops: bool = False,
     jobs: int | None = None,
     tet_device: str | None = None,
@@ -24,6 +32,7 @@ def run_benchmark(
 ) -> int:
     fmt_list: list[FormatName] = list(formats or DEFAULT_FORMATS)
     op_list = parse_ops(ops)
+    tier_list: tuple[TierName, ...] = parse_tiers(tiers) if tiers is not None else DEFAULT_TIERS
     job_count = jobs if jobs is not None else int(os.environ.get("BENCH_JOBS", "0"))
     device = (
         tet_device
@@ -33,13 +42,13 @@ def run_benchmark(
 
     tet = tet_bin()
     log(
-        f"start formats={fmt_list} ops={op_list} tet={tet} jobs={job_count} "
-        f"skip_ops={skip_ops} tet_device={device!r}"
+        f"start formats={fmt_list} tiers={tier_list} ops={op_list} tet={tet} "
+        f"jobs={job_count} skip_ops={skip_ops} tet_device={device!r}"
     )
     rows = []
     for fmt in fmt_list:
         log(f"######## {fmt} ########")
-        for case in cases_for(fmt):
+        for case in cases_for(fmt, tiers=tier_list):
             rows.append(
                 bench_case(
                     tet,
