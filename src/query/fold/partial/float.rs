@@ -158,11 +158,7 @@ fn run_partial_f32(
                             return Ok(());
                         }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
-                        let oi = partial_geometry::reduced_index(
-                            &coords,
-                            &ctx.layout.axis_set,
-                            &ctx.layout.out_shape,
-                        )?;
+                        let oi = ctx.layout.reduced_index(&coords)?;
                         let fi = partial_geometry::fiber_linear_index(
                             &coords,
                             &ctx.layout.axis_indices,
@@ -194,11 +190,7 @@ fn run_partial_f32(
                             return Ok(());
                         }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
-                        let oi = partial_geometry::reduced_index(
-                            &coords,
-                            &ctx.layout.axis_set,
-                            &ctx.layout.out_shape,
-                        )?;
+                        let oi = ctx.layout.reduced_index(&coords)?;
                         cells[oi].push(v);
                         Ok(())
                     })?;
@@ -236,11 +228,7 @@ fn run_partial_f64(
                             return Ok(());
                         }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
-                        let oi = partial_geometry::reduced_index(
-                            &coords,
-                            &ctx.layout.axis_set,
-                            &ctx.layout.out_shape,
-                        )?;
+                        let oi = ctx.layout.reduced_index(&coords)?;
                         let fi = partial_geometry::fiber_linear_index(
                             &coords,
                             &ctx.layout.axis_indices,
@@ -272,11 +260,7 @@ fn run_partial_f64(
                             return Ok(());
                         }
                         let coords = indexing::coords_from_linear_row_major(li, ctx.shape)?;
-                        let oi = partial_geometry::reduced_index(
-                            &coords,
-                            &ctx.layout.axis_set,
-                            &ctx.layout.out_shape,
-                        )?;
+                        let oi = ctx.layout.reduced_index(&coords)?;
                         cells[oi].push_f64(v);
                         Ok(())
                     })?;

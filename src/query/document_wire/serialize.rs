@@ -4,8 +4,8 @@ use serde::ser::{Serialize, SerializeMap, Serializer};
 use serde_json::Value;
 
 use super::super::types::{
-    AlignSpec, ExecutionHints, Operation, OutputHint, OutputHints, PipelineStep, QueryDocument,
-    ValueFilter, ValuePredicate, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, ExecutionHints, GroupBySpec, Operation, OutputHint, OutputHints, PipelineStep,
+    QueryDocument, ValueFilter, ValuePredicate, WindowSpec, WriteHints, WriteTarget,
 };
 
 pub(super) struct QueryDocumentWire<'a> {
@@ -59,8 +59,8 @@ where
     if let Some(filter) = &doc.filter {
         serialize_filter(map, filter)?;
     }
-    if let Some(keys) = &doc.group_by {
-        map.serialize_entry("group_by", keys)?;
+    if let Some(group_by) = &doc.group_by {
+        serialize_group_by(map, group_by)?;
     }
     if let Some(window) = &doc.window {
         serialize_window(map, window)?;
@@ -183,6 +183,37 @@ where
         .collect();
     obj.insert("axes".to_owned(), serde_json::Value::Array(axes));
     map.serialize_entry("align", &serde_json::Value::Object(obj))?;
+    Ok(())
+}
+
+fn serialize_group_by<S>(map: &mut S, group_by: &GroupBySpec) -> Result<(), S::Error>
+where
+    S: SerializeMap,
+{
+    match group_by {
+        GroupBySpec::Axes(keys) => {
+            map.serialize_entry("group_by", keys)?;
+        }
+        GroupBySpec::Labels { axes } => {
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "by".to_owned(),
+                serde_json::Value::String("labels".to_owned()),
+            );
+            let axes_v: Vec<serde_json::Value> = axes
+                .iter()
+                .map(|a| {
+                    if let Ok(idx) = a.parse::<u64>() {
+                        serde_json::json!(idx)
+                    } else {
+                        serde_json::Value::String(a.clone())
+                    }
+                })
+                .collect();
+            obj.insert("axes".to_owned(), serde_json::Value::Array(axes_v));
+            map.serialize_entry("group_by", &serde_json::Value::Object(obj))?;
+        }
+    }
     Ok(())
 }
 

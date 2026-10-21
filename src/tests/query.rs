@@ -818,7 +818,13 @@ fn group_by_named_dimension_streams_fold() {
     let doc = parse_query_json(r#"{"dataset":"a","group_by":["col"],"sum":[]}"#).unwrap();
     validate_query(&doc).unwrap();
     let roundtrip = parse_query_json(&serde_json::to_string(&doc).unwrap()).unwrap();
-    assert_eq!(roundtrip.group_by.as_deref(), Some(&["col".to_owned()][..]));
+    assert_eq!(
+        roundtrip
+            .group_by
+            .as_ref()
+            .map(crate::query::GroupBySpec::axes),
+        Some(&["col".to_owned()][..])
+    );
 
     let mmap = mmap_file_read(&path).unwrap();
     let plan = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
@@ -853,6 +859,126 @@ fn group_by_tier_c_materializes() {
 }
 
 #[test]
+fn group_by_labels_collapses_repeated_coords() {
+    use crate::catalog::{
+        CoordAxisV1, DatasetMetadataV1, FooterBlobV1, TetMetadataV1, write_footer_blob,
+    };
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("group_by_labels.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    write_footer_blob(
+        &path,
+        &FooterBlobV1 {
+            history: Vec::new(),
+            metadata: Some(TetMetadataV1 {
+                datasets: [(
+                    "a".to_owned(),
+                    DatasetMetadataV1 {
+                        dim_names: Some(vec!["row".to_owned(), "col".to_owned()]),
+                        coords: Some(
+                            [(
+                                "col".to_owned(),
+                                CoordAxisV1 {
+                                    labels: vec![
+                                        "east".to_owned(),
+                                        "east".to_owned(),
+                                        "west".to_owned(),
+                                    ],
+                                },
+                            )]
+                            .into_iter()
+                            .collect(),
+                        ),
+                        ..Default::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            }),
+            metadata_ref: None,
+        },
+    )
+    .unwrap();
+
+    let doc =
+        parse_query_json(r#"{"dataset":"a","group_by":{"by":"labels","axes":["col"]},"sum":[]}"#)
+            .unwrap();
+    validate_query(&doc).unwrap();
+    assert!(
+        doc.group_by
+            .as_ref()
+            .is_some_and(crate::query::GroupBySpec::by_labels)
+    );
+    let roundtrip = parse_query_json(&serde_json::to_string(&doc).unwrap()).unwrap();
+    assert_eq!(roundtrip.group_by, doc.group_by);
+
+    let mmap = mmap_file_read(&path).unwrap();
+    let plan = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    assert_eq!(ex.memory_strategy, Some("streaming_fold"));
+    assert_eq!(ex.group_count, Some(2));
+    assert_eq!(ex.operation_reduced_shape.as_deref(), Some(&[2u64][..]));
+    let sums = ex.operation_reduced_sum.as_ref().unwrap();
+    assert_eq!(sums.len(), 2);
+    // Index group_by col sums were 5, 7, 9 — east collapses col0+col1.
+    assert!((sums[0] - 12.0).abs() < 1e-5);
+    assert!((sums[1] - 9.0).abs() < 1e-5);
+}
+
+#[test]
+fn group_by_labels_missing_coords_fail_closed() {
+    use crate::catalog::{DatasetMetadataV1, FooterBlobV1, TetMetadataV1, write_footer_blob};
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("group_by_labels_missing.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    write_footer_blob(
+        &path,
+        &FooterBlobV1 {
+            history: Vec::new(),
+            metadata: Some(TetMetadataV1 {
+                datasets: [(
+                    "a".to_owned(),
+                    DatasetMetadataV1 {
+                        dim_names: Some(vec!["row".to_owned(), "col".to_owned()]),
+                        ..Default::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            }),
+            metadata_ref: None,
+        },
+    )
+    .unwrap();
+
+    let doc =
+        parse_query_json(r#"{"dataset":"a","group_by":{"by":"labels","axes":["col"]},"sum":[]}"#)
+            .unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let err = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap_err();
+    assert!(err.to_string().contains("coordinate labels"));
+}
+
+#[test]
+fn group_by_labels_wire_rejects_unknown() {
+    let unknown = parse_query_json(
+        r#"{"dataset":"a","group_by":{"by":"labels","axes":["0"],"how":"dense"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(unknown.to_string().contains("unknown field `group_by"));
+
+    let bad_by =
+        parse_query_json(r#"{"dataset":"a","group_by":{"by":"values","axes":["0"]},"sum":[]}"#)
+            .unwrap_err();
+    assert!(bad_by.to_string().contains("group_by.by"));
+}
+
+#[test]
 fn pipeline_lowers_to_group_by_fold() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("pipeline.tet");
@@ -861,7 +987,10 @@ fn pipeline_lowers_to_group_by_fold() {
     let doc = parse_query_json(raw).unwrap();
     validate_query(&doc).unwrap();
     assert!(doc.pipeline.as_ref().is_some_and(|steps| steps.len() == 2));
-    assert_eq!(doc.group_by.as_deref(), Some(&["1".to_owned()][..]));
+    assert_eq!(
+        doc.group_by.as_ref().map(crate::query::GroupBySpec::axes),
+        Some(&["1".to_owned()][..])
+    );
     let again = parse_query_json(&serde_json::to_string(&doc).unwrap()).unwrap();
     assert_eq!(again.group_by, doc.group_by);
     assert!(again.pipeline.is_some());

@@ -209,8 +209,8 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
     if let Some(filter) = &doc.filter {
         validate_value_filter(filter, &limits)?;
     }
-    if let Some(keys) = &doc.group_by {
-        validate_group_by(keys, doc.operation.as_ref(), &limits)?;
+    if let Some(group_by) = &doc.group_by {
+        validate_group_by(group_by.axes(), doc.operation.as_ref(), &limits)?;
     }
     if let Some(window) = &doc.window {
         validate_window(

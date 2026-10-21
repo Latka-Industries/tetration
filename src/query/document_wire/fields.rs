@@ -1,11 +1,11 @@
-//! Parse selection, group_by, window, spill, write, and execution fields.
+//! Parse selection, `group_by`, window, spill, write, and execution fields.
 
 use serde_json::Value;
 
 use super::super::document::QueryLimits;
 use super::super::types::{
-    AlignSpec, AxisSlice, ExecutionDeviceHint, ExecutionHints, OutputHint, OutputHints, TetError,
-    WindowMode, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AxisSlice, ExecutionDeviceHint, ExecutionHints, GroupBySpec, OutputHint,
+    OutputHints, TetError, WindowMode, WindowSpec, WriteHints, WriteTarget,
 };
 use super::operation::parse_axis_spec_item;
 
@@ -75,18 +75,65 @@ pub(super) fn parse_align(v: &Value) -> Result<AlignSpec, TetError> {
     Ok(AlignSpec { with, axes })
 }
 
-pub(super) fn parse_group_by(v: &Value) -> Result<Vec<String>, TetError> {
-    let arr = v.as_array().ok_or_else(|| {
-        TetError::Validation("`group_by` must be an array of dimension names or indices".into())
+pub(super) fn parse_group_by(v: &Value) -> Result<GroupBySpec, TetError> {
+    if let Some(arr) = v.as_array() {
+        return Ok(GroupBySpec::Axes(parse_group_by_axes(arr, "`group_by`")?));
+    }
+    let obj = v.as_object().ok_or_else(|| {
+        TetError::Validation(
+            "`group_by` must be an array of dimension names/indices or `{ \"by\": \"labels\", \"axes\": [...] }`"
+                .into(),
+        )
     })?;
+    for key in obj.keys() {
+        if !matches!(key.as_str(), "by" | "axes") {
+            return Err(TetError::Validation(format!(
+                "unknown field `group_by.{key}`"
+            )));
+        }
+    }
+    let by = match obj.get("by") {
+        None => {
+            return Err(TetError::Validation(
+                "`group_by.by` is required (`labels`)".into(),
+            ));
+        }
+        Some(v) => v
+            .as_str()
+            .ok_or_else(|| TetError::Validation("`group_by.by` must be a string".into()))?,
+    };
+    if by != "labels" {
+        return Err(TetError::Validation(format!(
+            "unknown group_by.by `{by}` (expected labels)"
+        )));
+    }
+    let axes = match obj.get("axes") {
+        None => {
+            return Err(TetError::Validation(
+                "`group_by.axes` is required when `by` is `labels`".into(),
+            ));
+        }
+        Some(v) => {
+            let arr = v.as_array().ok_or_else(|| {
+                TetError::Validation(
+                    "`group_by.axes` must be an array of dimension names or indices".into(),
+                )
+            })?;
+            parse_group_by_axes(arr, "`group_by.axes`")?
+        }
+    };
+    Ok(GroupBySpec::Labels { axes })
+}
+
+fn parse_group_by_axes(arr: &[Value], label: &str) -> Result<Vec<String>, TetError> {
     if arr.is_empty() {
-        return Err(TetError::Validation(
-            "`group_by` must list at least one dimension".into(),
-        ));
+        return Err(TetError::Validation(format!(
+            "{label} must list at least one dimension"
+        )));
     }
     if arr.len() > QueryLimits::DEFAULT.max_group_by_keys {
         return Err(TetError::Validation(format!(
-            "`group_by` has {} keys; maximum is {}",
+            "{label} has {} keys; maximum is {}",
             arr.len(),
             QueryLimits::DEFAULT.max_group_by_keys
         )));

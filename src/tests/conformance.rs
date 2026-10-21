@@ -93,6 +93,7 @@ fn assert_expect_number(ex: &crate::query::QueryExecutionPreview, key: &str, wan
         "execution.operation_var" => ex.operation_var,
         "execution.operation_element_count" => ex.operation_element_count.map(|n| n as f64),
         "execution.window_count" => ex.window_count.map(|n| n as f64),
+        "execution.group_count" => ex.group_count.map(|n| n as f64),
         other => panic!("unsupported expect key `{other}` — extend conformance runner"),
     };
     let got = got.unwrap_or_else(|| panic!("missing {key} in execution preview"));
@@ -276,6 +277,8 @@ fn conformance_reject_query_files_exist() {
         "conformance/reject/queries/unknown_align_field.json",
         "conformance/reject/queries/align_with_reduction.json",
         "conformance/reject/queries/align_empty_axes.json",
+        "conformance/reject/queries/unknown_group_by_field.json",
+        "conformance/reject/queries/group_by_labels_bad_by.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
@@ -288,17 +291,18 @@ fn conformance_accept_query_files_exist() {
         "conformance/accept/queries/window_bins_sum_col.json",
         "conformance/accept/queries/window_rolling_sum_col.json",
         "conformance/accept/queries/align_pair_ok.json",
+        "conformance/accept/queries/group_by_labels_col_sum.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
 }
 
 #[test]
-fn conformance_spec_milestone_is_0_6_1() {
+fn conformance_spec_milestone_is_0_6_2() {
     let path = repo_root().join("conformance/manifest.v1.json");
     let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(
         v.get("spec_milestone").and_then(|x| x.as_str()),
-        Some("0.6.1")
+        Some("0.6.2")
     );
 }

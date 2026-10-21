@@ -94,6 +94,8 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.6.1:** `window.mode` → `bins` / `rolling` (reject-closed on `tumbling` / `sliding`); multi-dataset **`align`** checks; conformance pack milestone **0.6.1** (THI-594). Layout / package / C ABI unchanged. PyPI **tet-py 0.6.1** pins this crate.
 
+**Shipped in 0.6.2:** `group_by` labels form (`{ "by": "labels", "axes": [...] }`) collapses repeated footer coordinate labels; array form unchanged; conformance pack milestone **0.6.2** (THI-596). Layout / package / C ABI unchanged.
+
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Indexes stay optional, verifiable, and outside the v1 byte layout.
 
 **Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**. The posting list does not change `packed.tet`.
@@ -129,7 +131,7 @@ GROUP BY region
 
 **Design tension:** scientists want expressive analytics; the format wants a small, auditable control plane. Any extension should declare **tiers** (scalar fold vs materialize-required) and stay JSON/TOML-serializable for agents and FFI.
 
-**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. **Windowed stats** along a named axis shipped in **0.6.0** (`window` wire). Multi-dataset alignment shipped in **0.6.1**. Label-value group-by remains later (**0.6.2**). Filter-by-value pushdown shipped in 0.4.1.
+**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. **Windowed stats** along a named axis shipped in **0.6.0** (`window` wire). Multi-dataset alignment shipped in **0.6.1**. Label-value group-by shipped in **0.6.2**. Filter-by-value pushdown shipped in 0.4.1.
 
 ---
 

@@ -12,6 +12,40 @@ pub(crate) struct PartialAxisLayout {
     pub axis_set: BTreeSet<usize>,
     pub out_shape: Vec<u64>,
     pub out_len: usize,
+    /// When set (label-value `group_by`), kept-axis coords remap through these maps.
+    kept_remap: Option<Vec<Vec<usize>>>,
+}
+
+impl PartialAxisLayout {
+    /// Map full-rank coords to a linear index in the reduced output.
+    pub(crate) fn reduced_index(&self, coords: &[usize]) -> Result<usize, TetError> {
+        let mut out_c = Vec::with_capacity(self.out_shape.len());
+        let mut kept_i = 0usize;
+        for (d, &c) in coords.iter().enumerate() {
+            if self.axis_set.contains(&d) {
+                continue;
+            }
+            let mapped = match &self.kept_remap {
+                None => c,
+                Some(maps) => {
+                    let map = maps.get(kept_i).ok_or_else(|| {
+                        TetError::Validation(
+                            "internal: label group remap missing a kept axis".into(),
+                        )
+                    })?;
+                    *map.get(c).ok_or_else(|| {
+                        TetError::Validation(format!(
+                            "internal: label group remap index {c} out of range (len {})",
+                            map.len()
+                        ))
+                    })?
+                }
+            };
+            out_c.push(mapped);
+            kept_i += 1;
+        }
+        linear_rm_index(&out_c, &self.out_shape)
+    }
 }
 
 pub(crate) fn parse_axis_indices(labels: &[String], ndim: usize) -> Result<Vec<usize>, TetError> {
@@ -65,28 +99,40 @@ pub(crate) fn partial_axis_layout(
                 .into(),
         ));
     }
-    let out_shape = out_shape(shape, &axis_indices);
+    let axis_set: BTreeSet<usize> = axis_indices.iter().copied().collect();
+    let (out_shape, kept_remap) = match &plan.label_group_remap {
+        None => (out_shape(shape, &axis_indices), None),
+        Some(remap) => {
+            let kept_dims: Vec<usize> = (0..ndim).filter(|d| !axis_set.contains(d)).collect();
+            if remap.maps.len() != kept_dims.len() || remap.extents.len() != kept_dims.len() {
+                return Err(TetError::Validation(format!(
+                    "internal: label group remap has {} maps for {} kept axes",
+                    remap.maps.len(),
+                    kept_dims.len()
+                )));
+            }
+            for (i, &d) in kept_dims.iter().enumerate() {
+                let extent = usize::try_from(shape[d]).map_err(|_| {
+                    TetError::Validation("selection extent does not fit usize".into())
+                })?;
+                if remap.maps[i].len() != extent {
+                    return Err(TetError::Validation(format!(
+                        "internal: label group remap for axis {d} has len {}, expected {extent}",
+                        remap.maps[i].len()
+                    )));
+                }
+            }
+            (remap.extents.clone(), Some(remap.maps.clone()))
+        }
+    };
     let out_len = shape_product_usize(&out_shape)?;
     Ok(PartialAxisLayout {
-        axis_set: axis_indices.iter().copied().collect(),
         axis_indices,
+        axis_set,
         out_shape,
         out_len,
+        kept_remap,
     })
-}
-
-pub(crate) fn reduced_index(
-    coords: &[usize],
-    axis_set: &BTreeSet<usize>,
-    out_shape: &[u64],
-) -> Result<usize, TetError> {
-    let mut out_c = Vec::new();
-    for (d, &c) in coords.iter().enumerate() {
-        if !axis_set.contains(&d) {
-            out_c.push(c);
-        }
-    }
-    linear_rm_index(&out_c, out_shape)
 }
 
 pub(crate) fn fiber_linear_index(
@@ -106,7 +152,7 @@ pub(crate) fn reduced_cell_index(
     layout: &PartialAxisLayout,
 ) -> Result<(usize, u64), TetError> {
     let coords = coords_from_linear_row_major(li, shape)?;
-    let oi = reduced_index(&coords, &layout.axis_set, &layout.out_shape)?;
+    let oi = layout.reduced_index(&coords)?;
     let fi = fiber_linear_index(&coords, &layout.axis_indices, shape)? as u64;
     Ok((oi, fi))
 }

@@ -1,0 +1,5 @@
+{
+  "dataset": "a",
+  "group_by": { "by": "values", "axes": ["0"] },
+  "sum": []
+}

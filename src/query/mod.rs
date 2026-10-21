@@ -18,6 +18,7 @@ pub(crate) mod engine;
 mod execute;
 pub(crate) mod fold;
 mod gpu;
+mod label_group;
 pub(crate) mod materialize;
 mod plan;
 pub(crate) mod resolve_axes;
@@ -68,8 +69,8 @@ pub use execute::{ExecuteQueryOptions, execute_query_document, execute_query_jso
 pub use plan::fetch::{chunk_payload_ranges, plan_query_fetch};
 pub use types::{
     AlignSpec, AlignmentAxisResult, AlignmentResult, AxisSlice, CHUNK_TOUCH_POLICY,
-    ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint, ExecutionHints, Operation,
-    OutputHint, OutputHints, PlannedChunkIo, QueryDocument, QueryExecutionPreview, QueryResponse,
-    ReadPlan, TetError, TransformMethod, ValueCompareOp, ValueFilter, ValuePredicate, WindowMode,
-    WindowSpec, WriteHints, WriteTarget,
+    ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint, ExecutionHints, GroupBySpec,
+    Operation, OutputHint, OutputHints, PlannedChunkIo, QueryDocument, QueryExecutionPreview,
+    QueryResponse, ReadPlan, TetError, TransformMethod, ValueCompareOp, ValueFilter,
+    ValuePredicate, WindowMode, WindowSpec, WriteHints, WriteTarget,
 };

@@ -44,8 +44,8 @@ pub(crate) fn resolve_query_document_axes(
     ndim: usize,
 ) -> Result<(), TetError> {
     let dim_names = dataset_meta.and_then(|m| m.dim_names.as_deref());
-    if let Some(keys) = doc.group_by.as_mut() {
-        for label in keys.iter_mut() {
+    if let Some(group_by) = doc.group_by.as_mut() {
+        for label in group_by.axes_mut() {
             *label = resolve_one_axis_label(label, dim_names, ndim)?;
         }
     }
@@ -68,7 +68,7 @@ pub(crate) fn resolve_query_document_axes(
 
 /// Reduction axes are the complement of `group_by` when omitted, and must partition rank otherwise.
 fn apply_group_by_partition(doc: &mut QueryDocument, ndim: usize) -> Result<(), TetError> {
-    let Some(keys) = doc.group_by.as_ref() else {
+    let Some(group_by) = doc.group_by.as_ref() else {
         return Ok(());
     };
     let Some(op) = doc.operation.as_mut() else {
@@ -76,7 +76,7 @@ fn apply_group_by_partition(doc: &mut QueryDocument, ndim: usize) -> Result<(), 
             "`group_by` requires a reduction (for example `\"sum\": []`)".into(),
         ));
     };
-    let group_idx = axis_index_set(keys)?;
+    let group_idx = axis_index_set(group_by.axes())?;
     if op.axes().is_empty() {
         let reduce: Vec<String> = (0..ndim)
             .filter(|i| !group_idx.contains(i))
