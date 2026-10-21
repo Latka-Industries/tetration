@@ -94,9 +94,24 @@ depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --tet-device auto"
 
 [tasks."bench:cpu"]
-description = "Large/extra_large bench — .tet queries forced to CPU (all formats)"
+description = "Default ops (scalar+QC: mean/sum/min/max/…) — large+extra, all formats, CPU"
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --tet-device cpu"
+
+[tasks."bench:scalar"]
+description = "Scalar folds only (mean/sum/min/max/count/std/var) — large+extra, all formats, CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large --ops scalar --tet-device cpu"
+
+[tasks."bench:transforms"]
+description = "Transform ops (zscore…softmax) vs fair NumPy peers — large tier, all formats, CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large --tier large --ops transforms --tet-device cpu"
+
+[tasks."bench:full"]
+description = "ALL ops (scalar+QC+windows+transforms) × large+extra × all formats — CPU; expect ≥1 hour"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large --ops all --tet-device cpu"
 
 [tasks."bench:gpu"]
 description = "Large/extra_large bench — .tet queries on CUDA device 0 (all formats; needs --features tetration-gpu)"

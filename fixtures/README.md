@@ -105,14 +105,17 @@ For CPU-only timing comparisons, use **`mise run bench:cpu`**. GPU backends are 
 ```bash
 mise run bench              # alias for bench:auto (all formats)
 mise run bench:auto         # execution.device auto (Metal on macOS with tetration-metal, else CUDA/CPU)
-mise run bench:cpu          # force CPU streaming fold (recommended baseline)
+mise run bench:cpu          # default ops (scalar+QC) on large+extra, all formats, CPU
+mise run bench:scalar       # mean/sum/min/max/count/std/var only (CPU)
+mise run bench:transforms   # zscore…softmax vs fair NumPy peers — large, all formats, CPU
+mise run bench:windows      # h5 large only: window bins/rolling vs NumPy (CPU)
+mise run bench:full         # ALL ops × large+extra × all formats — CPU; expect ≥1 hour
 mise run bench:metal        # macOS: --features tetration-metal, device metal (large tier only useful)
 mise run bench:gpu          # Linux+NVIDIA: --features tetration-gpu, device cuda
 mise run bench:h5           # one format only (auto device)
 uv run --directory fixtures bench-large --run-id my-run   # archived under bench_results/runs/
 uv run --directory fixtures bench-large --skip-mean   # convert timing only
 uv run --directory fixtures bench-large --ops transforms   # + transform_zscore, …, transform_softmax
-mise run bench:windows                                   # h5 large only: windows vs NumPy (CPU)
 uv run --directory fixtures bench-large h5 --tier large --ops windows --tet-device cpu
 uv run --directory fixtures bench-large --tier large --ops mean,sum
 uv run --directory fixtures bench-large --tier all --ops all
