@@ -39,6 +39,10 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.6.5:** optional `sorted_axis_range` secondary index + planner pushdown (THI-613); fold
+//! Sum/Mean dense multi-dim slab path and sum-only SIMD; `bench:index` vs HDF5+NumPy. Layout /
+//! package / C ABI / pack milestone unchanged from 0.6.3.
+//!
 //! **0.6.4:** hygiene after the 0.6.0–0.6.3 query wave (DRY window/fold paths, pedantic +
 //! window-edge fuzz, broader benches, ephemeral `write: switch` spills). Layout / package /
 //! C ABI / pack milestone unchanged from 0.6.3 (THI-607 / THI-608).
