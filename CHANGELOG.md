@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-21
+
 ### Added
 
 - Query wire **`window`**: closed `{ axis, size, mode }` (`tumbling` | `sliding`) for windowed tier-A/B reductions along one named axis on a sealed generation (THI-595). Empty reduction axes reduce only within each window; `execution.window_count` reports the window axis length. Not valid with `group_by`, transform, covariance/correlation, or materialize-required ops. Pipeline reduce steps may carry `window`. Conformance pack milestone **0.6.0** adds accept + reject fixtures.
+
+### Notes
+
+- Semver minor: first query-wire change since the 0.5.2 SPEC freeze. PyPI **tet-py** stays on **0.5.4** until pin after crates.io shows 0.6.0.
 
 ## [0.5.4] - 2026-10-20
 
