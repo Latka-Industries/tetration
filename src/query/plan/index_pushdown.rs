@@ -131,11 +131,7 @@ pub(crate) fn sorted_axis_chunk_allowlist(
             Some(prev) => prev.intersection(&set).cloned().collect(),
         });
     }
-    if saw_entry {
-        combined
-    } else {
-        None
-    }
+    if saw_entry { combined } else { None }
 }
 
 /// Intersect optional allow-lists. `None` means “no constraint from that kind”.

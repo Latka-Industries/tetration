@@ -8,8 +8,8 @@ use crate::catalog::zone::sha256_hex;
 use crate::catalog::{
     CatalogError, DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
     SECONDARY_INDEX_FILE, SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, TetPackage,
-    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, secondary_index_for_packed,
-    known_index_entries, zone_maps_for_packed,
+    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, known_index_entries,
+    secondary_index_for_packed, zone_maps_for_packed,
 };
 
 use super::options::VerifyOptions;

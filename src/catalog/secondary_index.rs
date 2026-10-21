@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use super::metadata::{CoordAxisV1, DatasetMetadataV1};
 use super::zone::{fill_le_bytes, hex_le, sha256_hex, stored_payload};
 use super::{
-    CHUNK_PAYLOAD_CODEC_V1, CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1,
-    TetFileSummaryV1, elem_size_for_wire_tag, read_tet_summary_v1,
+    CHUNK_PAYLOAD_CODEC_V1, CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1, TetFileSummaryV1,
+    elem_size_for_wire_tag, read_tet_summary_v1,
 };
 
 /// File name beside `packed.tet` inside `generations/<G>/`.
@@ -262,8 +262,7 @@ fn sorted_axis_entries_for_summary(
         };
         let ndim = dataset.shape.len();
         for axis in 0..ndim {
-            let Some((values, ascending)) =
-                monotonic_numeric_axis(meta, axis, dataset.shape[axis])
+            let Some((values, ascending)) = monotonic_numeric_axis(meta, axis, dataset.shape[axis])
             else {
                 continue;
             }; // lookup uses shape extent when dim_names are absent (HDF5 CF import)
@@ -348,7 +347,7 @@ fn axis_segments(
     values: &[f64],
 ) -> Result<Vec<SortedAxisSegment>, CatalogError> {
     let ndim = dataset.shape.len();
-    let chunk_len = dataset.chunk_shape.get(axis).copied().ok_or_else(|| {
+    let chunk_len = dataset.chunk_shape.get(axis).copied().ok_or({
         CatalogError::InvalidWriteSpec("chunk_shape missing axis while building sorted-axis index")
     })?;
     if chunk_len == 0 {
@@ -357,20 +356,21 @@ fn axis_segments(
         ));
     }
     let n_axis_chunks = dataset.shape[axis].div_ceil(chunk_len);
-    let mut segments = Vec::with_capacity(
-        usize::try_from(n_axis_chunks).map_err(|_| CatalogError::TooLargeForPlatform {
+    let mut segments = Vec::with_capacity(usize::try_from(n_axis_chunks).map_err(|_| {
+        CatalogError::TooLargeForPlatform {
             field: "axis_chunks",
             value: n_axis_chunks,
-        })?,
-    );
+        }
+    })?);
     for c in 0..n_axis_chunks {
-        let g0 = c.checked_mul(chunk_len).ok_or(CatalogError::InvalidWriteSpec(
-            "sorted-axis chunk start overflow",
-        ))?;
+        let g0 = c
+            .checked_mul(chunk_len)
+            .ok_or(CatalogError::InvalidWriteSpec(
+                "sorted-axis chunk start overflow",
+            ))?;
         let g1 = (c.saturating_add(1))
             .checked_mul(chunk_len)
-            .map(|v| v.min(dataset.shape[axis]))
-            .unwrap_or(dataset.shape[axis]);
+            .map_or(dataset.shape[axis], |v| v.min(dataset.shape[axis]));
         let start = usize::try_from(g0).map_err(|_| CatalogError::TooLargeForPlatform {
             field: "axis_start",
             value: g0,
@@ -392,10 +392,7 @@ fn axis_segments(
         let mut chunks: Vec<Vec<u64>> = summary
             .chunks
             .iter()
-            .filter(|e| {
-                e.dataset_id == dataset_id
-                    && e.chunk_index.get(axis).copied() == Some(c)
-            })
+            .filter(|e| e.dataset_id == dataset_id && e.chunk_index.get(axis).copied() == Some(c))
             .map(|e| e.chunk_index[..ndim].to_vec())
             .collect();
         chunks.sort();

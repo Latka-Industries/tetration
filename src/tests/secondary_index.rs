@@ -339,21 +339,11 @@ fn execute_sum(packed: &std::path::Path, bytes: &[u8], query: &str) -> crate::qu
 
 fn publish_f32_with_sorted_time(pkg: &TetPackage, generation: u64, vals: &[f32]) {
     let labels: Vec<String> = (0..vals.len()).map(|i| format!("{}.0", i * 10)).collect();
-    let mut ds = TetDatasetWrite::f32_row_major(
-        "a",
-        &[vals.len() as u64],
-        &[2],
-        f32_le(vals),
-    )
-    .unwrap();
+    let mut ds =
+        TetDatasetWrite::f32_row_major("a", &[vals.len() as u64], &[2], f32_le(vals)).unwrap();
     ds.dim_names = Some(vec!["time".to_owned()]);
     let mut coords = BTreeMap::new();
-    coords.insert(
-        "time".to_owned(),
-        CoordAxisV1 {
-            labels,
-        },
-    );
+    coords.insert("time".to_owned(), CoordAxisV1 { labels });
     ds.coords = Some(coords);
     let mut w = TetShardWriter::create(pkg, "s", "only").unwrap();
     w.push_dataset(ds).unwrap();
@@ -391,13 +381,8 @@ fn publish_writes_sorted_axis_range_for_monotonic_coords() {
     assert_eq!(segments[0].chunks, vec![vec![0]]);
     assert_eq!(segments[1].chunks, vec![vec![1]]);
 
-    let report = verify_tet_package_with_options(
-        pkg.root(),
-        VerifyOptions {
-            deep_decode: true,
-        },
-    )
-    .unwrap();
+    let report =
+        verify_tet_package_with_options(pkg.root(), VerifyOptions { deep_decode: true }).unwrap();
     assert!(report.ok, "{:?}", report.findings);
 }
 
@@ -411,7 +396,8 @@ fn sorted_axis_selection_matches_with_or_without_index() {
     let packed = pkg.packed_tet_path(1);
     let bytes = fs::read(&packed).unwrap();
     // Labels "20.0".."40.0" → indices 2..4 → chunk 1 only; sum = 3+4 = 7
-    let query = r#"{"dataset":"a","selection":[{"start_label":"20.0","stop_label":"40.0"}],"sum":[]}"#;
+    let query =
+        r#"{"dataset":"a","selection":[{"start_label":"20.0","stop_label":"40.0"}],"sum":[]}"#;
 
     let hit = execute_sum(&packed, &bytes, query);
     let plan = hit.read_plan.expect("plan");
@@ -441,12 +427,7 @@ fn unsorted_coords_omit_sorted_axis_kind() {
     coords.insert(
         "time".to_owned(),
         CoordAxisV1 {
-            labels: vec![
-                "10.0".into(),
-                "30.0".into(),
-                "20.0".into(),
-                "40.0".into(),
-            ],
+            labels: vec!["10.0".into(), "30.0".into(), "20.0".into(), "40.0".into()],
         },
     );
     ds.coords = Some(coords);
