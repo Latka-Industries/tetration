@@ -1,0 +1,5 @@
+{
+  "dataset": "temperature",
+  "window": { "axis": 1, "size": 2, "mode": "bins", "min_count": 0 },
+  "sum": []
+}
