@@ -39,6 +39,10 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.6.4:** hygiene after the 0.6.0–0.6.3 query wave (DRY window/fold paths, pedantic +
+//! window-edge fuzz, broader benches, ephemeral `write: switch` spills). Layout / package /
+//! C ABI / pack milestone unchanged from 0.6.3 (THI-607 / THI-608).
+//!
 //! **0.6.3:** `window` `pad` / `step` / `align` / `min_count` + multi-dtype windowed folds;
 //! conformance pack milestone 0.6.3 (THI-606). Layout / package / C ABI unchanged.
 //!

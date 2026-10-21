@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-21
+
+### Changed
+
+- Hygiene after the 0.6.0–0.6.3 window / align / label `group_by` / pad wave (THI-607): DRY query / window / fold module boundaries, clippy pedantic cleanups, and fuzz growth for `window` `pad` / `step` / `align` / `min_count` parse + geometry edges.
+- Fixture / `mise bench:*` matrix covers scalar + QC, windows, and transforms with fair source peers; `bench:scalar`, `bench:transforms`, `bench:windows`, and `bench:full` (≥1 hour) (THI-608).
+- `write: switch` over budget uses an ephemeral cache spill (`TempSpillFile`) that is deleted when the query ends — same contract as materialize temp spills; durable export still requires `write: spill` or an explicit path (THI-608).
+
+### Notes
+
+- Semver patch: hygiene + benches + spill cleanup only. Layout / query wire / conformance pack milestone unchanged (**0.6.3**). PyPI **tet-py** stays on **0.6.3** until pin after crates.io shows 0.6.4.
+
 ## [0.6.3] - 2026-10-21
 
 ### Added
