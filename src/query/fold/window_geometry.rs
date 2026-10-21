@@ -207,18 +207,24 @@ fn bins_window_start(layout: &WindowAxisLayout, w: usize) -> i64 {
         WindowAlign::Start => i64::try_from(w.saturating_mul(layout.size)).unwrap_or(0),
         WindowAlign::End => {
             // Short remainder at the start: last window ends at `extent`.
-            let rem = layout.extent % layout.size;
-            let offset = if rem == 0 { 0 } else { rem };
-            // Window 0 starts at 0 with length `offset` (or `size` when rem==0).
+            let rem = bins_end_remainder(layout.extent, layout.size);
+            // Window 0 starts at 0 with length `rem` (or `size` when rem==0).
             // Subsequent windows are full `size` chunks.
             if w == 0 {
                 0
             } else {
-                let start = offset + (w - 1) * layout.size;
+                let start = rem + (w - 1) * layout.size;
                 i64::try_from(start).unwrap_or(0)
             }
         }
     }
+}
+
+/// Short first-bin length under [`WindowAlign::End`] (`0` when extent divides evenly).
+#[must_use]
+fn bins_end_remainder(extent: u64, size: u64) -> u64 {
+    let rem = extent % size;
+    if rem == 0 { 0 } else { rem }
 }
 
 /// In-bounds axis length for window `w` (before pad).
@@ -303,7 +309,7 @@ fn bins_window_for_coord(layout: &WindowAxisLayout, c: u64) -> Result<usize, Tet
     let w = match layout.align {
         WindowAlign::Start => c / layout.size,
         WindowAlign::End => {
-            let rem = layout.extent % layout.size;
+            let rem = bins_end_remainder(layout.extent, layout.size);
             if rem == 0 {
                 c / layout.size
             } else if c < rem {
@@ -339,4 +345,68 @@ pub(crate) fn window_fiber_index(
         ));
     }
     u64::try_from(fiber).map_err(|_| TetError::Validation("window fiber overflow".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    fn layout_bins(extent: u64, size: u64, align: WindowAlign) -> WindowAxisLayout {
+        let window_count = usize::try_from(extent.div_ceil(size)).unwrap();
+        WindowAxisLayout {
+            window_axis: 0,
+            size,
+            mode: WindowMode::Bins,
+            pad: WindowPad::None,
+            step: 1,
+            align,
+            min_count: 1,
+            window_count,
+            first_start: 0,
+            other_reduce_product: 1,
+            reduce_set: BTreeSet::from([0]),
+            out_shape: vec![u64::try_from(window_count).unwrap()],
+            out_len: window_count,
+            out_window_dim: 0,
+            extent,
+        }
+    }
+
+    #[test]
+    fn bins_end_remainder_and_covering_agree() {
+        let layout = layout_bins(5, 2, WindowAlign::End);
+        assert_eq!(bins_end_remainder(5, 2), 1);
+        assert_eq!(window_start(&layout, 0), 0);
+        assert_eq!(window_start(&layout, 1), 1);
+        assert_eq!(window_start(&layout, 2), 3);
+        // Short first bin: only coord 0 maps to window 0; then pairs [1,2] and [3,4].
+        assert_eq!(windows_covering(&[0], &layout).unwrap(), vec![0]);
+        assert_eq!(windows_covering(&[1], &layout).unwrap(), vec![1]);
+        assert_eq!(windows_covering(&[2], &layout).unwrap(), vec![1]);
+        assert_eq!(windows_covering(&[4], &layout).unwrap(), vec![2]);
+    }
+
+    #[test]
+    fn rolling_step_covering_can_overlap() {
+        let layout = WindowAxisLayout {
+            window_axis: 0,
+            size: 3,
+            mode: WindowMode::Rolling,
+            pad: WindowPad::None,
+            step: 2,
+            align: WindowAlign::Start,
+            min_count: 1,
+            window_count: 2,
+            first_start: 0,
+            other_reduce_product: 1,
+            reduce_set: BTreeSet::from([0]),
+            out_shape: vec![2],
+            out_len: 2,
+            out_window_dim: 0,
+            extent: 5,
+        };
+        // Cell 2 is in window 0 ([0,3)) and window 1 ([2,5)).
+        assert_eq!(windows_covering(&[2], &layout).unwrap(), vec![0, 1]);
+    }
 }

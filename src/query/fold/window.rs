@@ -25,7 +25,7 @@ pub(crate) struct WindowFoldInput<'a> {
 /// Stream a windowed reduction without allocating the full logical tensor.
 ///
 /// Supports all wire dtypes (promoted to `f64` accumulators). Pad / step / align /
-/// min_count follow [`WindowSpec`].
+/// `min_count` follow [`WindowSpec`].
 pub(crate) fn fold_read_plan_window_operation(
     input: &WindowFoldInput<'_>,
 ) -> Result<shared::FoldPlanOutcome, TetError> {
@@ -296,6 +296,12 @@ impl WindowPreview {
         }
     }
 
+    /// Best-effort preview store; intentional truncating / sign casts from `f64`.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     fn store(&mut self, li: usize, v: f64) {
         match self {
             Self::F32(buf) => {

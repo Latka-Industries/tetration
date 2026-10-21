@@ -378,7 +378,7 @@ impl WindowSpec {
     ///
     /// # Errors
     ///
-    /// [`TetError::Validation`] when size/step/min_count or rolling/`align`/`pad` combos are invalid.
+    /// [`TetError::Validation`] when `size` / `step` / `min_count` or rolling/`align`/`pad` combos are invalid.
     pub fn validate_cross_fields(&self) -> Result<(), TetError> {
         if self.size == 0 {
             return Err(TetError::Validation("`window.size` must be >= 1".into()));

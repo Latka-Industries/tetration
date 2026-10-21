@@ -32,7 +32,7 @@ nightly compiler`.
 | `verify_tet_bytes` | quick scan (`deep_decode: false`) | Hot loop — prefer this for file layout |
 | `verify_tet_bytes_deep` | `deep_decode: true` | Slower; decode walk |
 | `verify_tet_package` | package tree from length-prefixed blob | PROTOCOL / CURRENT / MANIFEST / packed.tet |
-| `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604) |
+| `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604; window pad/step/align/`min_count` seeds THI-607) |
 
 ### Package input shape (`verify_tet_package`)
 

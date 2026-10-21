@@ -1,4 +1,4 @@
-//! Fuzz target for closed query wire parse (`parse_query_json`) — THI-604.
+//! Fuzz target for closed query wire parse (`parse_query_json`) — THI-604 / THI-607.
 //!
 //! Mutated inputs must never panic; invalid JSON / unknown keys are expected
 //! [`TetError::Validation`] failures.
