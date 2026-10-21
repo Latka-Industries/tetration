@@ -171,15 +171,6 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
         }
         Some(v) => parse_u64_field("window.size", v)?,
     };
-    if size == 0 {
-        return Err(TetError::Validation("`window.size` must be >= 1".into()));
-    }
-    if size > QueryLimits::DEFAULT.max_window_size {
-        return Err(TetError::Validation(format!(
-            "`window.size` exceeds maximum ({size} > {})",
-            QueryLimits::DEFAULT.max_window_size
-        )));
-    }
     let mode = match obj.get("mode") {
         None => {
             return Err(TetError::Validation(
@@ -204,19 +195,8 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
     };
     let step = match obj.get("step") {
         None => None,
-        Some(v) => {
-            let s = parse_u64_field("window.step", v)?;
-            if s == 0 {
-                return Err(TetError::Validation("`window.step` must be >= 1".into()));
-            }
-            Some(s)
-        }
+        Some(v) => Some(parse_u64_field("window.step", v)?),
     };
-    if mode == WindowMode::Bins && step.is_some() {
-        return Err(TetError::Validation(
-            "`window.step` is only valid with mode \"rolling\"".into(),
-        ));
-    }
     let align = match obj.get("align") {
         None => WindowAlign::Start,
         Some(v) => {
@@ -226,29 +206,11 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
             WindowAlign::parse(s)?
         }
     };
-    if mode == WindowMode::Rolling && pad == WindowPad::None && align == WindowAlign::End {
-        return Err(TetError::Validation(
-            "`window.align` \"end\" with mode \"rolling\" requires pad other than \"none\"".into(),
-        ));
-    }
     let min_count = match obj.get("min_count") {
         None => 1,
-        Some(v) => {
-            let c = parse_u64_field("window.min_count", v)?;
-            if c == 0 {
-                return Err(TetError::Validation(
-                    "`window.min_count` must be >= 1".into(),
-                ));
-            }
-            if c > size {
-                return Err(TetError::Validation(format!(
-                    "`window.min_count` ({c}) exceeds window.size ({size})"
-                )));
-            }
-            c
-        }
+        Some(v) => parse_u64_field("window.min_count", v)?,
     };
-    Ok(WindowSpec {
+    let window = WindowSpec {
         axis,
         size,
         mode,
@@ -256,7 +218,10 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
         step,
         align,
         min_count,
-    })
+    };
+    window.validate_cross_fields()?;
+    window.validate_size_limit(QueryLimits::DEFAULT.max_window_size)?;
+    Ok(window)
 }
 
 pub(super) fn parse_spill(v: &Value) -> Result<OutputHints, TetError> {

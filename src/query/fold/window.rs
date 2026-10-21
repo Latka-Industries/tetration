@@ -128,129 +128,116 @@ impl WindowVisit {
 }
 
 fn fold_window(ctx: &FoldWindowCtx<'_>) -> Result<shared::FoldPlanOutcome, TetError> {
-    let FoldWindowCtx {
-        mmap,
-        plan,
-        max_preview,
-        kind,
-        layout,
-        dtype,
-        pad_value,
-        policy,
-    } = *ctx;
-    let shape = &plan.logical_selection_shape;
-    let n = plan.logical_element_count;
-    let preview_cap = max_preview.min(n);
-    let visit = WindowVisit::from_dtype(dtype);
-    let mut preview = WindowPreview::new(dtype, preview_cap);
-    let mut saw_any = false;
-    let mut total_bytes: u64 = 0;
-    let chunk_order = fold_policy::chunk_indices_for_fold(plan, policy.sequential_io);
-    let mut real_counts = vec![0_u64; layout.out_len];
+    let n = ctx.plan.logical_element_count;
+    let mut preview = WindowPreview::new(ctx.dtype, ctx.max_preview.min(n));
 
-    let operation = match kind {
+    let (saw_any, total_bytes, operation) = match ctx.kind {
         reduction::ReductionKind::ArgMin | reduction::ReductionKind::ArgMax => {
-            let mut cells = vec![reduction::ArgIndexAccum::default(); layout.out_len];
-            for i in chunk_order {
-                let c = &plan.chunks[i];
-                let chunk_bytes = visit.visit_chunk(mmap, plan, c, |li, v| {
-                    saw_any = true;
-                    preview.store(li, v);
-                    if !fold_keeps_cell(plan.cell_filter, v) {
-                        return Ok(());
-                    }
-                    let coords = indexing::coords_from_linear_row_major(li, shape)?;
-                    let axis_c = u64::try_from(coords[layout.window_axis])
-                        .map_err(|_| TetError::Validation("axis coord overflow".into()))?;
-                    for w in window_geometry::windows_covering(&coords, layout)? {
-                        let oi = window_geometry::window_reduced_index(&coords, w, layout)?;
-                        let fiber = window_geometry::window_fiber_index(axis_c, w, layout)?;
-                        cells[oi].push_f64(fiber, v, kind);
-                        real_counts[oi] = real_counts[oi].saturating_add(1);
-                    }
+            let mut cells = vec![reduction::ArgIndexAccum::default(); ctx.layout.out_len];
+            let (saw_any, total_bytes, real_counts) =
+                scan_window_cells(ctx, &mut preview, |oi, axis_c, w, v| {
+                    let fiber = window_geometry::window_fiber_index(axis_c, w, ctx.layout)?;
+                    cells[oi].push_f64(fiber, v, ctx.kind);
                     Ok(())
                 })?;
-                dispatch::accumulate_chunk_read_bytes(&mut total_bytes, chunk_bytes)?;
-            }
-            inject_pad_arg(&mut cells, layout, pad_value, kind)?;
-            apply_min_count_arg(&mut cells, &real_counts, layout);
-            partial_arg_fields(kind, n, &layout.out_shape, &cells)
+            inject_pad_slots(ctx.layout, ctx.pad_value, cells.len(), |oi, fiber, pad| {
+                cells[oi].push_f64(fiber, pad, ctx.kind);
+                Ok(())
+            })?;
+            apply_min_count_arg(&mut cells, &real_counts, ctx.layout);
+            (
+                saw_any,
+                total_bytes,
+                partial_arg_fields(ctx.kind, n, &ctx.layout.out_shape, &cells),
+            )
         }
         _ => {
-            let mut cells = vec![reduction::ValueAccum::default(); layout.out_len];
-            for i in chunk_order {
-                let c = &plan.chunks[i];
-                let chunk_bytes = visit.visit_chunk(mmap, plan, c, |li, v| {
-                    saw_any = true;
-                    preview.store(li, v);
-                    if !fold_keeps_cell(plan.cell_filter, v) {
-                        return Ok(());
-                    }
-                    let coords = indexing::coords_from_linear_row_major(li, shape)?;
-                    for w in window_geometry::windows_covering(&coords, layout)? {
-                        let oi = window_geometry::window_reduced_index(&coords, w, layout)?;
-                        cells[oi].push_f64(v);
-                        real_counts[oi] = real_counts[oi].saturating_add(1);
-                    }
+            let mut cells = vec![reduction::ValueAccum::default(); ctx.layout.out_len];
+            let (saw_any, total_bytes, real_counts) =
+                scan_window_cells(ctx, &mut preview, |oi, _axis_c, _w, v| {
+                    cells[oi].push_f64(v);
                     Ok(())
                 })?;
-                dispatch::accumulate_chunk_read_bytes(&mut total_bytes, chunk_bytes)?;
-            }
-            inject_pad_values(&mut cells, layout, pad_value)?;
+            inject_pad_slots(ctx.layout, ctx.pad_value, cells.len(), |oi, _fiber, pad| {
+                cells[oi].push_f64(pad);
+                Ok(())
+            })?;
             let reduced: Vec<f64> = cells
                 .iter()
                 .enumerate()
                 .map(|(oi, c)| {
-                    if real_counts[oi] < layout.min_count {
+                    if real_counts[oi] < ctx.layout.min_count {
                         f64::NAN
                     } else {
-                        c.finish_f64(kind)
+                        c.finish_f64(ctx.kind)
                     }
                 })
                 .collect();
-            partial_fields(kind, n, &layout.out_shape, &reduced, &cells)
+            (
+                saw_any,
+                total_bytes,
+                partial_fields(ctx.kind, n, &ctx.layout.out_shape, &reduced, &cells),
+            )
         }
     };
     preview.validate(saw_any)?;
-    Ok(preview.into_outcome(max_preview, n, total_bytes, operation))
+    Ok(preview.into_outcome(ctx.max_preview, n, total_bytes, operation))
 }
 
-fn inject_pad_values(
-    cells: &mut [reduction::ValueAccum],
-    layout: &WindowAxisLayout,
-    pad_value: Option<f64>,
-) -> Result<(), TetError> {
-    let Some(pad) = pad_value else {
-        return Ok(());
-    };
-    for (oi, cell) in cells.iter_mut().enumerate() {
-        let w = out_window_index(oi, layout)?;
-        let pad_n = window_geometry::window_pad_axis_slots(layout, w)
-            .saturating_mul(layout.other_reduce_product);
-        for _ in 0..pad_n {
-            cell.push_f64(pad);
-        }
+/// Shared chunk scan for windowed folds: decode → filter → covering windows → callback.
+fn scan_window_cells(
+    ctx: &FoldWindowCtx<'_>,
+    preview: &mut WindowPreview,
+    mut on_window: impl FnMut(usize, u64, usize, f64) -> Result<(), TetError>,
+) -> Result<(bool, u64, Vec<u64>), TetError> {
+    let shape = &ctx.plan.logical_selection_shape;
+    let visit = WindowVisit::from_dtype(ctx.dtype);
+    let mut saw_any = false;
+    let mut total_bytes: u64 = 0;
+    let chunk_order = fold_policy::chunk_indices_for_fold(ctx.plan, ctx.policy.sequential_io);
+    let mut real_counts = vec![0_u64; ctx.layout.out_len];
+
+    for i in chunk_order {
+        let c = &ctx.plan.chunks[i];
+        let chunk_bytes = visit.visit_chunk(ctx.mmap, ctx.plan, c, |li, v| {
+            saw_any = true;
+            preview.store(li, v);
+            if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                return Ok(());
+            }
+            let coords = indexing::coords_from_linear_row_major(li, shape)?;
+            let axis_c = u64::try_from(coords[ctx.layout.window_axis])
+                .map_err(|_| TetError::Validation("axis coord overflow".into()))?;
+            for w in window_geometry::windows_covering(&coords, ctx.layout)? {
+                let oi = window_geometry::window_reduced_index(&coords, w, ctx.layout)?;
+                on_window(oi, axis_c, w, v)?;
+                real_counts[oi] = real_counts[oi].saturating_add(1);
+            }
+            Ok(())
+        })?;
+        dispatch::accumulate_chunk_read_bytes(&mut total_bytes, chunk_bytes)?;
     }
-    Ok(())
+    Ok((saw_any, total_bytes, real_counts))
 }
 
-fn inject_pad_arg(
-    cells: &mut [reduction::ArgIndexAccum],
+/// Inject pad cells for each output index (fiber used by arg folds; ignored by value folds).
+fn inject_pad_slots(
     layout: &WindowAxisLayout,
     pad_value: Option<f64>,
-    kind: reduction::ReductionKind,
+    cell_count: usize,
+    mut push: impl FnMut(usize, u64, f64) -> Result<(), TetError>,
 ) -> Result<(), TetError> {
     let Some(pad) = pad_value else {
         return Ok(());
     };
-    for (oi, cell) in cells.iter_mut().enumerate() {
+    for oi in 0..cell_count {
         let w = out_window_index(oi, layout)?;
         let axis_pad = window_geometry::window_pad_axis_slots(layout, w);
         let real_len = window_geometry::window_real_axis_len(layout, w);
         for k in 0..axis_pad {
             let fiber = real_len.saturating_add(k);
             for _ in 0..layout.other_reduce_product {
-                cell.push_f64(fiber, pad, kind);
+                push(oi, fiber, pad)?;
             }
         }
     }

@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::query::decode::indexing::linear_rm_index;
+use crate::query::fold::partial_geometry;
 use crate::query::plan::read_plan::shape_product_usize;
 use crate::query::types::{ReadPlan, TetError, WindowAlign, WindowMode, WindowPad, WindowSpec};
 
@@ -50,9 +51,7 @@ pub(crate) fn window_axis_layout(
             "window axis {window_axis} out of range for rank {ndim}"
         )));
     }
-    if window.size == 0 {
-        return Err(TetError::Validation("`window.size` must be >= 1".into()));
-    }
+    window.validate_cross_fields()?;
     let extent = shape[window_axis];
     if window.size > extent {
         return Err(TetError::Validation(format!(
@@ -61,28 +60,6 @@ pub(crate) fn window_axis_layout(
         )));
     }
     let step = window.effective_step();
-    if step == 0 {
-        return Err(TetError::Validation("`window.step` must be >= 1".into()));
-    }
-    if window.mode == WindowMode::Bins && window.step.is_some() {
-        return Err(TetError::Validation(
-            "`window.step` is only valid with mode \"rolling\"".into(),
-        ));
-    }
-    if window.mode == WindowMode::Rolling
-        && window.pad == WindowPad::None
-        && window.align == WindowAlign::End
-    {
-        return Err(TetError::Validation(
-            "`window.align` \"end\" with mode \"rolling\" requires pad other than \"none\"".into(),
-        ));
-    }
-    if window.min_count == 0 || window.min_count > window.size {
-        return Err(TetError::Validation(format!(
-            "`window.min_count` must be in 1..=window.size (got {})",
-            window.min_count
-        )));
-    }
 
     let (first_start, window_count) = match window.mode {
         WindowMode::Bins => {
@@ -101,22 +78,9 @@ pub(crate) fn window_axis_layout(
         ));
     }
 
-    let mut reduce_set = BTreeSet::new();
-    for label in axis_labels {
-        let v: usize = label
-            .parse()
-            .map_err(|_| TetError::Validation(format!("invalid operation axis index {label:?}")))?;
-        if v >= ndim {
-            return Err(TetError::Validation(format!(
-                "operation axis index {v} out of range for rank {ndim}"
-            )));
-        }
-        if !reduce_set.insert(v) {
-            return Err(TetError::Validation(format!(
-                "duplicate operation axis index {v}"
-            )));
-        }
-    }
+    let reduce_set: BTreeSet<usize> = partial_geometry::parse_axis_indices(axis_labels, ndim)?
+        .into_iter()
+        .collect();
     if !reduce_set.contains(&window_axis) {
         return Err(TetError::Validation(
             "internal: window layout requires the windowed axis in the reduction set".into(),
