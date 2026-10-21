@@ -54,7 +54,7 @@ fn resolve_axis_slice_labels(
             "selection[{axis}]: use either `stop` or `stop_label`, not both"
         )));
     }
-    let coord = coord_axis_for_dimension(meta, axis).ok_or_else(|| {
+    let coord = coord_axis_for_dimension(meta, axis, extent).ok_or_else(|| {
         TetError::Validation(format!(
             "selection[{axis}] coordinate labels require `coords` for this axis in footer metadata"
         ))
@@ -87,7 +87,11 @@ fn resolve_axis_slice_labels(
     Ok(())
 }
 
-fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<CoordAxisV1> {
+fn coord_axis_for_dimension(
+    meta: &DatasetMetadataV1,
+    d: usize,
+    extent: u64,
+) -> Option<CoordAxisV1> {
     let coords = meta.coords.as_ref()?;
     if let Some(names) = &meta.dim_names
         && let Some(name) = names.get(d)
@@ -95,7 +99,14 @@ fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<CoordA
     {
         return Some(c.clone());
     }
-    coords.get(d.to_string().as_str()).cloned()
+    if let Some(c) = coords.get(d.to_string().as_str()) {
+        return Some(c.clone());
+    }
+    // HDF5 CF import: coords keyed by axis name without dim_names.
+    let extent = usize::try_from(extent).ok()?;
+    let mut matches = coords.values().filter(|c| c.labels.len() == extent);
+    let first = matches.next()?;
+    matches.next().is_none().then(|| first.clone())
 }
 
 fn label_to_index(coord: &CoordAxisV1, label: &str) -> Result<u64, TetError> {

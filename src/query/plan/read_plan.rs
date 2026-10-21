@@ -1,10 +1,12 @@
 //! Build [`ReadPlan`] from catalog summary and chunk coordinate list.
 
 use crate::catalog::{
-    ChunkIndexEntryV1, ChunkZoneStat, GenerationSecondaryIndex, GenerationZoneMaps, MAX_NDIM,
-    TetFileSummaryV1,
+    ChunkIndexEntryV1, ChunkZoneStat, DatasetMetadataV1, GenerationSecondaryIndex,
+    GenerationZoneMaps, MAX_NDIM, TetFileSummaryV1,
 };
-use crate::query::plan::index_pushdown::eq_chunk_allowlist;
+use crate::query::plan::index_pushdown::{
+    eq_chunk_allowlist, intersect_allowlists, sorted_axis_chunk_allowlist,
+};
 use crate::query::plan::zone_pushdown::zone_may_match_filter;
 use crate::query::types::{CellPredicate, PlannedChunkIo, ReadPlan, TetError, ValueFilter};
 
@@ -34,15 +36,17 @@ impl<'a> ReadPlanGeometry<'a> {
     }
 }
 
-/// Optional zone-map pushdown inputs for [`build_read_plan`].
+/// Optional zone-map / secondary-index pushdown inputs for [`build_read_plan`].
 pub(crate) struct ZonePushdown<'a> {
     pub zones: Option<&'a GenerationZoneMaps>,
     pub dtype: u32,
     pub filter: Option<&'a ValueFilter>,
     /// Dataset fill (`_FillValue` / `missing_value` / `fill_value`) for cell-null tests.
     pub fill: Option<f64>,
-    /// Sealed value-posting index, when the open generation has a usable one.
+    /// Sealed secondary index, when the open generation has a usable one.
     pub index: Option<&'a GenerationSecondaryIndex>,
+    /// Footer metadata for sorted-axis coord spans (labels → numeric range).
+    pub dataset_meta: Option<&'a DatasetMetadataV1>,
 }
 
 pub(crate) fn selection_logical_shape_u64(
@@ -137,11 +141,24 @@ pub(crate) fn build_read_plan(
     let logical_selection_shape =
         selection_logical_shape_u64(geom.g0, geom.g1_exclusive, geom.step)?;
     let logical_element_count = shape_product_usize(&logical_selection_shape)?;
-    let allowlist = pushdown.filter.and_then(|filter| {
+    let eq_allow = pushdown.filter.and_then(|filter| {
         pushdown
             .index
             .and_then(|index| eq_chunk_allowlist(index, dataset_idx as u64, pushdown.dtype, filter))
     });
+    let sorted_allow = pushdown.index.and_then(|index| {
+        pushdown.dataset_meta.and_then(|meta| {
+            sorted_axis_chunk_allowlist(
+                index,
+                dataset_idx as u64,
+                meta,
+                geom.dataset_shape,
+                geom.g0,
+                geom.g1_exclusive,
+            )
+        })
+    });
+    let allowlist = intersect_allowlists(eq_allow, sorted_allow);
     let mut chunks = Vec::with_capacity(coords.len());
     let mut total_stored: u64 = 0;
     let mut zone_filter_skipped_chunks = 0usize;

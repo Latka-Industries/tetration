@@ -8,8 +8,8 @@ use crate::catalog::zone::sha256_hex;
 use crate::catalog::{
     CatalogError, DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
     SECONDARY_INDEX_FILE, SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, TetPackage,
-    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, secondary_index_for_packed,
-    value_postings, zone_maps_for_packed,
+    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, known_index_entries,
+    secondary_index_for_packed, zone_maps_for_packed,
 };
 
 use super::options::VerifyOptions;
@@ -564,8 +564,8 @@ fn secondary_index_matches_recompute(
     let packed_bytes = fs::read(packed).map_err(|e| e.to_string())?;
     let fresh = secondary_index_for_packed(&packed_bytes, generation, doc.packed_sha256.as_str())
         .map_err(|e| e.to_string())?;
-    let fresh_postings = fresh.as_ref().map(value_postings).unwrap_or_default();
-    if fresh_postings != value_postings(doc) {
+    let fresh_known = fresh.as_ref().map(known_index_entries).unwrap_or_default();
+    if fresh_known != known_index_entries(doc) {
         return Err(format!(
             "{SECONDARY_INDEX_FILE} does not match a recompute of packed.tet"
         ));

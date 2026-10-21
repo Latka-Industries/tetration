@@ -18,6 +18,7 @@ dependencies = [
 tet-fixtures = "cli:main"
 generate-fixtures = "cli:main_generate"
 bench-large = "cli:main_bench"
+bench-index = "cli:main_bench_index"
 
 [build-system]
 requires = ["hatchling"]

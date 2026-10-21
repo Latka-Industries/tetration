@@ -16,7 +16,7 @@ impl ValueAccum {
             }
             ReductionKind::Sum | ReductionKind::Mean => {
                 self.count += vals.len();
-                self.sum += variance_simd::f32_sum_sumsq(vals).0;
+                self.sum += variance_simd::f32_sum(vals);
             }
             ReductionKind::Var | ReductionKind::Std => {
                 self.count += vals.len();
@@ -87,7 +87,7 @@ impl ValueAccum {
             }
             ReductionKind::Sum | ReductionKind::Mean => {
                 self.count += vals.len();
-                self.sum += variance_simd::f64_sum_sumsq(vals).0;
+                self.sum += variance_simd::f64_sum(vals);
             }
             ReductionKind::Var | ReductionKind::Std => {
                 self.count += vals.len();
@@ -518,7 +518,7 @@ impl ValueAccum {
             }
             ReductionKind::Sum | ReductionKind::Mean => {
                 self.count += vals.len();
-                self.sum += variance_simd::f16_sum_sumsq(vals).0;
+                self.sum += variance_simd::f16_sum(vals);
             }
             ReductionKind::Var | ReductionKind::Std => {
                 self.count += vals.len();

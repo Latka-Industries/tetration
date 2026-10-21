@@ -2,7 +2,7 @@
 
 use crate::query::engine::budget::ExecutionBudget;
 use crate::query::fold::fold_policy::{
-    FoldIoPolicy, IoRegime, chunk_indices_for_fold, resolve_io_regime,
+    FoldIoPolicy, IoRegime, PARALLEL_MIN_LOGICAL_BYTES, chunk_indices_for_fold, resolve_io_regime,
 };
 use crate::query::fold::linear_scan;
 use crate::query::types::{ExecutionHints, PlannedChunkIo, ReadPlan};
@@ -97,14 +97,8 @@ fn chunk_indices_sorted_by_payload_offset() {
     assert_eq!(idx, vec![1, 2, 0]);
 }
 
-#[test]
-fn policy_parallel_default_all_regimes() {
-    let budget = ExecutionBudget {
-        memory_budget_bytes: 1,
-        host_available_ram_bytes: Some(10 * 1024 * 1024 * 1024),
-        memory_budget_percent_bps: 2500,
-    };
-    let chunks = vec![
+fn two_chunks() -> Vec<PlannedChunkIo> {
+    vec![
         PlannedChunkIo {
             chunk_index: vec![0],
             payload_offset: 0,
@@ -121,26 +115,67 @@ fn policy_parallel_default_all_regimes() {
             codec: 0,
             zone: None,
         },
-    ];
-    let plan = sample_plan(chunks, 32);
+    ]
+}
+
+/// f32 element count that meets [`PARALLEL_MIN_LOGICAL_BYTES`].
+fn parallel_min_f32_elems() -> u64 {
+    PARALLEL_MIN_LOGICAL_BYTES.div_ceil(4)
+}
+
+#[test]
+fn policy_parallel_default_all_regimes() {
+    let budget = ExecutionBudget {
+        memory_budget_bytes: 1,
+        host_available_ram_bytes: Some(10 * 1024 * 1024 * 1024),
+        memory_budget_percent_bps: 2500,
+    };
+    let plan = sample_plan(two_chunks(), parallel_min_f32_elems());
     let policy = FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32).expect("resolve");
     assert_eq!(policy.io_regime, IoRegime::InCore);
     assert!(policy.parallel);
     assert!(!policy.sequential_io);
     assert_eq!(policy.fold_workers, None);
 
+    // Out-of-core linear_scan needs payload bytes == logical bytes; keep a tiny
+    // contiguous plan for that check (independent of the parallel size floor).
     let tight_budget = ExecutionBudget {
         memory_budget_bytes: 1,
         host_available_ram_bytes: Some(100),
         memory_budget_percent_bps: 2500,
     };
+    let tiny = sample_plan(two_chunks(), 32); // 128 B f32, matches two×64 payloads
     let policy =
-        FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32).expect("resolve");
+        FoldIoPolicy::resolve(&tiny, &tight_budget, None, ElementDtype::F32).expect("resolve");
     assert_eq!(policy.io_regime, IoRegime::OutOfCore);
     assert!(policy.linear_scan);
     assert!(!policy.parallel);
     assert!(!policy.sequential_io);
     assert_eq!(policy.fold_workers, None);
+}
+
+#[test]
+fn policy_tiny_multi_chunk_stays_sequential_by_default() {
+    let budget = ExecutionBudget {
+        memory_budget_bytes: 1,
+        host_available_ram_bytes: Some(10 * 1024 * 1024 * 1024),
+        memory_budget_percent_bps: 2500,
+    };
+    // 16 MiB f32 selection — below PARALLEL_MIN_LOGICAL_BYTES.
+    let plan = sample_plan(two_chunks(), (16 * 1024 * 1024) / 4);
+    let policy = FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32).expect("resolve");
+    assert!(!policy.parallel);
+    assert!(!policy.linear_scan);
+
+    let hints = ExecutionHints {
+        memory_budget_bytes: None,
+        memory_budget_percent_bps: None,
+        fold_parallel: Some(true),
+        device: None,
+    };
+    let forced =
+        FoldIoPolicy::resolve(&plan, &budget, Some(&hints), ElementDtype::F32).expect("resolve");
+    assert!(forced.parallel);
 }
 
 #[test]
@@ -200,25 +235,7 @@ fn policy_in_core_keeps_parallel_not_linear_scan() {
         host_available_ram_bytes: Some(10 * 1024 * 1024 * 1024),
         memory_budget_percent_bps: 2500,
     };
-    let chunks = vec![
-        PlannedChunkIo {
-            chunk_index: vec![0],
-            payload_offset: 0,
-            stored_byte_len: 64,
-            raw_byte_len: 64,
-            codec: 0,
-            zone: None,
-        },
-        PlannedChunkIo {
-            chunk_index: vec![1],
-            payload_offset: 64,
-            stored_byte_len: 64,
-            raw_byte_len: 64,
-            codec: 0,
-            zone: None,
-        },
-    ];
-    let plan = sample_plan(chunks, 32);
+    let plan = sample_plan(two_chunks(), parallel_min_f32_elems());
     let policy = FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32).expect("resolve");
     assert!(!policy.linear_scan);
     assert!(policy.parallel);
@@ -231,25 +248,7 @@ fn policy_fold_parallel_false_enables_sequential_io() {
         host_available_ram_bytes: Some(10 * 1024 * 1024 * 1024),
         memory_budget_percent_bps: 2500,
     };
-    let chunks = vec![
-        PlannedChunkIo {
-            chunk_index: vec![0],
-            payload_offset: 0,
-            stored_byte_len: 64,
-            raw_byte_len: 64,
-            codec: 0,
-            zone: None,
-        },
-        PlannedChunkIo {
-            chunk_index: vec![1],
-            payload_offset: 64,
-            stored_byte_len: 64,
-            raw_byte_len: 64,
-            codec: 0,
-            zone: None,
-        },
-    ];
-    let plan = sample_plan(chunks, 32);
+    let plan = sample_plan(two_chunks(), parallel_min_f32_elems());
     let hints = ExecutionHints {
         memory_budget_bytes: None,
         memory_budget_percent_bps: None,

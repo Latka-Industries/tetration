@@ -57,9 +57,11 @@ pub use package::{
 };
 pub use secondary_index::{
     GenerationSecondaryIndex, PreparedSecondaryIndex, SECONDARY_INDEX_FILE,
-    SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, SECONDARY_INDEX_VERSION, SecondaryIndexEntry,
-    VALUE_POSTINGS_KIND, VALUE_POSTINGS_MAX_CARDINALITY, ValuePosting, encode_secondary_index,
-    prepare_secondary_index, read_secondary_index_file, secondary_index_for_packed, value_postings,
+    SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, SECONDARY_INDEX_VERSION,
+    SORTED_AXIS_RANGE_KIND, SecondaryIndexEntry, SortedAxisSegment, VALUE_POSTINGS_KIND,
+    VALUE_POSTINGS_MAX_CARDINALITY, ValuePosting, encode_secondary_index, known_index_entries,
+    prepare_secondary_index, read_secondary_index_file, secondary_index_for_packed,
+    sorted_axis_ranges, value_postings,
 };
 pub use semantics::{
     DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, declared_attrs,

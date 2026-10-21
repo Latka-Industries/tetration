@@ -141,6 +141,21 @@ run = "cargo build --release && uv run --directory fixtures bench-large h5 --tie
 description = "Alias for bench:windows (THI-608)"
 depends = ["bench:windows"]
 
+[tasks."bench:index"]
+description = "THI-613: tet range sum vs HDF5+NumPy — small (≈16 MiB select) + large (≈0.4 GiB)"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-index --tier both"
+
+[tasks."bench:index:small"]
+description = "THI-613: tet vs HDF5+NumPy on small index tier (select ≈16 MiB)"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-index --tier small"
+
+[tasks."bench:index:extra"]
+description = "THI-613: tet range sum vs HDF5+NumPy on 20 GiB extra tier (select ≈1.25 GiB)"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-index --tier extra"
+
 [tasks."bench:netcdf"]
 description = "Benchmark large + extra_large NetCDF only (device auto)"
 depends = ["fixtures:sync"]

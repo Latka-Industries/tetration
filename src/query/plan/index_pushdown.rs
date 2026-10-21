@@ -1,13 +1,14 @@
-//! Equality chunk allow-list from a sealed value-posting index.
+//! Chunk allow-lists from a sealed secondary index (`value_postings`, `sorted_axis_range`).
 //!
 //! Missing, unusable, or inapplicable indexes return `None`. The planner then keeps
-//! the zone-map result. A `Some` allow-list may be empty: that value is absent, so
-//! every surviving chunk can be dropped.
+//! the zone-map / geometric result. A `Some` allow-list may be empty: that predicate
+//! matches no chunk, so every surviving candidate can be dropped.
 
 use std::collections::BTreeSet;
 
 use half::f16;
 
+use crate::catalog::metadata::{CoordAxisV1, DatasetMetadataV1};
 use crate::catalog::zone::{hex_le, sha256_hex};
 use crate::catalog::{
     DATASET_DTYPE_TAG_V1, GenerationSecondaryIndex, SECONDARY_INDEX_VERSION, SecondaryIndexEntry,
@@ -71,6 +72,163 @@ pub(crate) fn eq_chunk_allowlist(
         .map(|posting| posting.chunks.iter().cloned().collect())
         .unwrap_or_default();
     Some(chunks)
+}
+
+/// Chunk coordinates overlapping the selection's numeric coord span on sorted axes.
+///
+/// `None` means do not consult sorted-axis entries (none for this dataset, or labels at
+/// the selection bounds are not finite numbers). `Some` is the intersected allow-list
+/// across every `sorted_axis_range` entry for `dataset_id` (may be empty).
+#[must_use]
+pub(crate) fn sorted_axis_chunk_allowlist(
+    index: &GenerationSecondaryIndex,
+    dataset_id: u64,
+    meta: &DatasetMetadataV1,
+    dataset_shape: &[u64],
+    g0: &[u64],
+    g1_exclusive: &[u64],
+) -> Option<BTreeSet<Vec<u64>>> {
+    let mut combined: Option<BTreeSet<Vec<u64>>> = None;
+    let mut saw_entry = false;
+    for entry in &index.indexes {
+        let SecondaryIndexEntry::SortedAxisRange {
+            dataset_id: id,
+            axis,
+            segments,
+            ..
+        } = entry
+        else {
+            continue;
+        };
+        if *id != dataset_id {
+            continue;
+        }
+        saw_entry = true;
+        let axis = usize::try_from(*axis).ok()?;
+        if axis >= g0.len() || axis >= g1_exclusive.len() || axis >= dataset_shape.len() {
+            return None;
+        }
+        let (lo, hi) = selection_coord_span(
+            meta,
+            axis,
+            dataset_shape[axis],
+            g0[axis],
+            g1_exclusive[axis],
+        )?;
+        let mut set = BTreeSet::new();
+        for seg in segments {
+            let seg_lo = f64_from_le_hex(&seg.lo_le)?;
+            let seg_hi = f64_from_le_hex(&seg.hi_le)?;
+            if seg_hi < lo || seg_lo > hi {
+                continue;
+            }
+            for chunk in &seg.chunks {
+                set.insert(chunk.clone());
+            }
+        }
+        combined = Some(match combined.take() {
+            None => set,
+            Some(prev) => prev.intersection(&set).cloned().collect(),
+        });
+    }
+    if saw_entry { combined } else { None }
+}
+
+/// Intersect optional allow-lists. `None` means “no constraint from that kind”.
+#[must_use]
+pub(crate) fn intersect_allowlists(
+    eq: Option<BTreeSet<Vec<u64>>>,
+    sorted_axis: Option<BTreeSet<Vec<u64>>>,
+) -> Option<BTreeSet<Vec<u64>>> {
+    match (eq, sorted_axis) {
+        (None, None) => None,
+        (Some(a), None) | (None, Some(a)) => Some(a),
+        (Some(a), Some(b)) => Some(a.intersection(&b).cloned().collect()),
+    }
+}
+
+fn selection_coord_span(
+    meta: &DatasetMetadataV1,
+    axis: usize,
+    axis_extent: u64,
+    start: u64,
+    stop_exclusive: u64,
+) -> Option<(f64, f64)> {
+    if start >= stop_exclusive {
+        // Empty selection: no coordinate can match.
+        return Some((f64::INFINITY, f64::NEG_INFINITY));
+    }
+    let start_i = usize::try_from(start).ok()?;
+    let stop_i = usize::try_from(stop_exclusive).ok()?;
+    let extent = usize::try_from(axis_extent).ok()?;
+    let coord = coord_axis_for_dimension(meta, axis, Some(extent))?;
+    if stop_i > coord.labels.len() {
+        return None;
+    }
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    for label in &coord.labels[start_i..stop_i] {
+        let v: f64 = label.parse().ok()?;
+        if !v.is_finite() {
+            return None;
+        }
+        lo = lo.min(v);
+        hi = hi.max(v);
+    }
+    if !lo.is_finite() || !hi.is_finite() {
+        return None;
+    }
+    Some((lo, hi))
+}
+
+fn coord_axis_for_dimension(
+    meta: &DatasetMetadataV1,
+    d: usize,
+    extent: Option<usize>,
+) -> Option<&CoordAxisV1> {
+    let coords = meta.coords.as_ref()?;
+    if let Some(names) = &meta.dim_names
+        && let Some(name) = names.get(d)
+        && let Some(c) = coords.get(name)
+    {
+        return Some(c);
+    }
+    if let Some(c) = coords.get(d.to_string().as_str()) {
+        return Some(c);
+    }
+    let extent = extent?;
+    let mut matches = coords.values().filter(|c| c.labels.len() == extent);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn f64_from_le_hex(hex: &str) -> Option<f64> {
+    let bytes = decode_hex_bytes(hex)?;
+    let arr: [u8; 8] = bytes.as_slice().try_into().ok()?;
+    let v = f64::from_le_bytes(arr);
+    v.is_finite().then_some(v)
+}
+
+fn decode_hex_bytes(hex: &str) -> Option<Vec<u8>> {
+    if !hex.len().is_multiple_of(2) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(hex.len() / 2);
+    for pair in hex.as_bytes().chunks_exact(2) {
+        let hi = hex_nibble(pair[0])?;
+        let lo = hex_nibble(pair[1])?;
+        out.push((hi << 4) | lo);
+    }
+    Some(out)
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn eq_literal(filter: &ValueFilter) -> Option<f64> {

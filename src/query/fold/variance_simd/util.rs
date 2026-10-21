@@ -5,6 +5,35 @@ pub(super) const fn simd_aligned_end(len: usize, lanes: usize) -> usize {
     len - (len % lanes)
 }
 
+/// Prologue, SIMD main loop, and scalar tail for population `sum` only over a slice.
+macro_rules! with_sum_loop {
+    (
+        $vals:expr,
+        lanes: $lanes:expr,
+        simd: |$ptr:ident, $i:ident, $sum:ident| $body:expr,
+        tail_load: $tail_load:expr
+    ) => {{
+        let ptr = $vals.as_ptr();
+        let len = $vals.len();
+        let mut sum = 0.0f64;
+        let mut i = 0usize;
+        let simd_end = $crate::query::fold::variance_simd::util::simd_aligned_end(len, $lanes);
+        while i < simd_end {
+            let $ptr = ptr;
+            let $i = &mut i;
+            let $sum = &mut sum;
+            $body;
+        }
+        while i < len {
+            // SAFETY: `i` is in `0..len` for the same slice as `ptr`.
+            let x: f64 = unsafe { ($tail_load)(ptr.add(i)) };
+            sum += x;
+            i += 1;
+        }
+        sum
+    }};
+}
+
 /// Prologue, SIMD main loop, and scalar tail for population `sum` / `sumsq` over a slice.
 macro_rules! with_sum_sumsq_loop {
     (
@@ -91,6 +120,23 @@ pub(super) mod x86 {
     fn accum_f64_pair(sum: &mut f64, sumsq: &mut f64, lo: f64, hi: f64) {
         *sum += lo + hi;
         *sumsq += lo * lo + hi * hi;
+    }
+
+    /// Four `f32` lanes → `f64` sum accumulator (SSE2).
+    #[inline]
+    pub unsafe fn accum_f32x4_sum(sum: &mut f64, ptr: *const f32) {
+        // SAFETY: caller aligns `ptr` to a 4-lane chunk inside the slice.
+        let (lo_arr, hi_arr) = unsafe {
+            let v = _mm_loadu_ps(ptr);
+            let lo = _mm_cvtps_pd(v);
+            let hi = _mm_cvtps_pd(_mm_movehl_ps(v, v));
+            let mut lo_arr = [0.0f64; 2];
+            let mut hi_arr = [0.0f64; 2];
+            _mm_storeu_pd(lo_arr.as_mut_ptr(), lo);
+            _mm_storeu_pd(hi_arr.as_mut_ptr(), hi);
+            (lo_arr, hi_arr)
+        };
+        *sum += lo_arr[0] + lo_arr[1] + hi_arr[0] + hi_arr[1];
     }
 
     /// Four `f32` lanes → `f64` sum/sumsq accumulators (SSE2).

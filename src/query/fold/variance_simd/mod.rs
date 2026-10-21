@@ -8,8 +8,8 @@ mod integer;
 // Re-exported for tests and bulk fold paths; not every symbol is used inside `float`/`integer` alone.
 #[allow(unused_imports)]
 pub(crate) use float::{
-    f16_min_max, f16_sum_sumsq, f32_min_max, f32_sum_sumsq, f64_sum_sumsq, scalar_f32_min_max,
-    scalar_f32_sum_sumsq,
+    f16_min_max, f16_sum, f16_sum_sumsq, f32_min_max, f32_sum, f32_sum_sumsq, f64_sum,
+    f64_sum_sumsq, scalar_f32_min_max, scalar_f32_sum, scalar_f32_sum_sumsq,
 };
 #[allow(unused_imports)]
 pub(crate) use integer::{

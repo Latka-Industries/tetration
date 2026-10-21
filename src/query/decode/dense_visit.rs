@@ -28,8 +28,42 @@ pub(crate) fn logical_index_unit_step(
     linear_rm_index(&lc[..ndim], &plan.logical_selection_shape)
 }
 
-/// When the tile at `chunk_coord` is fully inside the selection box and step is `1`, return the
-/// logical row-major index of the tile's first element.
+/// True when a tile extent is a single contiguous block in row-major order of `sel_shape`.
+///
+/// Innermost axes may be full-width; at most one partial axis; every slower axis must have
+/// extent `1`. That is exactly when payload order matches `li_base .. li_base + nelem`.
+#[must_use]
+pub(crate) fn tile_is_rm_contiguous(sel_shape: &[u64], tile: &[u64]) -> bool {
+    if sel_shape.len() != tile.len() || sel_shape.is_empty() {
+        return false;
+    }
+    let ndim = sel_shape.len();
+    let mut d = ndim;
+    while d > 0 {
+        d -= 1;
+        if tile[d] != sel_shape[d] {
+            break;
+        }
+        if d == 0 {
+            return true; // tile spans the full selection
+        }
+    }
+    // `d` is the innermost non-full axis (or 0 if axis 0 is partial / we broke there).
+    if tile[d] != sel_shape[d] {
+        for &t in tile.iter().take(d) {
+            if t != 1 {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// When the tile at `chunk_coord` is fully inside the selection box, step is `1`, and the tile
+/// is row-major-contiguous in the selection, return the logical index of the tile's first element.
+///
+/// Callers may then treat payload order as `li_base + k` (slab SIMD / dense visit). Row-chunked
+/// multi-dim tiles (full trailing axes) qualify; partial trailing tiles do not.
 pub(crate) fn dense_tile_logical_base(
     plan: &ReadPlan,
     chunk_coord: &[u64],
@@ -40,6 +74,9 @@ pub(crate) fn dense_tile_logical_base(
     }
     let ndim = plan.dataset_shape.len();
     if chunk_coord.len() != ndim || tile.len() != ndim {
+        return Ok(None);
+    }
+    if !tile_is_rm_contiguous(&plan.logical_selection_shape, tile) {
         return Ok(None);
     }
     for d in 0..ndim {
