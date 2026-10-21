@@ -74,6 +74,9 @@ pub struct ReadPlan {
     /// When set, partial-fold output extents are distinct label counts (not axis extents).
     #[serde(skip)]
     pub(crate) label_group_remap: Option<LabelGroupRemap>,
+    /// Dataset fill (`_FillValue` / `missing_value` / `fill_value`) for `window.pad` = `fill`.
+    #[serde(skip)]
+    pub(crate) dataset_fill: Option<f64>,
 }
 
 /// Selection-local index → group id for each kept axis under label-value `group_by`.
@@ -132,6 +135,7 @@ impl<'de> Deserialize<'de> for ReadPlan {
             logical_element_count: wire.logical_element_count,
             cell_filter: None,
             label_group_remap: None,
+            dataset_fill: None,
         })
     }
 }

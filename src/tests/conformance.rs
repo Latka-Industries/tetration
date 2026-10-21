@@ -279,6 +279,9 @@ fn conformance_reject_query_files_exist() {
         "conformance/reject/queries/align_empty_axes.json",
         "conformance/reject/queries/unknown_group_by_field.json",
         "conformance/reject/queries/group_by_labels_bad_by.json",
+        "conformance/reject/queries/window_pad_unknown.json",
+        "conformance/reject/queries/window_step_on_bins.json",
+        "conformance/reject/queries/window_align_unknown.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
@@ -290,6 +293,9 @@ fn conformance_accept_query_files_exist() {
         "conformance/accept/queries/mean_strided_sample.json",
         "conformance/accept/queries/window_bins_sum_col.json",
         "conformance/accept/queries/window_rolling_sum_col.json",
+        "conformance/accept/queries/window_rolling_step2_sum_col.json",
+        "conformance/accept/queries/window_bins_pad0_sum_col.json",
+        "conformance/accept/queries/window_bins_align_end_sum_col.json",
         "conformance/accept/queries/align_pair_ok.json",
         "conformance/accept/queries/group_by_labels_col_sum.json",
     ] {
@@ -298,11 +304,11 @@ fn conformance_accept_query_files_exist() {
 }
 
 #[test]
-fn conformance_spec_milestone_is_0_6_2() {
+fn conformance_spec_milestone_is_0_6_3() {
     let path = repo_root().join("conformance/manifest.v1.json");
     let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(
         v.get("spec_milestone").and_then(|x| x.as_str()),
-        Some("0.6.2")
+        Some("0.6.3")
     );
 }

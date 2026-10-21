@@ -192,5 +192,6 @@ pub(crate) fn build_read_plan(
             .filter
             .map(|filter| CellPredicate::from_filter(filter, pushdown.fill)),
         label_group_remap: None,
+        dataset_fill: pushdown.fill,
     })
 }

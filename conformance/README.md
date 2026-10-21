@@ -54,7 +54,7 @@ Supported `expect` keys today (reference runner):
 
 Float compares use absolute tolerance `1e-5` unless `expect_tol` is set on the case.
 
-**0.6.2 accept surface (summary):** 0.6.1 cases plus label-value `group_by` on `group_by_labels.tet`. Reject pack covers unknown `group_by.*`, bad `group_by.by`, and prior window/align rejects.
+**0.6.3 accept surface (summary):** 0.6.2 cases plus window `step` / `pad` / `align` accept fixtures and a u8 windowed sum. Reject pack covers unknown `pad` / `align`, `step` on bins, and prior window/align/group_by rejects.
 
 ### `reject_verify[]`
 

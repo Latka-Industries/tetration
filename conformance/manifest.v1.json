@@ -1,7 +1,7 @@
 {
   "pack_version": 1,
-  "spec_milestone": "0.6.2",
-  "description": "Layout v1 verify + closed query wire answers (THI-596 label-value group_by on THI-594 pack)",
+  "spec_milestone": "0.6.3",
+  "description": "Layout v1 verify + closed query wire answers (THI-606 window pad/step/align/min_count + dtype on THI-596 pack)",
   "accept": [
     {
       "id": "sample-verify",
@@ -158,6 +158,42 @@
         "execution.group_count": 2,
         "execution.operation_reduced_sum": [12.0, 9.0]
       }
+    },
+    {
+      "id": "window-rolling-step2-sum-col",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "conformance/accept/queries/window_rolling_step2_sum_col.json",
+      "expect": {
+        "execution.window_count": 1,
+        "execution.operation_reduced_sum": [3.0, 9.0]
+      }
+    },
+    {
+      "id": "window-bins-pad0-sum-col",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "conformance/accept/queries/window_bins_pad0_sum_col.json",
+      "expect": {
+        "execution.window_count": 2,
+        "execution.operation_reduced_sum": [3.0, 3.0, 9.0, 6.0]
+      }
+    },
+    {
+      "id": "window-bins-align-end-sum-col",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "conformance/accept/queries/window_bins_align_end_sum_col.json",
+      "expect": {
+        "execution.window_count": 2,
+        "execution.operation_reduced_sum": [1.0, 5.0, 4.0, 11.0]
+      }
+    },
+    {
+      "id": "window-u8-bins-sum-col",
+      "tet": "fixtures/small/tet/multichunk_u8.tet",
+      "query": "conformance/accept/queries/window_bins_sum_col_a.json",
+      "expect": {
+        "execution.window_count": 2,
+        "execution.operation_reduced_sum": [3.0, 3.0, 9.0, 6.0]
+      }
     }
   ],
   "reject_verify": [
@@ -307,6 +343,21 @@
       "id": "group_by_labels_bad_by",
       "query": "conformance/reject/queries/group_by_labels_bad_by.json",
       "expect_error_substr": "group_by.by"
+    },
+    {
+      "id": "window_pad_unknown",
+      "query": "conformance/reject/queries/window_pad_unknown.json",
+      "expect_error_substr": "window pad"
+    },
+    {
+      "id": "window_step_on_bins",
+      "query": "conformance/reject/queries/window_step_on_bins.json",
+      "expect_error_substr": "window.step"
+    },
+    {
+      "id": "window_align_unknown",
+      "query": "conformance/reject/queries/window_align_unknown.json",
+      "expect_error_substr": "window align"
     }
   ]
 }

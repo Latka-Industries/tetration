@@ -107,6 +107,7 @@ pub fn split_read_plan(plan: &ReadPlan, spec: &ShardSpec) -> ReadPlan {
         logical_element_count: plan.logical_element_count,
         cell_filter: plan.cell_filter,
         label_group_remap: plan.label_group_remap.clone(),
+        dataset_fill: plan.dataset_fill,
     }
 }
 

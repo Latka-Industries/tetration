@@ -1066,6 +1066,36 @@ fn window_wire_rejects_unknown_and_bad_size() {
     )
     .unwrap_err();
     assert!(legacy_slide.to_string().contains("rolling"));
+
+    let bad_pad = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"bins","pad":"edge"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(bad_pad.to_string().contains("window pad"));
+
+    let bins_step = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"bins","step":1},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(bins_step.to_string().contains("window.step"));
+
+    let bad_align = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"rolling","align":"middle"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(bad_align.to_string().contains("window align"));
+
+    let rolling_end_no_pad = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"rolling","align":"end"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(rolling_end_no_pad.to_string().contains("pad"));
+
+    let min_over = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"bins","min_count":3},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(min_over.to_string().contains("min_count"));
 }
 
 #[test]
@@ -1109,6 +1139,102 @@ fn window_bins_and_rolling_match_reference() {
     assert!((sums[1] - 5.0).abs() < 1e-5);
     assert!((sums[2] - 9.0).abs() < 1e-5);
     assert!((sums[3] - 11.0).abs() < 1e-5);
+}
+
+#[test]
+fn window_step_pad_align_min_count_and_u8() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("window_ext.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let mmap = mmap_file_read(&path).unwrap();
+
+    // Rolling step 2 along cols: starts at 0 only (extent 3, size 2) → one window per row.
+    let step = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"rolling","step":2},"sum":[]}"#,
+    )
+    .unwrap();
+    validate_query(&step).unwrap();
+    let plan = plan_query_with_tet_mmap(&step, None, &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    assert_eq!(ex.window_count, Some(1));
+    let sums = ex.operation_reduced_sum.as_ref().unwrap();
+    assert_eq!(sums.len(), 2);
+    assert!((sums[0] - 3.0).abs() < 1e-5); // 1+2
+    assert!((sums[1] - 9.0).abs() < 1e-5); // 4+5
+
+    // Bins + pad zero: short last bin padded to size → row0 [1+2, 3+0], row1 [4+5, 6+0].
+    let pad = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"bins","pad":"0"},"sum":[]}"#,
+    )
+    .unwrap();
+    let plan = plan_query_with_tet_mmap(&pad, None, &mmap, Some(0)).unwrap();
+    let sums = plan
+        .execution
+        .as_ref()
+        .unwrap()
+        .operation_reduced_sum
+        .as_ref()
+        .unwrap();
+    assert!((sums[0] - 3.0).abs() < 1e-5);
+    assert!((sums[1] - 3.0).abs() < 1e-5);
+    assert!((sums[2] - 9.0).abs() < 1e-5);
+    assert!((sums[3] - 6.0).abs() < 1e-5);
+
+    // min_count 2 on short last bin → NaN for the short windows.
+    let mc = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"bins","min_count":2},"sum":[]}"#,
+    )
+    .unwrap();
+    let plan = plan_query_with_tet_mmap(&mc, None, &mmap, Some(0)).unwrap();
+    let sums = plan
+        .execution
+        .as_ref()
+        .unwrap()
+        .operation_reduced_sum
+        .as_ref()
+        .unwrap();
+    assert!((sums[0] - 3.0).abs() < 1e-5);
+    assert!(sums[1].is_nan());
+    assert!((sums[2] - 9.0).abs() < 1e-5);
+    assert!(sums[3].is_nan());
+
+    // Bins align end: short first — row0 [1, 2+3], row1 [4, 5+6].
+    let end = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"bins","align":"end"},"sum":[]}"#,
+    )
+    .unwrap();
+    let plan = plan_query_with_tet_mmap(&end, None, &mmap, Some(0)).unwrap();
+    let sums = plan
+        .execution
+        .as_ref()
+        .unwrap()
+        .operation_reduced_sum
+        .as_ref()
+        .unwrap();
+    assert!((sums[0] - 1.0).abs() < 1e-5);
+    assert!((sums[1] - 5.0).abs() < 1e-5);
+    assert!((sums[2] - 4.0).abs() < 1e-5);
+    assert!((sums[3] - 11.0).abs() < 1e-5);
+
+    // u8 dtype windowed sum (same geometry as f32 reference).
+    let u8_path = dir.path().join("window_u8.tet");
+    fixture::write_multichunk_2x3_u8_tiles(&u8_path, "a");
+    let u8_mmap = mmap_file_read(&u8_path).unwrap();
+    let u8_doc =
+        parse_query_json(r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"bins"},"sum":[]}"#)
+            .unwrap();
+    let plan = plan_query_with_tet_mmap(&u8_doc, None, &u8_mmap, Some(0)).unwrap();
+    let sums = plan
+        .execution
+        .as_ref()
+        .unwrap()
+        .operation_reduced_sum
+        .as_ref()
+        .unwrap();
+    assert!((sums[0] - 3.0).abs() < 1e-5);
+    assert!((sums[1] - 3.0).abs() < 1e-5);
+    assert!((sums[2] - 9.0).abs() < 1e-5);
+    assert!((sums[3] - 6.0).abs() < 1e-5);
 }
 
 #[test]

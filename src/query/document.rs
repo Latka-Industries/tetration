@@ -473,6 +473,35 @@ fn validate_window(
             window.size, limits.max_window_size
         )));
     }
+    if let Some(step) = window.step {
+        if step == 0 {
+            return Err(TetError::Validation("`window.step` must be >= 1".into()));
+        }
+        if window.mode == crate::query::types::WindowMode::Bins {
+            return Err(TetError::Validation(
+                "`window.step` is only valid with mode \"rolling\"".into(),
+            ));
+        }
+    }
+    if window.min_count == 0 {
+        return Err(TetError::Validation(
+            "`window.min_count` must be >= 1".into(),
+        ));
+    }
+    if window.min_count > window.size {
+        return Err(TetError::Validation(format!(
+            "`window.min_count` ({}) exceeds window.size ({})",
+            window.min_count, window.size
+        )));
+    }
+    if window.mode == crate::query::types::WindowMode::Rolling
+        && window.pad == crate::query::types::WindowPad::None
+        && window.align == crate::query::types::WindowAlign::End
+    {
+        return Err(TetError::Validation(
+            "`window.align` \"end\" with mode \"rolling\" requires pad other than \"none\"".into(),
+        ));
+    }
     let Some(op) = op else {
         return Err(TetError::Validation(
             "`window` requires a reduction (for example `\"sum\": []`)".into(),
