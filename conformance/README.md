@@ -1,6 +1,6 @@
-# Tetration conformance pack (0.5.3)
+# Tetration conformance pack (0.6.0)
 
-**Status:** normative pack format (THI-592; grown in THI-605).  
+**Status:** normative pack format (THI-592; grown in THI-605 / THI-595).  
 **SPEC:** [`SPEC/README.md`](../SPEC/README.md) · [`SPEC/COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md).
 
 This directory is the **portable** description of “compatible”: accept fixtures with expected query answers, reject fixtures that must fail verify or query parse. The reference Rust reader gates CI by running [`src/tests/conformance.rs`](../src/tests/conformance.rs) against [`manifest.v1.json`](manifest.v1.json).
@@ -47,10 +47,12 @@ Supported `expect` keys today (reference runner):
 - `execution.operation_sum`
 - `execution.operation_var`
 - `execution.operation_element_count`
+- `execution.window_count`
+- `execution.operation_reduced_sum` / `execution.operation_reduced_mean` (JSON arrays)
 
 Float compares use absolute tolerance `1e-5` unless `expect_tol` is set on the case.
 
-**0.5.3 accept surface (summary):** sample + large + recording verify; scalar sum/mean/var on `multichunk_{u8,u32,f16}` (sum **21**, mean **3.5**, var **17.5/6**); sample mean + strided mean on `temperature`; optional `operation_element_count` where stable.
+**0.6.0 accept surface (summary):** 0.5.3 cases plus windowed tumbling/sliding sum along axis 1 on `sample.tet` (`temperature`). Reject pack covers unknown `window.*`, zero size, missing reduction, and `window`+`group_by`.
 
 ### `reject_verify[]`
 

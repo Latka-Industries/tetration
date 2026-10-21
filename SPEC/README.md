@@ -1,6 +1,6 @@
-# Tetration normative SPEC (0.5.x)
+# Tetration normative SPEC (0.6.x)
 
-**Status:** draft for the **0.5.2** cut (THI-586 / THI-478).  
+**Status:** draft for the **0.6.0** cut (windowed stats; builds on 0.5.2 freeze).  
 **Audience:** someone implementing a **compatible `.tet` reader** (or package open + pin) without reading the Rust crate.  
 **Language:** **MUST** / **MUST NOT** / **SHOULD** / **MAY** follow [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 
@@ -180,14 +180,16 @@ Standalone `.tet` uses the layout-v1 reader contract unchanged.
 
 ### 3.2 Closed top-level keys
 
-**Reserved:** `layout_version`, `dataset`, `selection`, `filter`, `group_by`, `pipeline`, `spill`, `write`, `execution`.
+**Reserved:** `layout_version`, `dataset`, `selection`, `filter`, `group_by`, `window`, `pipeline`, `spill`, `write`, `execution`.
 
 **Reduction / transform keys (at most one):**  
 `sum`, `mean`, `min`, `max`, `count`, `var`, `std`, `product`, `norm_l1`, `norm_l2`, `all_finite`, `any_nan`, `any_inf`, `arg_min`, `arg_max`, `median`, `quantile`, `histogram`, `nan_count`, `inf_count`, `null_count`, `covariance`, `correlation`, `nan_mean`, `nan_std`, `transform`.
 
 **`filter` keys (closed, AND):** `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `is_null`, `is_not_null`.
 
-**`pipeline`:** ordered steps lowered onto the flat document (`select`, `filter`, one reduction, then `spill` or `write`). Unknown steps, repeats, and out-of-order stages **MUST** fail. Maximum **eight** steps. **MUST NOT** combine with those analytic keys at the top level.
+**`window`:** object with closed fields `axis` (dimension name or index), `size` (positive integer), `mode` (`tumbling` | `sliding`). Requires a reduction. **MUST NOT** combine with `group_by`, `transform`, covariance/correlation, or materialize-required ops. Empty reduction axes mean reduce only within each window along the windowed axis (other axes kept). Tumbling last window **MAY** be shorter; sliding advances by one index. Unknown `window.*` fields **MUST** be rejected.
+
+**`pipeline`:** ordered steps lowered onto the flat document (`select`, `filter`, one reduction with optional `group_by` or `window`, then `spill` or `write`). Unknown steps, repeats, and out-of-order stages **MUST** fail. Maximum **eight** steps. **MUST NOT** combine with those analytic keys at the top level.
 
 ### 3.3 Limits (defaults)
 
@@ -202,6 +204,7 @@ Conforming parsers **MUST** enforce at least these caps (reference: `QueryLimits
 | `filter` predicates | 8 |
 | `group_by` keys | 8 |
 | `pipeline` steps | 8 |
+| `window.size` | 1 048 576 (extent checks at plan time) |
 | Rank / axes | ≤ `MAX_NDIM` (8) |
 
 Axis tokens are non-negative ASCII decimals or dimension names from footer `dim_names` — not arbitrary expressions.

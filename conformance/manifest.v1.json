@@ -1,7 +1,7 @@
 {
   "pack_version": 1,
-  "spec_milestone": "0.5.3",
-  "description": "Layout v1 verify + closed query wire answers (THI-605 grow on THI-592)",
+  "spec_milestone": "0.6.0",
+  "description": "Layout v1 verify + closed query wire answers (THI-595 windowed stats on THI-605/THI-592 pack)",
   "accept": [
     {
       "id": "sample-verify",
@@ -108,6 +108,24 @@
       "id": "recording-verify",
       "tet": "fixtures/small/tet/recording.tet",
       "verify": "ok"
+    },
+    {
+      "id": "sample-window-tumbling-sum-col",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "conformance/accept/queries/window_tumbling_sum_col.json",
+      "expect": {
+        "execution.window_count": 2,
+        "execution.operation_reduced_sum": [3.0, 3.0, 9.0, 6.0]
+      }
+    },
+    {
+      "id": "sample-window-sliding-sum-col",
+      "tet": "fixtures/small/tet/sample.tet",
+      "query": "conformance/accept/queries/window_sliding_sum_col.json",
+      "expect": {
+        "execution.window_count": 2,
+        "execution.operation_reduced_sum": [3.0, 5.0, 9.0, 11.0]
+      }
     }
   ],
   "reject_verify": [
@@ -207,6 +225,26 @@
       "id": "unknown_write_field",
       "query": "conformance/reject/queries/unknown_write_field.json",
       "expect_error_substr": "unknown field `write"
+    },
+    {
+      "id": "unknown_window_field",
+      "query": "conformance/reject/queries/unknown_window_field.json",
+      "expect_error_substr": "unknown field `window"
+    },
+    {
+      "id": "window_size_zero",
+      "query": "conformance/reject/queries/window_size_zero.json",
+      "expect_error_substr": "window.size"
+    },
+    {
+      "id": "window_without_reduction",
+      "query": "conformance/reject/queries/window_without_reduction.json",
+      "expect_error_substr": "requires a reduction"
+    },
+    {
+      "id": "window_with_group_by",
+      "query": "conformance/reject/queries/window_with_group_by.json",
+      "expect_error_substr": "cannot be combined"
     }
   ]
 }

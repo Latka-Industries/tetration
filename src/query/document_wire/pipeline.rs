@@ -4,9 +4,10 @@ use serde_json::{Map, Value};
 
 use super::super::document::QueryLimits;
 use super::super::types::{
-    AxisSlice, Operation, OutputHint, OutputHints, PipelineStep, TetError, ValueFilter, WriteHints,
+    AxisSlice, Operation, OutputHint, OutputHints, PipelineStep, TetError, ValueFilter, WindowSpec,
+    WriteHints,
 };
-use super::fields::{parse_group_by, parse_selection, parse_spill, parse_write};
+use super::fields::{parse_group_by, parse_selection, parse_spill, parse_window, parse_write};
 use super::filter::parse_filter;
 use super::keys::OP_KEYS;
 use super::operation::parse_operation;
@@ -15,6 +16,7 @@ pub(super) struct LoweredPipeline {
     pub(super) selection: Option<Vec<AxisSlice>>,
     pub(super) filter: Option<ValueFilter>,
     pub(super) group_by: Option<Vec<String>>,
+    pub(super) window: Option<WindowSpec>,
     pub(super) operation: Option<Operation>,
     pub(super) output: Option<OutputHints>,
     pub(super) write: Option<WriteHints>,
@@ -25,6 +27,7 @@ pub(super) fn lower_pipeline(steps: &[PipelineStep]) -> LoweredPipeline {
         selection: None,
         filter: None,
         group_by: None,
+        window: None,
         operation: None,
         output: None,
         write: None,
@@ -35,9 +38,11 @@ pub(super) fn lower_pipeline(steps: &[PipelineStep]) -> LoweredPipeline {
             PipelineStep::Filter(filter) => lowered.filter = Some(filter.clone()),
             PipelineStep::Reduce {
                 group_by,
+                window,
                 operation,
             } => {
                 lowered.group_by.clone_from(group_by);
+                lowered.window.clone_from(window);
                 lowered.operation = Some(operation.clone());
             }
             PipelineStep::Spill(path) => {
@@ -127,12 +132,18 @@ fn parse_pipeline_step(index: usize, v: &Value) -> Result<PipelineStep, TetError
         require_step_keys(index, obj, &["write"])?;
         return Ok(PipelineStep::Write(parse_write(&obj["write"])?));
     }
-    if obj.contains_key("group_by") || obj.keys().any(|key| OP_KEYS.contains(&key.as_str())) {
+    if obj.contains_key("group_by")
+        || obj.contains_key("window")
+        || obj.keys().any(|key| OP_KEYS.contains(&key.as_str()))
+    {
         let mut group_by = None;
+        let mut window = None;
         let mut operation = None;
         for (key, val) in obj {
             if key == "group_by" {
                 group_by = Some(parse_group_by(val)?);
+            } else if key == "window" {
+                window = Some(parse_window(val)?);
             } else if OP_KEYS.contains(&key.as_str()) {
                 if operation.is_some() {
                     return Err(TetError::Validation(format!(
@@ -148,11 +159,17 @@ fn parse_pipeline_step(index: usize, v: &Value) -> Result<PipelineStep, TetError
         }
         let Some(operation) = operation else {
             return Err(TetError::Validation(format!(
-                "`pipeline[{index}]` group_by requires a reduction"
+                "`pipeline[{index}]` group_by/window requires a reduction"
             )));
         };
+        if group_by.is_some() && window.is_some() {
+            return Err(TetError::Validation(format!(
+                "`pipeline[{index}]` cannot combine `group_by` and `window`"
+            )));
+        }
         return Ok(PipelineStep::Reduce {
             group_by,
+            window,
             operation,
         });
     }

@@ -284,6 +284,7 @@ pub(super) struct ExecutionPreviewInput<'a> {
     pub dtype: u32,
     pub source_dataset: &'a str,
     pub operation: Option<&'a types::Operation>,
+    pub window: Option<&'a types::WindowSpec>,
     pub output: Option<&'a types::OutputHints>,
     pub write: Option<&'a types::WriteHints>,
     pub max_f32: usize,
@@ -302,6 +303,7 @@ pub(super) fn build_execution_preview(
         dtype,
         source_dataset,
         operation,
+        window,
         output,
         write,
         max_f32,
@@ -327,6 +329,7 @@ pub(super) fn build_execution_preview(
             mmap,
             plan,
             op,
+            window,
             write,
             source_dataset,
             max_preview: max_f32,
@@ -343,6 +346,7 @@ struct OperationPreviewInput<'a> {
     mmap: &'a [u8],
     plan: &'a types::ReadPlan,
     op: &'a types::Operation,
+    window: Option<&'a types::WindowSpec>,
     write: Option<&'a types::WriteHints>,
     source_dataset: &'a str,
     max_preview: usize,
@@ -464,6 +468,7 @@ fn build_transform_operation_preview(
         spill_allowlist,
         dtype,
         tet_path,
+        ..
     } = *input;
     let policy = require_spill_allowlist(spill_allowlist, "transform operation")?;
     let fold_policy = fold::fold_policy::FoldIoPolicy::resolve(plan, &budget, execution, dtype)?;
@@ -504,6 +509,7 @@ fn build_fold_operation_preview(
         mmap,
         plan,
         op,
+        window,
         max_preview,
         budget,
         execution,
@@ -512,6 +518,34 @@ fn build_fold_operation_preview(
         ..
     } = *input;
     let fold_policy = fold::fold_policy::FoldIoPolicy::resolve(plan, &budget, execution, dtype)?;
+    if let Some(window) = window {
+        let kind = fold::reduction::ReductionKind::from(op);
+        let folded =
+            fold::window::fold_read_plan_window_operation(&fold::window::WindowFoldInput {
+                mmap,
+                plan,
+                max_preview,
+                kind,
+                window,
+                axis_labels: op.axes(),
+                dtype,
+                policy: &fold_policy,
+            })?;
+        let device_route = device::resolve_device_route(execution, plan, dtype, Some(op));
+        let mut preview = fold_outcome_to_preview(FoldPreviewInput {
+            folded,
+            strategy: budget::MemoryStrategy::StreamingFold,
+            budget,
+            plan,
+            dtype,
+            fold_policy,
+            device_route,
+        });
+        if let Ok(layout) = fold::window_geometry::window_axis_layout(plan, window, op.axes()) {
+            preview.window_count = Some(layout.window_count);
+        }
+        return Ok(preview);
+    }
     if let Some(kind) = scalar_reduction_kind(op) {
         let (folded, device_route) = try_gpu_scalar_fold_or_cpu(&GpuScalarFoldInput {
             mmap,

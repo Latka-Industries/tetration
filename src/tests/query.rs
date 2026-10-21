@@ -903,6 +903,101 @@ fn pipeline_rejects_reorder_unknown_and_oversize() {
 }
 
 #[test]
+fn window_wire_rejects_unknown_and_bad_size() {
+    let unknown = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"tumbling","frame":"rows"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(unknown.to_string().contains("unknown field `window"));
+
+    let zero = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":0,"mode":"tumbling"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(zero.to_string().contains("window.size"));
+
+    let missing =
+        parse_query_json(r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"tumbling"}}"#)
+            .unwrap();
+    let err = validate_query(&missing).unwrap_err();
+    assert!(err.to_string().contains("requires a reduction"));
+
+    let mixed = parse_query_json(
+        r#"{"dataset":"a","group_by":["0"],"window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}"#,
+    )
+    .unwrap();
+    let err = validate_query(&mixed).unwrap_err();
+    assert!(err.to_string().contains("cannot be combined"));
+}
+
+#[test]
+fn window_tumbling_and_sliding_match_reference() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("window.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    // Logical [[1,2,3],[4,5,6]] — window along col (axis 1).
+    let tumble = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}"#,
+    )
+    .unwrap();
+    validate_query(&tumble).unwrap();
+    let roundtrip = parse_query_json(&serde_json::to_string(&tumble).unwrap()).unwrap();
+    assert_eq!(roundtrip.window.as_ref().unwrap().size, 2);
+
+    let mmap = mmap_file_read(&path).unwrap();
+    let plan = plan_query_with_tet_mmap(&tumble, None, &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    assert_eq!(ex.memory_strategy, Some("streaming_fold"));
+    assert_eq!(ex.window_count, Some(2));
+    assert_eq!(ex.operation_reduced_shape.as_deref(), Some(&[2u64, 2][..]));
+    let sums = ex.operation_reduced_sum.as_ref().unwrap();
+    assert_eq!(sums.len(), 4);
+    // Reference: row0 [1+2, 3], row1 [4+5, 6]
+    assert!((sums[0] - 3.0).abs() < 1e-5);
+    assert!((sums[1] - 3.0).abs() < 1e-5);
+    assert!((sums[2] - 9.0).abs() < 1e-5);
+    assert!((sums[3] - 6.0).abs() < 1e-5);
+
+    let slide = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"sliding"},"sum":[]}"#,
+    )
+    .unwrap();
+    validate_query(&slide).unwrap();
+    let plan = plan_query_with_tet_mmap(&slide, None, &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    assert_eq!(ex.window_count, Some(2));
+    let sums = ex.operation_reduced_sum.as_ref().unwrap();
+    // Reference: row0 [1+2, 2+3], row1 [4+5, 5+6]
+    assert!((sums[0] - 3.0).abs() < 1e-5);
+    assert!((sums[1] - 5.0).abs() < 1e-5);
+    assert!((sums[2] - 9.0).abs() < 1e-5);
+    assert!((sums[3] - 11.0).abs() < 1e-5);
+}
+
+#[test]
+fn pipeline_window_lowers_and_matches_flat() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pipeline_window.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let raw =
+        r#"{"dataset":"a","pipeline":[{"window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}]}"#;
+    let doc = parse_query_json(raw).unwrap();
+    validate_query(&doc).unwrap();
+    assert!(doc.window.is_some());
+    let flat = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}"#,
+    )
+    .unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let piped = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let direct = plan_query_with_tet_mmap(&flat, None, &mmap, Some(0)).unwrap();
+    assert_eq!(
+        piped.execution.as_ref().unwrap().operation_reduced_sum,
+        direct.execution.as_ref().unwrap().operation_reduced_sum
+    );
+}
+
+#[test]
 fn pipeline_cli_quiet_group_sum() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("pipeline_cli.tet");

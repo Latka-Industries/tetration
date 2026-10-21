@@ -69,5 +69,5 @@ pub use types::{
     AxisSlice, CHUNK_TOUCH_POLICY, ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint,
     ExecutionHints, Operation, OutputHint, OutputHints, PlannedChunkIo, QueryDocument,
     QueryExecutionPreview, QueryResponse, ReadPlan, TetError, TransformMethod, ValueCompareOp,
-    ValueFilter, ValuePredicate, WriteHints, WriteTarget,
+    ValueFilter, ValuePredicate, WindowMode, WindowSpec, WriteHints, WriteTarget,
 };

@@ -1,11 +1,11 @@
-//! Parse selection, group_by, spill, write, and execution fields.
+//! Parse selection, group_by, window, spill, write, and execution fields.
 
 use serde_json::Value;
 
 use super::super::document::QueryLimits;
 use super::super::types::{
-    AxisSlice, ExecutionDeviceHint, ExecutionHints, OutputHint, OutputHints, TetError, WriteHints,
-    WriteTarget,
+    AxisSlice, ExecutionDeviceHint, ExecutionHints, OutputHint, OutputHints, TetError, WindowMode,
+    WindowSpec, WriteHints, WriteTarget,
 };
 use super::operation::parse_axis_spec_item;
 
@@ -26,6 +26,58 @@ pub(super) fn parse_group_by(v: &Value) -> Result<Vec<String>, TetError> {
         )));
     }
     arr.iter().map(parse_axis_spec_item).collect()
+}
+
+pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| TetError::Validation("`window` must be a JSON object".into()))?;
+    for key in obj.keys() {
+        if !matches!(key.as_str(), "axis" | "size" | "mode") {
+            return Err(TetError::Validation(format!(
+                "unknown field `window.{key}`"
+            )));
+        }
+    }
+    let axis = match obj.get("axis") {
+        None => {
+            return Err(TetError::Validation(
+                "`window.axis` is required (dimension name or index)".into(),
+            ));
+        }
+        Some(v) => parse_axis_spec_item(v)?,
+    };
+    let size = match obj.get("size") {
+        None => {
+            return Err(TetError::Validation(
+                "`window.size` is required (positive integer)".into(),
+            ));
+        }
+        Some(v) => parse_u64_field("window.size", v)?,
+    };
+    if size == 0 {
+        return Err(TetError::Validation("`window.size` must be >= 1".into()));
+    }
+    if size > QueryLimits::DEFAULT.max_window_size {
+        return Err(TetError::Validation(format!(
+            "`window.size` exceeds maximum ({size} > {})",
+            QueryLimits::DEFAULT.max_window_size
+        )));
+    }
+    let mode = match obj.get("mode") {
+        None => {
+            return Err(TetError::Validation(
+                "`window.mode` is required (`tumbling` or `sliding`)".into(),
+            ));
+        }
+        Some(v) => {
+            let s = v
+                .as_str()
+                .ok_or_else(|| TetError::Validation("`window.mode` must be a string".into()))?;
+            WindowMode::parse(s)?
+        }
+    };
+    Ok(WindowSpec { axis, size, mode })
 }
 
 pub(super) fn parse_spill(v: &Value) -> Result<OutputHints, TetError> {

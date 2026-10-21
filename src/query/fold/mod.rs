@@ -8,5 +8,7 @@ pub mod partial_geometry;
 pub mod reduction;
 pub mod shared;
 pub(crate) mod variance_simd;
+pub(crate) mod window;
+pub(crate) mod window_geometry;
 
 pub(crate) use shared::FoldPlanOutcome;
