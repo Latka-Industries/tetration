@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-21
+
 ### Added
 
 - Query wire **`align`**: closed `{ with, axes }` comparing two catalog datasets in one sealed package for axis extent / dim-name / coordinate-label agreement (THI-594). Mismatch is a structured `execution.alignment` result (not a silent read). Not a join or new array. Mutually exclusive with selection / filter / group_by / window / reduction / pipeline / spill / write.
@@ -9,6 +11,10 @@
 ### Changed
 
 - `window.mode` wire tokens renamed to **`bins`** (non-overlapping chunks of `size`) and **`rolling`** (length-`size`, step 1). Legacy `tumbling` / `sliding` are **reject-closed** with a migration hint (THI-594). Conformance pack milestone **0.6.1**.
+
+### Notes
+
+- Semver patch on the 0.6 line. PyPI **tet-py** stays on **0.6.0** until pin after crates.io shows 0.6.1.
 
 ## [0.6.0] - 2026-10-21
 
