@@ -1,7 +1,7 @@
 {
   "pack_version": 1,
-  "spec_milestone": "0.6.0",
-  "description": "Layout v1 verify + closed query wire answers (THI-595 windowed stats on THI-605/THI-592 pack)",
+  "spec_milestone": "0.6.1",
+  "description": "Layout v1 verify + closed query wire answers (THI-594 alignment + window bins/rolling on THI-595 pack)",
   "accept": [
     {
       "id": "sample-verify",
@@ -110,21 +110,44 @@
       "verify": "ok"
     },
     {
-      "id": "sample-window-tumbling-sum-col",
+      "id": "sample-window-bins-sum-col",
       "tet": "fixtures/small/tet/sample.tet",
-      "query": "conformance/accept/queries/window_tumbling_sum_col.json",
+      "query": "conformance/accept/queries/window_bins_sum_col.json",
       "expect": {
         "execution.window_count": 2,
-        "execution.operation_reduced_sum": [3.0, 3.0, 9.0, 6.0]
+        "execution.operation_reduced_sum": [
+          3.0,
+          3.0,
+          9.0,
+          6.0
+        ]
       }
     },
     {
-      "id": "sample-window-sliding-sum-col",
+      "id": "sample-window-rolling-sum-col",
       "tet": "fixtures/small/tet/sample.tet",
-      "query": "conformance/accept/queries/window_sliding_sum_col.json",
+      "query": "conformance/accept/queries/window_rolling_sum_col.json",
       "expect": {
         "execution.window_count": 2,
-        "execution.operation_reduced_sum": [3.0, 5.0, 9.0, 11.0]
+        "execution.operation_reduced_sum": [
+          3.0,
+          5.0,
+          9.0,
+          11.0
+        ]
+      }
+    },
+    {
+      "id": "align-pair-verify",
+      "tet": "fixtures/small/tet/align_pair.tet",
+      "verify": "ok"
+    },
+    {
+      "id": "align-pair-ok",
+      "tet": "fixtures/small/tet/align_pair.tet",
+      "query": "conformance/accept/queries/align_pair_ok.json",
+      "expect": {
+        "execution.alignment.aligned": true
       }
     }
   ],
@@ -245,6 +268,26 @@
       "id": "window_with_group_by",
       "query": "conformance/reject/queries/window_with_group_by.json",
       "expect_error_substr": "cannot be combined"
+    },
+    {
+      "id": "window_mode_legacy",
+      "query": "conformance/reject/queries/window_mode_legacy.json",
+      "expect_error_substr": "bins"
+    },
+    {
+      "id": "unknown_align_field",
+      "query": "conformance/reject/queries/unknown_align_field.json",
+      "expect_error_substr": "unknown field `align"
+    },
+    {
+      "id": "align_with_reduction",
+      "query": "conformance/reject/queries/align_with_reduction.json",
+      "expect_error_substr": "cannot be combined"
+    },
+    {
+      "id": "align_empty_axes",
+      "query": "conformance/reject/queries/align_empty_axes.json",
+      "expect_error_substr": "at least one axis"
     }
   ]
 }

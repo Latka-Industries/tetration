@@ -36,6 +36,7 @@ pub(super) const RESERVED_KEYS: &[&str] = &[
     "filter",
     "group_by",
     "window",
+    "align",
     "pipeline",
     "spill",
     "write",
@@ -51,7 +52,7 @@ pub(super) fn is_allowed_key(key: &str) -> bool {
 pub(super) fn is_flat_analytic_key(key: &str) -> bool {
     matches!(
         key,
-        "selection" | "filter" | "group_by" | "window" | "spill" | "write"
+        "selection" | "filter" | "group_by" | "window" | "align" | "spill" | "write"
     ) || OP_KEYS.contains(&key)
 }
 

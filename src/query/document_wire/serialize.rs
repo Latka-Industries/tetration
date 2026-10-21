@@ -4,8 +4,8 @@ use serde::ser::{Serialize, SerializeMap, Serializer};
 use serde_json::Value;
 
 use super::super::types::{
-    ExecutionHints, Operation, OutputHint, OutputHints, PipelineStep, QueryDocument, ValueFilter,
-    ValuePredicate, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, ExecutionHints, Operation, OutputHint, OutputHints, PipelineStep, QueryDocument,
+    ValueFilter, ValuePredicate, WindowSpec, WriteHints, WriteTarget,
 };
 
 pub(super) struct QueryDocumentWire<'a> {
@@ -35,6 +35,7 @@ impl Serialize for QueryDocumentWire<'_> {
             || doc.filter.is_some()
             || doc.group_by.is_some()
             || doc.window.is_some()
+            || doc.align.is_some()
             || doc.operation.is_some()
             || doc.output.is_some()
             || doc.write.is_some()
@@ -63,6 +64,9 @@ where
     }
     if let Some(window) = &doc.window {
         serialize_window(map, window)?;
+    }
+    if let Some(align) = &doc.align {
+        serialize_align(map, align)?;
     }
     if let Some(op) = &doc.operation {
         serialize_operation(map, op)?;
@@ -96,6 +100,7 @@ fn pipeline_step_value(step: &PipelineStep) -> Result<Value, serde_json::Error> 
         filter: None,
         group_by: None,
         window: None,
+        align: None,
         operation: None,
         output: None,
         write: None,
@@ -153,6 +158,31 @@ where
         serde_json::Value::String(window.mode.as_wire_str().to_owned()),
     );
     map.serialize_entry("window", &serde_json::Value::Object(obj))?;
+    Ok(())
+}
+
+fn serialize_align<S>(map: &mut S, align: &AlignSpec) -> Result<(), S::Error>
+where
+    S: SerializeMap,
+{
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "with".to_owned(),
+        serde_json::Value::String(align.with.clone()),
+    );
+    let axes: Vec<serde_json::Value> = align
+        .axes
+        .iter()
+        .map(|a| {
+            if let Ok(idx) = a.parse::<u64>() {
+                serde_json::json!(idx)
+            } else {
+                serde_json::Value::String(a.clone())
+            }
+        })
+        .collect();
+    obj.insert("axes".to_owned(), serde_json::Value::Array(axes));
+    map.serialize_entry("align", &serde_json::Value::Object(obj))?;
     Ok(())
 }
 

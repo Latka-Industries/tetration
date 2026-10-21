@@ -48,11 +48,14 @@ Supported `expect` keys today (reference runner):
 - `execution.operation_var`
 - `execution.operation_element_count`
 - `execution.window_count`
+- `execution.alignment.aligned` (boolean)
 - `execution.operation_reduced_sum` / `execution.operation_reduced_mean` (JSON arrays)
 
 Float compares use absolute tolerance `1e-5` unless `expect_tol` is set on the case.
 
-**0.6.0 accept surface (summary):** 0.5.3 cases plus windowed tumbling/sliding sum along axis 1 on `sample.tet` (`temperature`). Reject pack covers unknown `window.*`, zero size, missing reduction, and `window`+`group_by`.
+**0.6.1 accept surface (summary):** 0.6.0 cases with `window.mode` `bins`/`rolling`, plus `align` on `align_pair.tet` (`a`/`b`). Reject pack covers legacy window modes, unknown `align.*`, `align`+reduction, empty `align.axes`, and prior window rejects.
+
+Expect keys also include boolean `execution.alignment.aligned`.
 
 ### `reject_verify[]`
 

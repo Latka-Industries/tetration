@@ -4,10 +4,76 @@ use serde_json::Value;
 
 use super::super::document::QueryLimits;
 use super::super::types::{
-    AxisSlice, ExecutionDeviceHint, ExecutionHints, OutputHint, OutputHints, TetError, WindowMode,
-    WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AxisSlice, ExecutionDeviceHint, ExecutionHints, OutputHint, OutputHints, TetError,
+    WindowMode, WindowSpec, WriteHints, WriteTarget,
 };
 use super::operation::parse_axis_spec_item;
+
+pub(super) fn parse_align(v: &Value) -> Result<AlignSpec, TetError> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| TetError::Validation("`align` must be a JSON object".into()))?;
+    for key in obj.keys() {
+        if !matches!(key.as_str(), "with" | "axes") {
+            return Err(TetError::Validation(format!("unknown field `align.{key}`")));
+        }
+    }
+    let with = match obj.get("with") {
+        None => {
+            return Err(TetError::Validation(
+                "`align.with` is required (second dataset name)".into(),
+            ));
+        }
+        Some(v) => {
+            let s = v
+                .as_str()
+                .ok_or_else(|| TetError::Validation("`align.with` must be a string".into()))?;
+            if s.trim().is_empty() {
+                return Err(TetError::Validation(
+                    "`align.with` must be a non-empty string".into(),
+                ));
+            }
+            if s.len() > QueryLimits::DEFAULT.max_dataset_name_len {
+                return Err(TetError::Validation(format!(
+                    "`align.with` name exceeds maximum length ({} > {})",
+                    s.len(),
+                    QueryLimits::DEFAULT.max_dataset_name_len
+                )));
+            }
+            s.to_owned()
+        }
+    };
+    let axes = match obj.get("axes") {
+        None => {
+            return Err(TetError::Validation(
+                "`align.axes` is required (non-empty array of dimension names or indices)".into(),
+            ));
+        }
+        Some(v) => {
+            let arr = v.as_array().ok_or_else(|| {
+                TetError::Validation(
+                    "`align.axes` must be an array of dimension names or indices".into(),
+                )
+            })?;
+            if arr.is_empty() {
+                return Err(TetError::Validation(
+                    "`align.axes` must list at least one axis".into(),
+                ));
+            }
+            if arr.len() > crate::catalog::MAX_NDIM {
+                return Err(TetError::Validation(format!(
+                    "`align.axes` has {} entries; maximum is {}",
+                    arr.len(),
+                    crate::catalog::MAX_NDIM
+                )));
+            }
+            arr.iter()
+                .map(parse_axis_spec_item)
+                .collect::<Result<Vec<_>, _>>()?
+        }
+    };
+    Ok(AlignSpec { with, axes })
+}
 
 pub(super) fn parse_group_by(v: &Value) -> Result<Vec<String>, TetError> {
     let arr = v.as_array().ok_or_else(|| {
@@ -67,7 +133,7 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
     let mode = match obj.get("mode") {
         None => {
             return Err(TetError::Validation(
-                "`window.mode` is required (`tumbling` or `sliding`)".into(),
+                "`window.mode` is required (`bins` or `rolling`)".into(),
             ));
         }
         Some(v) => {

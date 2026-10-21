@@ -216,7 +216,7 @@ fn resolve_operation_axes(
     Ok(())
 }
 
-fn resolve_one_axis_label(
+pub(crate) fn resolve_one_axis_label(
     label: &str,
     dim_names: Option<&[String]>,
     ndim: usize,

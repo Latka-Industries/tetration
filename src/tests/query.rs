@@ -905,41 +905,49 @@ fn pipeline_rejects_reorder_unknown_and_oversize() {
 #[test]
 fn window_wire_rejects_unknown_and_bad_size() {
     let unknown = parse_query_json(
-        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"tumbling","frame":"rows"},"sum":[]}"#,
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"bins","frame":"rows"},"sum":[]}"#,
     )
     .unwrap_err();
     assert!(unknown.to_string().contains("unknown field `window"));
 
-    let zero = parse_query_json(
-        r#"{"dataset":"a","window":{"axis":0,"size":0,"mode":"tumbling"},"sum":[]}"#,
-    )
-    .unwrap_err();
+    let zero =
+        parse_query_json(r#"{"dataset":"a","window":{"axis":0,"size":0,"mode":"bins"},"sum":[]}"#)
+            .unwrap_err();
     assert!(zero.to_string().contains("window.size"));
 
     let missing =
-        parse_query_json(r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"tumbling"}}"#)
-            .unwrap();
+        parse_query_json(r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"bins"}}"#).unwrap();
     let err = validate_query(&missing).unwrap_err();
     assert!(err.to_string().contains("requires a reduction"));
 
     let mixed = parse_query_json(
-        r#"{"dataset":"a","group_by":["0"],"window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}"#,
+        r#"{"dataset":"a","group_by":["0"],"window":{"axis":1,"size":2,"mode":"bins"},"sum":[]}"#,
     )
     .unwrap();
     let err = validate_query(&mixed).unwrap_err();
     assert!(err.to_string().contains("cannot be combined"));
+
+    let legacy = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"tumbling"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(legacy.to_string().contains("bins"));
+    let legacy_slide = parse_query_json(
+        r#"{"dataset":"a","window":{"axis":0,"size":2,"mode":"sliding"},"sum":[]}"#,
+    )
+    .unwrap_err();
+    assert!(legacy_slide.to_string().contains("rolling"));
 }
 
 #[test]
-fn window_tumbling_and_sliding_match_reference() {
+fn window_bins_and_rolling_match_reference() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("window.tet");
     write_multichunk_2x3_tiles(&path, "a");
     // Logical [[1,2,3],[4,5,6]] — window along col (axis 1).
-    let tumble = parse_query_json(
-        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}"#,
-    )
-    .unwrap();
+    let tumble =
+        parse_query_json(r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"bins"},"sum":[]}"#)
+            .unwrap();
     validate_query(&tumble).unwrap();
     let roundtrip = parse_query_json(&serde_json::to_string(&tumble).unwrap()).unwrap();
     assert_eq!(roundtrip.window.as_ref().unwrap().size, 2);
@@ -959,7 +967,7 @@ fn window_tumbling_and_sliding_match_reference() {
     assert!((sums[3] - 6.0).abs() < 1e-5);
 
     let slide = parse_query_json(
-        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"sliding"},"sum":[]}"#,
+        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"rolling"},"sum":[]}"#,
     )
     .unwrap();
     validate_query(&slide).unwrap();
@@ -975,19 +983,106 @@ fn window_tumbling_and_sliding_match_reference() {
 }
 
 #[test]
+fn align_wire_rejects_unknown_and_combinations() {
+    let unknown =
+        parse_query_json(r#"{"dataset":"a","align":{"with":"b","axes":["0"],"join":true}}"#)
+            .unwrap_err();
+    assert!(unknown.to_string().contains("unknown field `align"));
+
+    let empty = parse_query_json(r#"{"dataset":"a","align":{"with":"b","axes":[]}}"#).unwrap_err();
+    assert!(empty.to_string().contains("at least one axis"));
+
+    let mixed =
+        parse_query_json(r#"{"dataset":"a","align":{"with":"b","axes":["0"]},"sum":[]}"#).unwrap();
+    let err = validate_query(&mixed).unwrap_err();
+    assert!(err.to_string().contains("cannot be combined"));
+
+    let same = parse_query_json(r#"{"dataset":"a","align":{"with":"a","axes":["0"]}}"#).unwrap();
+    let err = validate_query(&same).unwrap_err();
+    assert!(err.to_string().contains("different dataset"));
+}
+
+#[test]
+fn align_check_ok_and_extent_mismatch() {
+    use std::collections::BTreeMap;
+
+    use crate::catalog::{CoordAxisV1, TetDatasetWrite, TetWriterSession};
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("align.tet");
+    let shape = [2_u64, 3];
+    let chunk = [2_u64, 2];
+    let mut data = vec![0u8; 24];
+    for (slot, n) in data.chunks_exact_mut(4).zip(1_u8..=6) {
+        slot.copy_from_slice(&f32::from(n).to_le_bytes());
+    }
+    let mut session = TetWriterSession::create(&path);
+    for name in ["a", "b"] {
+        let mut ds = TetDatasetWrite::f32_row_major(name, &shape, &chunk, data.clone()).unwrap();
+        ds.dim_names = Some(vec!["row".into(), "col".into()]);
+        let mut coords = BTreeMap::new();
+        coords.insert(
+            "row".into(),
+            CoordAxisV1 {
+                labels: vec!["r0".into(), "r1".into()],
+            },
+        );
+        ds.coords = Some(coords);
+        session.push_dataset(ds).unwrap();
+    }
+    session.commit().unwrap();
+
+    let doc =
+        parse_query_json(r#"{"dataset":"a","align":{"with":"b","axes":["row","col"]}}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let roundtrip = parse_query_json(&serde_json::to_string(&doc).unwrap()).unwrap();
+    assert_eq!(roundtrip.align.as_ref().unwrap().with, "b");
+
+    let mmap = mmap_file_read(&path).unwrap();
+    let plan = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let align = plan.execution.as_ref().unwrap().alignment.as_ref().unwrap();
+    assert!(align.aligned);
+    assert_eq!(align.axes.len(), 2);
+
+    // Mismatch: second file with different col extent.
+    let path2 = dir.path().join("align_bad.tet");
+    let mut session = TetWriterSession::create(&path2);
+    let mut a = TetDatasetWrite::f32_row_major("a", &shape, &chunk, data.clone()).unwrap();
+    a.dim_names = Some(vec!["row".into(), "col".into()]);
+    session.push_dataset(a).unwrap();
+    let shape_b = [2_u64, 2];
+    let chunk_b = [2_u64, 2];
+    let mut data_b = vec![0u8; 16];
+    for (slot, n) in data_b.chunks_exact_mut(4).zip(1_u8..=4) {
+        slot.copy_from_slice(&f32::from(n).to_le_bytes());
+    }
+    let mut b = TetDatasetWrite::f32_row_major("b", &shape_b, &chunk_b, data_b).unwrap();
+    b.dim_names = Some(vec!["row".into(), "col".into()]);
+    session.push_dataset(b).unwrap();
+    session.commit().unwrap();
+
+    let mmap = mmap_file_read(&path2).unwrap();
+    let plan = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let align = plan.execution.as_ref().unwrap().alignment.as_ref().unwrap();
+    assert!(!align.aligned);
+    assert!(align.axes.iter().any(|ax| ax.axis == "col"
+        && !ax.ok
+        && ax.reason.as_deref().is_some_and(|r| r.contains("extent"))));
+}
+
+#[test]
 fn pipeline_window_lowers_and_matches_flat() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("pipeline_window.tet");
     write_multichunk_2x3_tiles(&path, "a");
     let raw =
-        r#"{"dataset":"a","pipeline":[{"window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}]}"#;
+        r#"{"dataset":"a","pipeline":[{"window":{"axis":1,"size":2,"mode":"bins"},"sum":[]}]}"#;
     let doc = parse_query_json(raw).unwrap();
     validate_query(&doc).unwrap();
     assert!(doc.window.is_some());
-    let flat = parse_query_json(
-        r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"tumbling"},"sum":[]}"#,
-    )
-    .unwrap();
+    let flat =
+        parse_query_json(r#"{"dataset":"a","window":{"axis":1,"size":2,"mode":"bins"},"sum":[]}"#)
+            .unwrap();
     let mmap = mmap_file_read(&path).unwrap();
     let piped = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
     let direct = plan_query_with_tet_mmap(&flat, None, &mmap, Some(0)).unwrap();

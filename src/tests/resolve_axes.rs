@@ -12,6 +12,7 @@ fn minimal_doc(operation: Operation) -> QueryDocument {
         filter: None,
         group_by: None,
         window: None,
+        align: None,
         operation: Some(operation),
         output: None,
         write: None,

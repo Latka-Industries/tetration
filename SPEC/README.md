@@ -1,6 +1,6 @@
 # Tetration normative SPEC (0.6.x)
 
-**Status:** draft for the **0.6.0** cut (windowed stats; builds on 0.5.2 freeze).  
+**Status:** draft for the **0.6.1** cut (alignment + `window.mode` `bins`/`rolling`; builds on 0.6.0 / 0.5.2 freeze).  
 **Audience:** someone implementing a **compatible `.tet` reader** (or package open + pin) without reading the Rust crate.  
 **Language:** **MUST** / **MUST NOT** / **SHOULD** / **MAY** follow [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 
@@ -180,14 +180,16 @@ Standalone `.tet` uses the layout-v1 reader contract unchanged.
 
 ### 3.2 Closed top-level keys
 
-**Reserved:** `layout_version`, `dataset`, `selection`, `filter`, `group_by`, `window`, `pipeline`, `spill`, `write`, `execution`.
+**Reserved:** `layout_version`, `dataset`, `selection`, `filter`, `group_by`, `window`, `align`, `pipeline`, `spill`, `write`, `execution`.
 
 **Reduction / transform keys (at most one):**  
 `sum`, `mean`, `min`, `max`, `count`, `var`, `std`, `product`, `norm_l1`, `norm_l2`, `all_finite`, `any_nan`, `any_inf`, `arg_min`, `arg_max`, `median`, `quantile`, `histogram`, `nan_count`, `inf_count`, `null_count`, `covariance`, `correlation`, `nan_mean`, `nan_std`, `transform`.
 
 **`filter` keys (closed, AND):** `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `is_null`, `is_not_null`.
 
-**`window`:** object with closed fields `axis` (dimension name or index), `size` (positive integer), `mode` (`tumbling` | `sliding`). Requires a reduction. **MUST NOT** combine with `group_by`, `transform`, covariance/correlation, or materialize-required ops. Empty reduction axes mean reduce only within each window along the windowed axis (other axes kept). Tumbling last window **MAY** be shorter; sliding advances by one index. Unknown `window.*` fields **MUST** be rejected.
+**`window`:** object with closed fields `axis` (dimension name or index), `size` (positive integer), `mode` (`bins` | `rolling`). Requires a reduction. **MUST NOT** combine with `group_by`, `transform`, covariance/correlation, or materialize-required ops. Empty reduction axes mean reduce only within each window along the windowed axis (other axes kept). `bins`: non-overlapping chunks of `size` (last **MAY** be shorter). `rolling`: length-`size`, step 1. Legacy `tumbling` / `sliding` **MUST** be rejected. Unknown `window.*` fields **MUST** be rejected.
+
+**`align`:** object with closed fields `with` (second dataset name) and `axes` (non-empty list of dimension names or indices). Compares extents, dimension names, and coordinate labels between `dataset` and `align.with` on a sealed generation. **MUST NOT** combine with selection, filter, group_by, window, reduction, pipeline, spill, or write. Mismatch **MUST** surface as a structured execution result (or a typed validation error for missing datasets / unresolvable axes) — never a silent success. Does not join or produce a new array. Unknown `align.*` fields **MUST** be rejected.
 
 **`pipeline`:** ordered steps lowered onto the flat document (`select`, `filter`, one reduction with optional `group_by` or `window`, then `spill` or `write`). Unknown steps, repeats, and out-of-order stages **MUST** fail. Maximum **eight** steps. **MUST NOT** combine with those analytic keys at the top level.
 
@@ -285,6 +287,8 @@ Optional second-language smoke (catalog + one chunk, not a query engine): [`conf
 | ----- | ------- |
 | Crate **0.5.2** | First release that freezes this SPEC enough to claim “compatible” via conformance |
 | Pack **0.5.3** | Larger accept / reject surface (same layout + query wire; see [`conformance/`](../conformance/README.md)) |
+| Pack **0.6.0** | Windowed stats (`window` wire) |
+| Pack **0.6.1** | `window.mode` `bins`/`rolling` + multi-dataset `align` |
 | Crate **0.5.4** | Hygiene + `parse_query_json` fuzz (layout / query wire / pack milestone unchanged) |
 | Crate / pack **0.6.0** | Closed `window` query wire + conformance accept/reject (THI-595); layout / package / ABI unchanged |
 | `layout_version` | On-disk container (still **1**) |

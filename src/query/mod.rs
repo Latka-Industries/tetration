@@ -3,6 +3,7 @@
 //! Embedders should use [`crate::prelude`] and [`execute_query_document`] / [`execute_query_json`].
 //! History, `tet info` text, and response formatting live in [`cli`] for the `tet` binary.
 
+mod align;
 pub mod cli;
 pub(crate) mod decode;
 mod device;
@@ -66,8 +67,9 @@ pub use engine::{
 pub use execute::{ExecuteQueryOptions, execute_query_document, execute_query_json};
 pub use plan::fetch::{chunk_payload_ranges, plan_query_fetch};
 pub use types::{
-    AxisSlice, CHUNK_TOUCH_POLICY, ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint,
-    ExecutionHints, Operation, OutputHint, OutputHints, PlannedChunkIo, QueryDocument,
-    QueryExecutionPreview, QueryResponse, ReadPlan, TetError, TransformMethod, ValueCompareOp,
-    ValueFilter, ValuePredicate, WindowMode, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AlignmentAxisResult, AlignmentResult, AxisSlice, CHUNK_TOUCH_POLICY,
+    ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint, ExecutionHints, Operation,
+    OutputHint, OutputHints, PlannedChunkIo, QueryDocument, QueryExecutionPreview, QueryResponse,
+    ReadPlan, TetError, TransformMethod, ValueCompareOp, ValueFilter, ValuePredicate, WindowMode,
+    WindowSpec, WriteHints, WriteTarget,
 };

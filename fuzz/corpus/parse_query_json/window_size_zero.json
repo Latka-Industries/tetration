@@ -1,5 +1,5 @@
 {
   "dataset": "a",
-  "window": { "axis": 0, "size": 0, "mode": "tumbling" },
+  "window": { "axis": 0, "size": 0, "mode": "bins" },
   "sum": []
 }

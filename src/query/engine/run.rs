@@ -415,6 +415,40 @@ fn plan_query_matched_dataset(
     let rec = &summary.datasets[dataset_idx];
     let mut doc = doc.clone();
     let dataset_meta = summary.metadata.datasets.get(&doc.dataset);
+    if let Some(align) = &doc.align {
+        if attach.raw_f32_preview_max.is_none() {
+            return Err(TetError::Validation(
+                "`align` requires mmap execution with an explicit preview limit (e.g. `--execute --preview 0`)".into(),
+            ));
+        }
+        let alignment =
+            crate::query::align::check_alignment(summary, &doc.dataset, rec, dataset_meta, align)?;
+        let rows = chunk_index_rows_for_dataset(summary, dataset_idx);
+        let message = if alignment.aligned {
+            format!(
+                "query accepted; dataset matched; alignment check ok with {:?}",
+                alignment.with
+            )
+        } else {
+            format!(
+                "query accepted; dataset matched; alignment check reported mismatch with {:?}",
+                alignment.with
+            )
+        };
+        let preview = QueryExecutionPreview {
+            memory_strategy: Some("alignment_check"),
+            alignment: Some(alignment),
+            ..Default::default()
+        };
+        return Ok(query_response(
+            &doc,
+            message,
+            attach.tet_path,
+            Some(matched_dataset_resolution(summary, dataset_idx, rec, rows)),
+            None,
+            Some(preview),
+        ));
+    }
     resolve_query_document_axes(&mut doc, dataset_meta, rec.shape.len())?;
     resolve_query_document_selection(&mut doc, dataset_meta, &rec.shape)?;
     let rows = chunk_index_rows_for_dataset(summary, dataset_idx);
