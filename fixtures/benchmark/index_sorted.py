@@ -1,4 +1,9 @@
-"""Skip bench for sorted_axis_range (THI-613): present vs missing vs HDF5 peer."""
+"""THI-613 bench: tet sealed query vs HDF5+NumPy on the same time-range sum.
+
+Primary question: is the built-in tet op accurate and performant against the
+fair source peer (h5py slab + NumPy sum)? Index present/missing is a secondary
+correctness check only — not the headline comparison.
+"""
 
 from __future__ import annotations
 
@@ -32,22 +37,23 @@ from generate.index_sorted import (
 RESULTS_DIR = FIXTURES_ROOT / "bench_results"
 INDEX_RESULTS = RESULTS_DIR / "index_sorted_axis.md"
 
+# Same relative tolerance style as fixtures/benchmark/constants.py sum ops.
+SUM_TOL_REL = 1e-2
+
 
 @dataclass
 class Row:
-    label: str
+    backend: str
     seconds: float
     value: float | None
     chunk_count: int | None
-    index_skipped: int | None
-    note: str | None = None
+    note: str
 
 
-def _run(cmd: list[str], *, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "TET_NO_QUERY_HISTORY": "1"}
     return subprocess.run(
         cmd,
-        input=input_text,
         text=True,
         capture_output=True,
         env=env,
@@ -60,23 +66,27 @@ def _must_ok(proc: subprocess.CompletedProcess[str], what: str) -> None:
         raise RuntimeError(f"{what} failed:\n{proc.stderr or proc.stdout}")
 
 
-def query_body(*, with_selection: bool) -> str:
-    doc: dict = {"dataset": "data", "layout_version": 1, "sum": []}
-    if with_selection:
-        doc["selection"] = [
-            {"start_label": INDEX_SELECT_START, "stop_label": INDEX_SELECT_STOP},
-            {},
-        ]
-    doc["execution"] = {"device": "cpu"}
-    return json.dumps(doc)
+def query_body() -> str:
+    """Closed wire: label range on time + full x, streaming sum."""
+    return json.dumps(
+        {
+            "dataset": "data",
+            "layout_version": 1,
+            "selection": [
+                {"start_label": INDEX_SELECT_START, "stop_label": INDEX_SELECT_STOP},
+                {},
+            ],
+            "sum": [],
+            "execution": {"device": "cpu"},
+        }
+    )
 
 
-def run_package_query(tet: Path, pkg: Path, *, with_selection: bool) -> tuple[float, dict]:
-    body = query_body(with_selection=with_selection)
+def run_tet_query(tet: Path, pkg: Path) -> tuple[float, dict]:
     cmd = [
         str(tet),
         "query",
-        body,
+        query_body(),
         "-t",
         str(pkg),
         "-x",
@@ -99,13 +109,19 @@ def run_package_query(tet: Path, pkg: Path, *, with_selection: bool) -> tuple[fl
     return time.perf_counter() - t0, payload
 
 
-def source_sum_slice() -> tuple[float, float]:
+def source_h5_numpy_sum() -> tuple[float, float]:
+    """Fair peer: open HDF5, read the same half-open time slab, NumPy sum."""
     start = int(INDEX_SELECT_START)
     stop = int(INDEX_SELECT_STOP)
+
+    def once() -> float:
+        with h5py.File(INDEX_H5, "r") as f:
+            arr = np.asarray(f["data"][start:stop, :], dtype=np.float64)
+            return float(arr.sum())
+
+    once()  # warm (open + first read)
     t0 = time.perf_counter()
-    with h5py.File(INDEX_H5, "r") as f:
-        arr = np.asarray(f["data"][start:stop, :], dtype=np.float64)
-        total = float(arr.sum())
+    total = once()
     return time.perf_counter() - t0, total
 
 
@@ -120,7 +136,7 @@ def build_package(tet: Path) -> None:
     _must_ok(proc, "tet convert")
     log(f"convert done in {format_elapsed(time.perf_counter() - t0)}")
 
-    log(f"ingest → {INDEX_PKG.name}")
+    log(f"ingest + publish → {INDEX_PKG.name}")
     proc = _run(
         [str(tet), "ingest", str(INDEX_TET), "--out", str(INDEX_PKG), "--jobs", "1"]
     )
@@ -137,28 +153,62 @@ def index_path(pkg: Path) -> Path:
     return dirs[0] / "INDEX.json"
 
 
-def write_report(rows: list[Row], *, git_rev: str) -> None:
+def values_match(a: float, b: float) -> bool:
+    scale = max(abs(a), abs(b), 1e-9)
+    return abs(a - b) <= SUM_TOL_REL * scale
+
+
+def write_report(
+    *,
+    git_rev: str,
+    primary: list[Row],
+    secondary: list[Row],
+    accurate: bool,
+) -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# Sorted-axis range index bench (THI-613)",
+        "# Sorted-axis range query bench (THI-613)",
+        "",
+        "**Question:** is tet’s built-in range selection + `sum` accurate and "
+        "competitive vs loading the same HDF5 slab with NumPy?",
         "",
         f"- git: `{git_rev}`",
         f"- fixture: time={INDEX_TIME} × width={INDEX_WIDTH} f32 "
         f"(~{INDEX_TIME * INDEX_WIDTH * 4 / (1024**2):.0f} MiB), "
         f"chunk (1, {INDEX_WIDTH})",
-        f"- selection: time labels `[{INDEX_SELECT_START}, {INDEX_SELECT_STOP})` "
-        f"→ {INDEX_SELECT_LEN} chunks",
+        f"- op: `sum` over time labels `[{INDEX_SELECT_START}, {INDEX_SELECT_STOP})` "
+        f"× full x ({INDEX_SELECT_LEN} time chunks)",
+        f"- accuracy (tet vs h5+numpy): **{'pass' if accurate else 'FAIL'}**",
         "",
-        "| case | seconds | sum | chunks | index_skipped | note |",
-        "| --- | ---: | ---: | ---: | ---: | --- |",
+        "## Primary: tet vs HDF5 + NumPy",
+        "",
+        "| backend | seconds | sum | chunks | note |",
+        "| --- | ---: | ---: | ---: | --- |",
     ]
-    for row in rows:
+    for row in primary:
         lines.append(
-            f"| {row.label} | {row.seconds:.4f} | "
+            f"| {row.backend} | {row.seconds:.4f} | "
             f"{'-' if row.value is None else f'{row.value:.6g}'} | "
             f"{'-' if row.chunk_count is None else row.chunk_count} | "
-            f"{'-' if row.index_skipped is None else row.index_skipped} | "
-            f"{row.note or ''} |"
+            f"{row.note} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Secondary: index present vs missing (same tet query)",
+            "",
+            "Answers must match. Timing here is not the product claim.",
+            "",
+            "| backend | seconds | sum | chunks | note |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for row in secondary:
+        lines.append(
+            f"| {row.backend} | {row.seconds:.4f} | "
+            f"{'-' if row.value is None else f'{row.value:.6g}'} | "
+            f"{'-' if row.chunk_count is None else row.chunk_count} | "
+            f"{row.note} |"
         )
     lines.append("")
     INDEX_RESULTS.write_text("\n".join(lines), encoding="utf-8")
@@ -167,94 +217,82 @@ def write_report(rows: list[Row], *, git_rev: str) -> None:
 
 def run_index_bench() -> int:
     tet = tet_bin()
-    log("=== sorted_axis_range skip bench (THI-613) ===")
+    log("=== THI-613: tet range sum vs HDF5+NumPy ===")
     generate_sorted_axis_index(quiet=False)
     build_package(tet)
 
     idx = index_path(INDEX_PKG)
     if not idx.is_file():
         raise RuntimeError(f"expected INDEX.json at {idx} after publish")
-
-    # Confirm sorted_axis_range is in the sealed index.
     doc = json.loads(idx.read_text(encoding="utf-8"))
     kinds = [e.get("kind") for e in doc.get("indexes", [])]
     if "sorted_axis_range" not in kinds:
         raise RuntimeError(f"INDEX.json missing sorted_axis_range; kinds={kinds}")
 
-    rows: list[Row] = []
-
-    log("query: index present + narrow selection")
-    sec, payload = run_package_query(tet, INDEX_PKG, with_selection=True)
+    log("tet: sealed package, selection + sum (index present)")
+    tet_s, payload = run_tet_query(tet, INDEX_PKG)
     plan = payload.get("read_plan") or {}
     exe = payload.get("execution") or {}
-    rows.append(
+    tet_sum = exe.get("operation_sum")
+    tet_chunks = plan.get("chunk_count")
+    primary = [
         Row(
-            label="tet index present (select)",
-            seconds=sec,
-            value=exe.get("operation_sum"),
-            chunk_count=plan.get("chunk_count"),
-            index_skipped=plan.get("index_filter_skipped_chunks", 0),
-            note="sorted_axis_range usable",
+            backend="tet",
+            seconds=tet_s,
+            value=tet_sum,
+            chunk_count=tet_chunks,
+            note="query on package (sorted_axis_range sealed)",
+        )
+    ]
+
+    log("source: HDF5 + NumPy same slab sum")
+    h5_s, h5_sum = source_h5_numpy_sum()
+    primary.append(
+        Row(
+            backend="hdf5+numpy",
+            seconds=h5_s,
+            value=h5_sum,
+            chunk_count=INDEX_SELECT_LEN,
+            note="h5py read + np.sum (fair peer)",
         )
     )
 
+    # Secondary: drop INDEX.json; answers must still match.
     backup = idx.with_suffix(".json.bak")
     shutil.move(idx, backup)
-    log("query: index missing + narrow selection")
-    sec, payload = run_package_query(tet, INDEX_PKG, with_selection=True)
-    plan = payload.get("read_plan") or {}
-    exe = payload.get("execution") or {}
-    rows.append(
-        Row(
-            label="tet index missing (select)",
-            seconds=sec,
-            value=exe.get("operation_sum"),
-            chunk_count=plan.get("chunk_count"),
-            index_skipped=plan.get("index_filter_skipped_chunks", 0),
-            note="geometry only",
-        )
-    )
+    log("tet: same query with INDEX.json removed (fallback)")
+    miss_s, miss_payload = run_tet_query(tet, INDEX_PKG)
     shutil.move(backup, idx)
-
-    log("query: full tensor (I/O baseline)")
-    sec, payload = run_package_query(tet, INDEX_PKG, with_selection=False)
-    plan = payload.get("read_plan") or {}
-    exe = payload.get("execution") or {}
-    rows.append(
+    miss_exe = miss_payload.get("execution") or {}
+    miss_plan = miss_payload.get("read_plan") or {}
+    miss_sum = miss_exe.get("operation_sum")
+    secondary = [
         Row(
-            label="tet full scan",
-            seconds=sec,
-            value=exe.get("operation_sum"),
-            chunk_count=plan.get("chunk_count"),
-            index_skipped=plan.get("index_filter_skipped_chunks", 0),
-            note=f"all {INDEX_TIME} time chunks",
-        )
-    )
-
-    log("source: HDF5 slice sum")
-    sec, value = source_sum_slice()
-    rows.append(
+            backend="tet (index present)",
+            seconds=tet_s,
+            value=tet_sum,
+            chunk_count=tet_chunks,
+            note="from primary row",
+        ),
         Row(
-            label="hdf5 peer slice",
-            seconds=sec,
-            value=value,
-            chunk_count=INDEX_SELECT_LEN,
-            index_skipped=None,
-            note="h5py slab",
-        )
-    )
+            backend="tet (index missing)",
+            seconds=miss_s,
+            value=miss_sum,
+            chunk_count=miss_plan.get("chunk_count"),
+            note="geometry fallback; answer must match",
+        ),
+    ]
 
-    present = rows[0].value
-    missing = rows[1].value
-    peer = rows[3].value
-    if present is None or missing is None or peer is None:
+    if tet_sum is None or h5_sum is None or miss_sum is None:
         log("error: missing sum values")
         return 1
-    if abs(present - missing) > 1e-3 * max(abs(present), 1.0):
-        log(f"error: present vs missing sum mismatch ({present} vs {missing})")
-        return 1
-    if abs(present - peer) > 1e-2 * max(abs(present), 1.0):
-        log(f"warning: tet vs hdf5 sum |Δ| large ({present} vs {peer})")
+
+    accurate = values_match(float(tet_sum), h5_sum)
+    if not accurate:
+        log(f"error: tet vs hdf5+numpy sum mismatch ({tet_sum} vs {h5_sum})")
+    if not values_match(float(tet_sum), float(miss_sum)):
+        log(f"error: index present vs missing sum mismatch ({tet_sum} vs {miss_sum})")
+        accurate = False
 
     try:
         git_rev = subprocess.check_output(
@@ -264,13 +302,24 @@ def run_index_bench() -> int:
     except (subprocess.CalledProcessError, FileNotFoundError):
         git_rev = "unknown"
 
-    write_report(rows, git_rev=git_rev)
-    for row in rows:
+    write_report(
+        git_rev=git_rev,
+        primary=primary,
+        secondary=secondary,
+        accurate=accurate,
+    )
+    for row in primary + secondary:
         log(
-            f"{row.label}: {format_elapsed(row.seconds)}  sum={row.value}  "
-            f"chunks={row.chunk_count}  index_skipped={row.index_skipped}"
+            f"{row.backend}: {format_elapsed(row.seconds)}  sum={row.value}  "
+            f"chunks={row.chunk_count}"
         )
-    return 0
+    if accurate and primary[0].seconds > 0:
+        ratio = primary[1].seconds / primary[0].seconds
+        log(
+            f"primary: tet {primary[0].seconds:.4f}s vs hdf5+numpy "
+            f"{primary[1].seconds:.4f}s (numpy/tet = {ratio:.2f}x)"
+        )
+    return 0 if accurate else 1
 
 
 def main(argv: list[str] | None = None) -> int:
