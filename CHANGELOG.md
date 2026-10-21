@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Query wire **`group_by` labels form**: `{ "by": "labels", "axes": [...] }` collapses repeated footer coordinate labels into one group per distinct value (THI-596). Array form (one group per axis index) is unchanged. Missing coords fail closed. Conformance pack milestone **0.6.2**.
+
+### Notes
+
+- Semver patch on the 0.6 line (feature PR; version bump / tet-py pin follow separately). Layout / package / C ABI unchanged.
+
 ## [0.6.1] - 2026-10-21
 
 ### Added

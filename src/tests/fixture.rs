@@ -426,6 +426,51 @@ pub fn write_repair_plan_fixture(path: &Path, dataset_name: &str) {
     std::fs::write(path, &data).unwrap();
 }
 
+/// Multichunk `f32` `[2,3]` with repeated `col` coordinate labels (`east`,`east`,`west`).
+///
+/// Used by label-value `group_by` conformance (0.6.2 / THI-596).
+pub fn write_group_by_labels_fixture(path: &Path) {
+    use crate::catalog::{
+        CoordAxisV1, DatasetMetadataV1, FooterBlobV1, TetMetadataV1, write_footer_blob,
+    };
+
+    write_multichunk_2x3_tiles(path, "a");
+    write_footer_blob(
+        path,
+        &FooterBlobV1 {
+            history: Vec::new(),
+            metadata: Some(TetMetadataV1 {
+                datasets: [(
+                    "a".to_owned(),
+                    DatasetMetadataV1 {
+                        dim_names: Some(vec!["row".to_owned(), "col".to_owned()]),
+                        coords: Some(
+                            [(
+                                "col".to_owned(),
+                                CoordAxisV1 {
+                                    labels: vec![
+                                        "east".to_owned(),
+                                        "east".to_owned(),
+                                        "west".to_owned(),
+                                    ],
+                                },
+                            )]
+                            .into_iter()
+                            .collect(),
+                        ),
+                        ..Default::default()
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                ..Default::default()
+            }),
+            metadata_ref: None,
+        },
+    )
+    .unwrap();
+}
+
 /// Regenerate tracked files under `fixtures/small/tet/` (see `fixtures/small/tet/README.md`).
 pub fn write_tracked_small_tet_fixtures(dir: &Path) {
     use crate::catalog::write_recording_fixture;
@@ -438,6 +483,7 @@ pub fn write_tracked_small_tet_fixtures(dir: &Path) {
     write_multichunk_2x3_u32_tiles(&dir.join("multichunk_u32.tet"), "a");
     write_multichunk_2x3_f16_tiles(&dir.join("multichunk_f16.tet"), "a");
     write_recording_fixture(&dir.join("recording.tet")).unwrap();
+    write_group_by_labels_fixture(&dir.join("group_by_labels.tet"));
 }
 
 /// Path to committed manual fixtures: `fixtures/small/tet/`.

@@ -36,9 +36,17 @@ fn dataset_tensor_bytes(dtype: u32, shape: &[u64], expected: u32) -> Option<u64>
 }
 
 fn group_count_for(doc: &QueryDocument, plan: &ReadPlan) -> Option<usize> {
-    let keys = doc.group_by.as_ref()?;
+    let group_by = doc.group_by.as_ref()?;
+    if let Some(remap) = &plan.label_group_remap {
+        let mut count = 1usize;
+        for &extent in &remap.extents {
+            let extent = usize::try_from(extent).ok()?;
+            count = count.saturating_mul(extent);
+        }
+        return Some(count);
+    }
     let mut count = 1usize;
-    for key in keys {
+    for key in group_by.axes() {
         let idx = key.parse::<usize>().ok()?;
         let extent = *plan.logical_selection_shape.get(idx)?;
         let extent = usize::try_from(extent).ok()?;
@@ -452,8 +460,12 @@ fn plan_query_matched_dataset(
     resolve_query_document_axes(&mut doc, dataset_meta, rec.shape.len())?;
     resolve_query_document_selection(&mut doc, dataset_meta, &rec.shape)?;
     let rows = chunk_index_rows_for_dataset(summary, dataset_idx);
-    let read_plan =
+    let mut read_plan =
         build_matched_read_plan(summary, dataset_idx, &doc, attach.zones, attach.index)?;
+    if let Some(group_by) = &doc.group_by {
+        read_plan.label_group_remap =
+            crate::query::label_group::build_label_group_remap(group_by, dataset_meta, &read_plan)?;
+    }
     if doc.operation.is_some() && attach.raw_f32_preview_max.is_none() {
         return Err(TetError::Validation(
             "`operation` requires mmap execution with an explicit preview limit (e.g. `--execute --preview-f32 64`, or `--preview-f32 0` to omit preview floats)".into(),

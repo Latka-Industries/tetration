@@ -1,7 +1,7 @@
 {
   "pack_version": 1,
-  "spec_milestone": "0.6.1",
-  "description": "Layout v1 verify + closed query wire answers (THI-594 alignment + window bins/rolling on THI-595 pack)",
+  "spec_milestone": "0.6.2",
+  "description": "Layout v1 verify + closed query wire answers (THI-596 label-value group_by on THI-594 pack)",
   "accept": [
     {
       "id": "sample-verify",
@@ -149,6 +149,15 @@
       "expect": {
         "execution.alignment.aligned": true
       }
+    },
+    {
+      "id": "group-by-labels-col-sum",
+      "tet": "fixtures/small/tet/group_by_labels.tet",
+      "query": "conformance/accept/queries/group_by_labels_col_sum.json",
+      "expect": {
+        "execution.group_count": 2,
+        "execution.operation_reduced_sum": [12.0, 9.0]
+      }
     }
   ],
   "reject_verify": [
@@ -288,6 +297,16 @@
       "id": "align_empty_axes",
       "query": "conformance/reject/queries/align_empty_axes.json",
       "expect_error_substr": "at least one axis"
+    },
+    {
+      "id": "unknown_group_by_field",
+      "query": "conformance/reject/queries/unknown_group_by_field.json",
+      "expect_error_substr": "unknown field `group_by"
+    },
+    {
+      "id": "group_by_labels_bad_by",
+      "query": "conformance/reject/queries/group_by_labels_bad_by.json",
+      "expect_error_substr": "group_by.by"
     }
   ]
 }

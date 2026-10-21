@@ -8,7 +8,7 @@ use memmap2::MmapMut;
 use crate::query::{
     decode::indexing::coords_from_linear_row_major,
     engine::budget::MemoryStrategy,
-    fold::partial_geometry::{partial_axis_layout, reduced_index},
+    fold::partial_geometry::partial_axis_layout,
     types::{Operation, OperationPreviewFields, ReadPlan, TetError},
 };
 
@@ -135,7 +135,7 @@ fn gather_partial_in_memory<V: Copy>(
     let mut cells = vec![Vec::new(); layout.out_len];
     for (li, &value) in values.iter().enumerate() {
         let coords = coords_from_linear_row_major(li, shape)?;
-        let oi = reduced_index(&coords, &layout.axis_set, &layout.out_shape)?;
+        let oi = layout.reduced_index(&coords)?;
         cells[oi].push(value);
     }
     Ok(cells)
@@ -149,7 +149,7 @@ fn gather_partial_in_memory_f64_from_f32(
     let mut cells = vec![Vec::new(); layout.out_len];
     for (li, &value) in values.iter().enumerate() {
         let coords = coords_from_linear_row_major(li, shape)?;
-        let oi = reduced_index(&coords, &layout.axis_set, &layout.out_shape)?;
+        let oi = layout.reduced_index(&coords)?;
         cells[oi].push(f64::from(value));
     }
     Ok(cells)
@@ -167,7 +167,7 @@ where
     let mut cells = vec![Vec::new(); layout.out_len];
     for li in 0..n {
         let coords = coords_from_linear_row_major(li, shape)?;
-        let oi = reduced_index(&coords, &layout.axis_set, &layout.out_shape)?;
+        let oi = layout.reduced_index(&coords)?;
         cells[oi].push(read_at(li)?);
     }
     Ok(cells)

@@ -69,6 +69,22 @@ pub struct ReadPlan {
     /// chunk can drop non-matching cells without a second wire key.
     #[serde(skip)]
     pub(crate) cell_filter: Option<CellPredicate>,
+    /// Label-value `group_by` remap for kept axes. Not part of the JSON plan wire.
+    ///
+    /// When set, partial-fold output extents are distinct label counts (not axis extents).
+    #[serde(skip)]
+    pub(crate) label_group_remap: Option<LabelGroupRemap>,
+}
+
+/// Selection-local index → group id for each kept axis under label-value `group_by`.
+///
+/// Maps are ordered by ascending kept-axis dimension index (same order as reduced `out_shape`).
+#[derive(Debug, Clone)]
+pub(crate) struct LabelGroupRemap {
+    /// `maps[i][coord]` → group id for the `i`-th kept axis; length equals selection extent.
+    pub maps: Vec<Vec<usize>>,
+    /// Distinct group count per kept axis (defines reduced `out_shape` extents).
+    pub extents: Vec<u64>,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +131,7 @@ impl<'de> Deserialize<'de> for ReadPlan {
             logical_selection_shape: wire.logical_selection_shape,
             logical_element_count: wire.logical_element_count,
             cell_filter: None,
+            label_group_remap: None,
         })
     }
 }

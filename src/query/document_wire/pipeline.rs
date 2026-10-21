@@ -4,8 +4,8 @@ use serde_json::{Map, Value};
 
 use super::super::document::QueryLimits;
 use super::super::types::{
-    AxisSlice, Operation, OutputHint, OutputHints, PipelineStep, TetError, ValueFilter, WindowSpec,
-    WriteHints,
+    AxisSlice, GroupBySpec, Operation, OutputHint, OutputHints, PipelineStep, TetError,
+    ValueFilter, WindowSpec, WriteHints,
 };
 use super::fields::{parse_group_by, parse_selection, parse_spill, parse_window, parse_write};
 use super::filter::parse_filter;
@@ -15,7 +15,7 @@ use super::operation::parse_operation;
 pub(super) struct LoweredPipeline {
     pub(super) selection: Option<Vec<AxisSlice>>,
     pub(super) filter: Option<ValueFilter>,
-    pub(super) group_by: Option<Vec<String>>,
+    pub(super) group_by: Option<GroupBySpec>,
     pub(super) window: Option<WindowSpec>,
     pub(super) operation: Option<Operation>,
     pub(super) output: Option<OutputHints>,

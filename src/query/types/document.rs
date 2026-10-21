@@ -412,6 +412,44 @@ pub struct AlignSpec {
     pub axes: Vec<String>,
 }
 
+/// How [`QueryDocument::group_by`] partitions a reduction.
+///
+/// Wire: a string array (axis index / dim-name groups, 0.4.2) or
+/// `{ "by": "labels", "axes": [...] }` (collapse repeated coordinate labels, 0.6.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupBySpec {
+    /// One group per index along each listed axis (`["col"]` / `["0"]`).
+    Axes(Vec<String>),
+    /// One group per distinct coordinate-label value on each listed axis.
+    Labels {
+        /// Dimension names or decimal indices (same tokens as [`Self::Axes`]).
+        axes: Vec<String>,
+    },
+}
+
+impl GroupBySpec {
+    /// Axis tokens (dimension names or decimal indices).
+    #[must_use]
+    pub fn axes(&self) -> &[String] {
+        match self {
+            Self::Axes(keys) | Self::Labels { axes: keys } => keys,
+        }
+    }
+
+    /// Mutable axis tokens (for name → index resolution).
+    pub fn axes_mut(&mut self) -> &mut Vec<String> {
+        match self {
+            Self::Axes(keys) | Self::Labels { axes: keys } => keys,
+        }
+    }
+
+    /// True when grouping collapses repeated footer coordinate labels.
+    #[must_use]
+    pub const fn by_labels(&self) -> bool {
+        matches!(self, Self::Labels { .. })
+    }
+}
+
 /// Top-level JSON query document accepted by the engine and `tet query`.
 #[derive(Debug, Clone)]
 pub struct QueryDocument {
@@ -423,11 +461,12 @@ pub struct QueryDocument {
     pub selection: Option<Vec<AxisSlice>>,
     /// Optional cell-value filter (`filter` wire key); see [`ValueFilter`].
     pub filter: Option<ValueFilter>,
-    /// Dimensions that identify each group (`group_by` wire key).
+    /// Dimensions that identify each group (`group_by` wire key); see [`GroupBySpec`].
     ///
-    /// Names or decimal indices. The reduction runs inside each group (streaming fold for
-    /// tier-A/B). Together with the reduction axes they must partition the dataset rank.
-    pub group_by: Option<Vec<String>>,
+    /// Array form partitions by axis index. Object form `{ "by": "labels", "axes": [...] }`
+    /// collapses repeated footer coordinate labels. The reduction runs inside each group
+    /// (streaming fold for tier-A/B). Together with the reduction axes they must partition rank.
+    pub group_by: Option<GroupBySpec>,
     /// Optional windowed reduction along one axis (`window` wire key); see [`WindowSpec`].
     ///
     /// Mutually exclusive with [`Self::group_by`]. Empty reduction axes mean reduce only within
@@ -435,7 +474,7 @@ pub struct QueryDocument {
     pub window: Option<WindowSpec>,
     /// Optional multi-dataset alignment check (`align` wire key); see [`AlignSpec`].
     ///
-    /// Mutually exclusive with selection / filter / group_by / window / reduction / pipeline /
+    /// Mutually exclusive with selection / filter / `group_by` / window / reduction / pipeline /
     /// spill / write. Metadata-only; does not read cell payloads.
     pub align: Option<AlignSpec>,
     /// Optional reduction over the logical selection.
@@ -465,7 +504,7 @@ pub enum PipelineStep {
     Filter(ValueFilter),
     /// One reduction, optionally partitioned by `group_by` or windowed along one axis.
     Reduce {
-        group_by: Option<Vec<String>>,
+        group_by: Option<GroupBySpec>,
         window: Option<WindowSpec>,
         operation: Operation,
     },

@@ -39,6 +39,10 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.6.2:** `group_by` labels form (`{ "by": "labels", "axes": [...] }`) collapses repeated
+//! footer coordinate labels; array form unchanged; conformance pack milestone 0.6.2 (THI-596).
+//! Layout / package / C ABI unchanged.
+//!
 //! **0.6.1:** multi-dataset `align` checks and `window.mode` `bins`/`rolling` (reject-closed on
 //! legacy `tumbling`/`sliding`); conformance pack milestone 0.6.1 (THI-594). Layout / package /
 //! C ABI unchanged.
