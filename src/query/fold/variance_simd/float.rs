@@ -1,4 +1,13 @@
 #[inline]
+pub(crate) fn scalar_f32_sum(vals: &[f32]) -> f64 {
+    let mut sum = 0.0f64;
+    for &v in vals {
+        sum += f64::from(v);
+    }
+    sum
+}
+
+#[inline]
 pub(crate) fn scalar_f32_sum_sumsq(vals: &[f32]) -> (f64, f64) {
     let mut sum = 0.0f64;
     let mut sumsq = 0.0f64;
@@ -15,6 +24,23 @@ mod arch {
     use std::arch::aarch64::{
         vaddvq_f64, vcvt_f64_f32, vget_high_f32, vget_low_f32, vld1q_f32, vmulq_f64,
     };
+
+    #[target_feature(enable = "neon")]
+    pub(super) unsafe fn f32_sum(vals: &[f32]) -> f64 {
+        with_sum_loop!(
+            vals,
+            lanes: 4,
+            simd: |ptr, i, sum| {
+                // SAFETY: `*i` is chunk-aligned within `vals`.
+                let v = unsafe { vld1q_f32(ptr.add(*i)) };
+                let lo = vcvt_f64_f32(vget_low_f32(v));
+                let hi = vcvt_f64_f32(vget_high_f32(v));
+                *sum += vaddvq_f64(lo) + vaddvq_f64(hi);
+                *i += 4;
+            },
+            tail_load: |p: *const f32| f64::from(*p)
+        )
+    }
 
     #[target_feature(enable = "neon")]
     pub(super) unsafe fn f32_sum_sumsq(vals: &[f32]) -> (f64, f64) {
@@ -42,6 +68,20 @@ mod arch {
     use crate::query::fold::variance_simd::util::x86;
 
     #[target_feature(enable = "sse2")]
+    pub(super) unsafe fn f32_sum_sse2(vals: &[f32]) -> f64 {
+        with_sum_loop!(
+            vals,
+            lanes: 4,
+            simd: |ptr, i, sum| {
+                // SAFETY: `*i` is chunk-aligned within `vals`.
+                unsafe { x86::accum_f32x4_sum(sum, ptr.add(*i)) };
+                *i += 4;
+            },
+            tail_load: |p: *const f32| f64::from(*p)
+        )
+    }
+
+    #[target_feature(enable = "sse2")]
     pub(super) unsafe fn f32_sum_sumsq_sse2(vals: &[f32]) -> (f64, f64) {
         with_sum_sumsq_loop!(
             vals,
@@ -54,6 +94,27 @@ mod arch {
             tail_load: |p: *const f32| f64::from(*p)
         )
     }
+}
+
+/// Sum only (`f64` accumulator). Prefer this for `sum` / `mean` — do not pay for sumsq.
+#[must_use]
+pub(crate) fn f32_sum(vals: &[f32]) -> f64 {
+    if vals.is_empty() {
+        return 0.0;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            return unsafe { arch::f32_sum(vals) };
+        }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::arch::is_x86_feature_detected!("sse2") {
+            return unsafe { arch::f32_sum_sse2(vals) };
+        }
+    }
+    scalar_f32_sum(vals)
 }
 
 /// Sum and sum-of-squares for population variance (`f64` accumulators).
@@ -212,6 +273,16 @@ pub(crate) fn f32_min_max(vals: &[f32]) -> (f64, f64) {
     scalar_f32_min_max(vals)
 }
 
+/// Sum only over an `f64` slice.
+#[must_use]
+pub(crate) fn f64_sum(vals: &[f64]) -> f64 {
+    let mut sum = 0.0f64;
+    for &v in vals {
+        sum += v;
+    }
+    sum
+}
+
 /// Sum and sum-of-squares for population variance over an `f64` slice.
 #[must_use]
 pub(crate) fn f64_sum_sumsq(vals: &[f64]) -> (f64, f64) {
@@ -225,6 +296,29 @@ pub(crate) fn f64_sum_sumsq(vals: &[f64]) -> (f64, f64) {
 }
 
 const F16_SIMD_CHUNK: usize = 8;
+
+/// Sum only for `f16` slabs (via `f32` SIMD chunks). Prefer for `sum` / `mean`.
+#[must_use]
+pub(crate) fn f16_sum(vals: &[half::f16]) -> f64 {
+    if vals.is_empty() {
+        return 0.0;
+    }
+    let mut buf = [0.0f32; F16_SIMD_CHUNK];
+    let mut sum = 0.0f64;
+    let mut i = 0usize;
+    while i + F16_SIMD_CHUNK <= vals.len() {
+        for (j, slot) in buf.iter_mut().enumerate() {
+            *slot = f32::from(vals[i + j]);
+        }
+        sum += f32_sum(&buf);
+        i += F16_SIMD_CHUNK;
+    }
+    while i < vals.len() {
+        sum += f64::from(f32::from(vals[i]));
+        i += 1;
+    }
+    sum
+}
 
 /// Sum and sum-of-squares for `f16` slabs (via `f32` SIMD chunks).
 #[must_use]
