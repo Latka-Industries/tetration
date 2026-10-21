@@ -35,7 +35,7 @@ brew install tetration
 cargo install tetration
 ```
 
-**Library** (pins the latest compatible release from crates.io):
+**Library:**
 
 ```bash
 cargo add tetration
