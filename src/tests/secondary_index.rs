@@ -1,12 +1,13 @@
-//! Value-posting indexes written at compact/publish (THI-571).
+//! Secondary indexes written at compact/publish (THI-571 / THI-613).
 
+use std::collections::BTreeMap;
 use std::fs;
 
 use serde_json::json;
 
 use crate::catalog::store::ReadAt;
 use crate::catalog::{
-    DATASET_DTYPE_TAG_V1, GenerationPin, MemoryStore, SECONDARY_INDEX_FILE,
+    CoordAxisV1, DATASET_DTYPE_TAG_V1, GenerationPin, MemoryStore, SECONDARY_INDEX_FILE,
     SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, SecondaryIndexEntry, TetDatasetWrite,
     TetPackage, TetShardWriter, VALUE_POSTINGS_MAX_CARDINALITY, publish_staged_parts,
     read_secondary_index_file, secondary_index_key, stage_part,
@@ -334,4 +335,102 @@ fn execute_sum(packed: &std::path::Path, bytes: &[u8], query: &str) -> crate::qu
         None,
     )
     .unwrap()
+}
+
+fn publish_f32_with_sorted_time(pkg: &TetPackage, generation: u64, vals: &[f32]) {
+    let labels: Vec<String> = (0..vals.len()).map(|i| format!("{}.0", i * 10)).collect();
+    let mut ds = TetDatasetWrite::f32_row_major(
+        "a",
+        &[vals.len() as u64],
+        &[2],
+        f32_le(vals),
+    )
+    .unwrap();
+    ds.dim_names = Some(vec!["time".to_owned()]);
+    let mut coords = BTreeMap::new();
+    coords.insert(
+        "time".to_owned(),
+        CoordAxisV1 {
+            labels,
+        },
+    );
+    ds.coords = Some(coords);
+    let mut w = TetShardWriter::create(pkg, "s", "only").unwrap();
+    w.push_dataset(ds).unwrap();
+    w.seal().unwrap();
+    crate::catalog::publish_parts(pkg, generation, &["only".to_owned()]).unwrap();
+}
+
+#[test]
+fn publish_writes_sorted_axis_range_for_monotonic_coords() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("sorted.tet.d")).unwrap();
+    // Four values → two chunks; high-ish cardinality still gets value postings (4 ≤ 64)
+    // plus sorted_axis_range on time.
+    publish_f32_with_sorted_time(&pkg, 1, &[1.0, 2.0, 3.0, 4.0]);
+
+    let doc = read_secondary_index_file(&pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
+    let sorted = doc
+        .indexes
+        .iter()
+        .find(|e| matches!(e, SecondaryIndexEntry::SortedAxisRange { .. }))
+        .expect("sorted_axis_range entry");
+    let SecondaryIndexEntry::SortedAxisRange {
+        dataset_id,
+        axis,
+        ascending,
+        segments,
+    } = sorted
+    else {
+        unreachable!();
+    };
+    assert_eq!(*dataset_id, 0);
+    assert_eq!(*axis, 0);
+    assert!(*ascending);
+    assert_eq!(segments.len(), 2);
+    assert_eq!(segments[0].chunks, vec![vec![0]]);
+    assert_eq!(segments[1].chunks, vec![vec![1]]);
+
+    let report = verify_tet_package_with_options(
+        pkg.root(),
+        VerifyOptions {
+            deep_decode: true,
+        },
+    )
+    .unwrap();
+    assert!(report.ok, "{:?}", report.findings);
+}
+
+#[test]
+fn unsorted_coords_omit_sorted_axis_kind() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("unsorted.tet.d")).unwrap();
+    let mut ds =
+        TetDatasetWrite::f32_row_major("a", &[4], &[2], f32_le(&[1.0, 2.0, 3.0, 4.0])).unwrap();
+    ds.dim_names = Some(vec!["time".to_owned()]);
+    let mut coords = BTreeMap::new();
+    coords.insert(
+        "time".to_owned(),
+        CoordAxisV1 {
+            labels: vec![
+                "10.0".into(),
+                "30.0".into(),
+                "20.0".into(),
+                "40.0".into(),
+            ],
+        },
+    );
+    ds.coords = Some(coords);
+    let mut w = TetShardWriter::create(&pkg, "s", "only").unwrap();
+    w.push_dataset(ds).unwrap();
+    w.seal().unwrap();
+    crate::catalog::publish_parts(&pkg, 1, &["only".to_owned()]).unwrap();
+
+    let doc = read_secondary_index_file(&pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
+    assert!(
+        doc.indexes
+            .iter()
+            .all(|e| !matches!(e, SecondaryIndexEntry::SortedAxisRange { .. })),
+        "unsorted coords must not emit sorted_axis_range"
+    );
 }

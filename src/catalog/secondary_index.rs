@@ -1,11 +1,11 @@
-//! Optional value-posting index attached when a generation is sealed.
+//! Optional secondary indexes attached when a generation is sealed.
 //!
 //! Writers update staging parts only. Compact/publish recomputes [`GenerationSecondaryIndex`]
-//! from the merged `packed.tet` and writes `INDEX.json` beside it when at least one dataset
-//! qualifies. The manifest token is `"present"` or `"omitted"`. A later generation gets a new
-//! document; sealed bytes are not edited in place.
+//! from the merged `packed.tet` and writes `INDEX.json` beside it when at least one kind
+//! qualifies (`value_postings`, `sorted_axis_range`). The manifest token is `"present"` or
+//! `"omitted"`. A later generation gets a new document; sealed bytes are not edited in place.
 //!
-//! Contract: [`docs/secondary_indexes.md`](../../docs/secondary_indexes.md) (THI-568).
+//! Contract: [`docs/secondary_indexes.md`](../../docs/secondary_indexes.md) (THI-568 / THI-613).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -13,10 +13,11 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use super::metadata::{CoordAxisV1, DatasetMetadataV1};
 use super::zone::{fill_le_bytes, hex_le, sha256_hex, stored_payload};
 use super::{
-    CHUNK_PAYLOAD_CODEC_V1, CatalogError, DATASET_DTYPE_TAG_V1, elem_size_for_wire_tag,
-    read_tet_summary_v1,
+    CHUNK_PAYLOAD_CODEC_V1, CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1,
+    TetFileSummaryV1, elem_size_for_wire_tag, read_tet_summary_v1,
 };
 
 /// File name beside `packed.tet` inside `generations/<G>/`.
@@ -34,7 +35,10 @@ pub const SECONDARY_INDEX_VERSION: u32 = 1;
 /// `indexes[].kind` for exact cell-value → chunk-list postings.
 pub const VALUE_POSTINGS_KIND: &str = "value_postings";
 
-/// Distinct non-null values per dataset above which that dataset is left out of the index.
+/// `indexes[].kind` for monotonic numeric footer coords → chunk spans (THI-613).
+pub const SORTED_AXIS_RANGE_KIND: &str = "sorted_axis_range";
+
+/// Distinct non-null values per dataset above which value-postings are omitted for that dataset.
 ///
 /// A partial list would look like “this value is absent” and drop a chunk that has it.
 pub const VALUE_POSTINGS_MAX_CARDINALITY: usize = 64;
@@ -46,6 +50,18 @@ pub struct ValuePosting {
     /// Lowercase hex of the raw little-endian element (same encoding as zone `min_le`).
     pub value_le: String,
     /// Rank-length chunk coordinates. Sorted lexicographically.
+    pub chunks: Vec<Vec<u64>>,
+}
+
+/// One chunk-slab span on a sorted coordinate axis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SortedAxisSegment {
+    /// Lowercase hex of the `f64` LE min coordinate covering this slab (inclusive).
+    pub lo_le: String,
+    /// Lowercase hex of the `f64` LE max coordinate covering this slab (inclusive).
+    pub hi_le: String,
+    /// Rank-length chunk coordinates on this axis slab. Sorted lexicographically.
     pub chunks: Vec<Vec<u64>>,
 }
 
@@ -61,6 +77,14 @@ pub enum SecondaryIndexEntry {
         dataset_id: u64,
         dtype: u32,
         postings: Vec<ValuePosting>,
+    },
+    /// Monotonic numeric footer coords → per-chunk spans for one dataset axis.
+    #[serde(rename = "sorted_axis_range")]
+    SortedAxisRange {
+        dataset_id: u64,
+        axis: u32,
+        ascending: bool,
+        segments: Vec<SortedAxisSegment>,
     },
     /// A kind this crate does not interpret.
     #[serde(other)]
@@ -91,8 +115,8 @@ pub struct PreparedSecondaryIndex {
 
 /// Build the seal-time index blob.
 ///
-/// `None` indexes (status [`SECONDARY_INDEX_OMITTED`]) means every dataset was above the
-/// cardinality cap, or the image has no datasets. The caller must not write `INDEX.json`.
+/// `None` indexes (status [`SECONDARY_INDEX_OMITTED`]) means no kind qualified for any
+/// dataset. The caller must not write `INDEX.json`.
 ///
 /// # Errors
 ///
@@ -118,9 +142,9 @@ pub fn prepare_secondary_index(
     })
 }
 
-/// Posting lists for datasets at or under [`VALUE_POSTINGS_MAX_CARDINALITY`].
+/// Known index kinds for datasets that qualify at seal time.
 ///
-/// Returns `Ok(None)` when no dataset qualifies.
+/// Returns `Ok(None)` when no kind qualifies.
 ///
 /// # Errors
 ///
@@ -131,6 +155,34 @@ pub fn secondary_index_for_packed(
     packed_sha256: &str,
 ) -> Result<Option<GenerationSecondaryIndex>, CatalogError> {
     let summary = read_tet_summary_v1(packed)?;
+    let mut indexes = value_postings_for_summary(packed, &summary)?;
+    indexes.extend(sorted_axis_entries_for_summary(&summary)?);
+    indexes.sort_by_key(index_sort_key);
+    if indexes.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(GenerationSecondaryIndex {
+        version: SECONDARY_INDEX_VERSION,
+        generation,
+        packed_sha256: packed_sha256.to_owned(),
+        indexes,
+    }))
+}
+
+fn index_sort_key(entry: &SecondaryIndexEntry) -> (u64, u8, u32) {
+    match entry {
+        SecondaryIndexEntry::ValuePostings { dataset_id, .. } => (*dataset_id, 0, 0),
+        SecondaryIndexEntry::SortedAxisRange {
+            dataset_id, axis, ..
+        } => (*dataset_id, 1, *axis),
+        SecondaryIndexEntry::Unknown => (u64::MAX, 255, u32::MAX),
+    }
+}
+
+fn value_postings_for_summary(
+    packed: &[u8],
+    summary: &TetFileSummaryV1,
+) -> Result<Vec<SecondaryIndexEntry>, CatalogError> {
     let mut by_dataset: BTreeMap<u64, DatasetAcc> = BTreeMap::new();
     for entry in &summary.chunks {
         let dataset_idx =
@@ -182,7 +234,7 @@ pub fn secondary_index_for_packed(
             acc.values.clear();
         }
     }
-    let indexes = by_dataset
+    Ok(by_dataset
         .into_iter()
         .filter(|(_, acc)| !acc.omitted)
         .map(|(dataset_id, acc)| SecondaryIndexEntry::ValuePostings {
@@ -197,16 +249,152 @@ pub fn secondary_index_for_packed(
                 })
                 .collect(),
         })
-        .collect::<Vec<_>>();
-    if indexes.is_empty() {
-        return Ok(None);
+        .collect())
+}
+
+fn sorted_axis_entries_for_summary(
+    summary: &TetFileSummaryV1,
+) -> Result<Vec<SecondaryIndexEntry>, CatalogError> {
+    let mut out = Vec::new();
+    for (dataset_id, dataset) in summary.datasets.iter().enumerate() {
+        let Some(meta) = summary.metadata.datasets.get(&dataset.name) else {
+            continue;
+        };
+        let ndim = dataset.shape.len();
+        for axis in 0..ndim {
+            let Some((values, ascending)) =
+                monotonic_numeric_axis(meta, axis, dataset.shape[axis])
+            else {
+                continue;
+            };
+            let segments = axis_segments(summary, dataset_id as u64, dataset, axis, &values)?;
+            if segments.is_empty() {
+                continue;
+            }
+            out.push(SecondaryIndexEntry::SortedAxisRange {
+                dataset_id: dataset_id as u64,
+                axis: u32::try_from(axis).map_err(|_| CatalogError::TooLargeForPlatform {
+                    field: "axis",
+                    value: axis as u64,
+                })?,
+                ascending,
+                segments,
+            });
+        }
     }
-    Ok(Some(GenerationSecondaryIndex {
-        version: SECONDARY_INDEX_VERSION,
-        generation,
-        packed_sha256: packed_sha256.to_owned(),
-        indexes,
-    }))
+    Ok(out)
+}
+
+fn monotonic_numeric_axis(
+    meta: &DatasetMetadataV1,
+    axis: usize,
+    extent: u64,
+) -> Option<(Vec<f64>, bool)> {
+    let coord = coord_axis_for_dimension(meta, axis)?;
+    let extent_usize = usize::try_from(extent).ok()?;
+    if coord.labels.len() != extent_usize || extent_usize == 0 {
+        return None;
+    }
+    let mut values = Vec::with_capacity(extent_usize);
+    for label in &coord.labels {
+        let v: f64 = label.parse().ok()?;
+        if !v.is_finite() {
+            return None;
+        }
+        values.push(v);
+    }
+    if values.len() == 1 {
+        return Some((values, true));
+    }
+    let ascending = values.windows(2).all(|w| w[0] < w[1]);
+    let descending = values.windows(2).all(|w| w[0] > w[1]);
+    if ascending {
+        Some((values, true))
+    } else if descending {
+        Some((values, false))
+    } else {
+        None
+    }
+}
+
+fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&CoordAxisV1> {
+    let coords = meta.coords.as_ref()?;
+    if let Some(names) = &meta.dim_names
+        && let Some(name) = names.get(d)
+        && let Some(c) = coords.get(name)
+    {
+        return Some(c);
+    }
+    coords.get(d.to_string().as_str())
+}
+
+fn axis_segments(
+    summary: &TetFileSummaryV1,
+    dataset_id: u64,
+    dataset: &DatasetRecordV1,
+    axis: usize,
+    values: &[f64],
+) -> Result<Vec<SortedAxisSegment>, CatalogError> {
+    let ndim = dataset.shape.len();
+    let chunk_len = dataset.chunk_shape.get(axis).copied().ok_or_else(|| {
+        CatalogError::InvalidWriteSpec("chunk_shape missing axis while building sorted-axis index")
+    })?;
+    if chunk_len == 0 {
+        return Err(CatalogError::InvalidWriteSpec(
+            "chunk_shape axis extent is zero while building sorted-axis index",
+        ));
+    }
+    let n_axis_chunks = dataset.shape[axis].div_ceil(chunk_len);
+    let mut segments = Vec::with_capacity(
+        usize::try_from(n_axis_chunks).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "axis_chunks",
+            value: n_axis_chunks,
+        })?,
+    );
+    for c in 0..n_axis_chunks {
+        let g0 = c.checked_mul(chunk_len).ok_or(CatalogError::InvalidWriteSpec(
+            "sorted-axis chunk start overflow",
+        ))?;
+        let g1 = (c.saturating_add(1))
+            .checked_mul(chunk_len)
+            .map(|v| v.min(dataset.shape[axis]))
+            .unwrap_or(dataset.shape[axis]);
+        let start = usize::try_from(g0).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "axis_start",
+            value: g0,
+        })?;
+        let stop = usize::try_from(g1).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "axis_stop",
+            value: g1,
+        })?;
+        let slice = &values[start..stop];
+        if slice.is_empty() {
+            continue;
+        }
+        let mut lo = slice[0];
+        let mut hi = slice[0];
+        for &v in &slice[1..] {
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        let mut chunks: Vec<Vec<u64>> = summary
+            .chunks
+            .iter()
+            .filter(|e| {
+                e.dataset_id == dataset_id
+                    && e.chunk_index.get(axis).copied() == Some(c)
+            })
+            .map(|e| e.chunk_index[..ndim].to_vec())
+            .collect();
+        chunks.sort();
+        segments.push(SortedAxisSegment {
+            lo_le: hex_le(&lo.to_le_bytes()),
+            hi_le: hex_le(&hi.to_le_bytes()),
+            chunks,
+        });
+    }
+    segments.sort_by(|a, b| a.lo_le.cmp(&b.lo_le));
+    Ok(segments)
 }
 
 /// Serialize `doc` the same way seal writes `INDEX.json`.
@@ -237,6 +425,24 @@ pub fn value_postings(doc: &GenerationSecondaryIndex) -> Vec<&SecondaryIndexEntr
     doc.indexes
         .iter()
         .filter(|entry| matches!(entry, SecondaryIndexEntry::ValuePostings { .. }))
+        .collect()
+}
+
+/// `sorted_axis_range` entries only, in document order.
+#[must_use]
+pub fn sorted_axis_ranges(doc: &GenerationSecondaryIndex) -> Vec<&SecondaryIndexEntry> {
+    doc.indexes
+        .iter()
+        .filter(|entry| matches!(entry, SecondaryIndexEntry::SortedAxisRange { .. }))
+        .collect()
+}
+
+/// Known kinds only (skips [`SecondaryIndexEntry::Unknown`]), in document order.
+#[must_use]
+pub fn known_index_entries(doc: &GenerationSecondaryIndex) -> Vec<&SecondaryIndexEntry> {
+    doc.indexes
+        .iter()
+        .filter(|entry| !matches!(entry, SecondaryIndexEntry::Unknown))
         .collect()
 }
 
