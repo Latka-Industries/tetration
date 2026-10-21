@@ -122,7 +122,7 @@ Geometric touch count is `chunk_count + zone_filter_skipped_chunks + index_filte
 
 Same sidecar and manifest token. New `kind`: **`sorted_axis_range`**.
 
-Footer `coords` are string labels. When every label on an axis parses as a finite `f64` and the sequence is **strictly monotonic** (ascending or descending), seal emits one entry for that `(dataset_id, axis)`. Unsorted, non-numeric, empty, or missing coords → omit that axis (do not write a partial span).
+Footer `coords` are string labels. When every label on an axis parses as a finite `f64` and the sequence is **strictly monotonic** (ascending or descending), seal emits one entry for that `(dataset_id, axis)`. Unsorted, non-numeric, empty, or missing coords → omit that axis (do not write a partial span). Axis lookup uses `dim_names`, then `"0"`/`"1"`/… keys, then a **unique** length match (exactly one coord axis whose label count equals the dimension extent) so HDF5 CF imports without `dim_names` still qualify when extents are distinct.
 
 Each entry lists **segments**: one per distinct chunk-grid coordinate along that axis. A segment stores:
 
