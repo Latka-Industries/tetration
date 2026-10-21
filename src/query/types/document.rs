@@ -354,6 +354,22 @@ pub struct WindowSpec {
     pub size: u64,
     /// How consecutive windows are placed along the axis.
     pub mode: WindowMode,
+    /// Edge fill for short bins / overhanging rolling windows (default [`WindowPad::None`]).
+    pub pad: WindowPad,
+    /// Rolling stride. `None` means step 1. Present with [`WindowMode::Bins`] is rejected.
+    pub step: Option<u64>,
+    /// Short-bin side ([`WindowAlign::Start`] = short last) or rolling overhang side under pad.
+    pub align: WindowAlign,
+    /// Minimum real (non-pad) cells required; fewer → NaN for that window (default 1).
+    pub min_count: u64,
+}
+
+impl WindowSpec {
+    /// Effective rolling stride (`step` omitted → 1).
+    #[must_use]
+    pub fn effective_step(&self) -> u64 {
+        self.step.unwrap_or(1)
+    }
 }
 
 /// Window placement along the windowed axis.
@@ -361,7 +377,7 @@ pub struct WindowSpec {
 pub enum WindowMode {
     /// Non-overlapping chunks of `size` (last window may be shorter when extent is not divisible).
     Bins,
-    /// Overlapping spans of length `size` advancing by one index each step.
+    /// Overlapping spans of length `size` advancing by [`WindowSpec::effective_step`].
     Rolling,
 }
 
@@ -395,6 +411,86 @@ impl WindowMode {
             )),
             _ => Err(TetError::Validation(format!(
                 "unknown window mode `{token}` (expected bins or rolling)"
+            ))),
+        }
+    }
+}
+
+/// Edge fill policy for [`WindowSpec::pad`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WindowPad {
+    /// No edge fill (default). Short bins stay short; rolling does not overhang.
+    #[default]
+    None,
+    /// Literal `0.0` for out-of-bounds / short-bin slots.
+    Zero,
+    /// `NaN` for out-of-bounds / short-bin slots (float dtypes only).
+    Nan,
+    /// Dataset `_FillValue` / `missing_value` / `fill_value` (refused when missing).
+    Fill,
+}
+
+impl WindowPad {
+    /// Stable wire token.
+    #[must_use]
+    pub const fn as_wire_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Zero => "0",
+            Self::Nan => "nan",
+            Self::Fill => "fill",
+        }
+    }
+
+    /// Parse a closed pad token.
+    ///
+    /// # Errors
+    ///
+    /// [`TetError::Validation`] when the token is not `none` / `0` / `nan` / `fill`.
+    pub fn parse(token: &str) -> Result<Self, TetError> {
+        match token {
+            "none" => Ok(Self::None),
+            "0" => Ok(Self::Zero),
+            "nan" => Ok(Self::Nan),
+            "fill" => Ok(Self::Fill),
+            _ => Err(TetError::Validation(format!(
+                "unknown window pad `{token}` (expected none, 0, nan, or fill)"
+            ))),
+        }
+    }
+}
+
+/// Placement of a short last/first bin, or rolling overhang side under pad.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WindowAlign {
+    /// Short remainder at the end of the axis (bins); left overhang under rolling pad.
+    #[default]
+    Start,
+    /// Short remainder at the start of the axis (bins); right overhang under rolling pad.
+    End,
+}
+
+impl WindowAlign {
+    /// Stable wire token (`start` / `end`).
+    #[must_use]
+    pub const fn as_wire_str(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::End => "end",
+        }
+    }
+
+    /// Parse a closed align token.
+    ///
+    /// # Errors
+    ///
+    /// [`TetError::Validation`] when the token is not `start` or `end`.
+    pub fn parse(token: &str) -> Result<Self, TetError> {
+        match token {
+            "start" => Ok(Self::Start),
+            "end" => Ok(Self::End),
+            _ => Err(TetError::Validation(format!(
+                "unknown window align `{token}` (expected start or end)"
             ))),
         }
     }

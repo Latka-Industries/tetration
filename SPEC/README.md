@@ -1,6 +1,6 @@
 # Tetration normative SPEC (0.6.x)
 
-**Status:** draft for the **0.6.2** cut (label-value `group_by`; builds on 0.6.1 / 0.5.2 freeze).  
+**Status:** draft for the **0.6.3** cut (window `pad` / `step` / `align` / `min_count` + multi-dtype; builds on 0.6.2 / 0.5.2 freeze).  
 **Audience:** someone implementing a **compatible `.tet` reader** (or package open + pin) without reading the Rust crate.  
 **Language:** **MUST** / **MUST NOT** / **SHOULD** / **MAY** follow [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 
@@ -187,7 +187,7 @@ Standalone `.tet` uses the layout-v1 reader contract unchanged.
 
 **`filter` keys (closed, AND):** `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `is_null`, `is_not_null`.
 
-**`window`:** object with closed fields `axis` (dimension name or index), `size` (positive integer), `mode` (`bins` | `rolling`). Requires a reduction. **MUST NOT** combine with `group_by`, `transform`, covariance/correlation, or materialize-required ops. Empty reduction axes mean reduce only within each window along the windowed axis (other axes kept). `bins`: non-overlapping chunks of `size` (last **MAY** be shorter). `rolling`: length-`size`, step 1. Legacy `tumbling` / `sliding` **MUST** be rejected. Unknown `window.*` fields **MUST** be rejected.
+**`window`:** object with closed fields `axis` (dimension name or index), `size` (positive integer), `mode` (`bins` | `rolling`), and optional `pad` (`none` | `0` | `nan` | `fill`; default `none`), `step` (positive integer; rolling only; default 1 when omitted), `align` (`start` | `end`; default `start`), `min_count` (1…`size`; default 1). Requires a reduction. **MUST NOT** combine with `group_by`, `transform`, covariance/correlation, or materialize-required ops. Empty reduction axes mean reduce only within each window along the windowed axis (other axes kept). `bins`: non-overlapping chunks of `size`; `align` `start` places a short remainder at the end, `end` at the start; with `pad` other than `none`, short bins are padded up to `size`. `rolling`: length-`size` advancing by `step`; with `pad` other than `none`, windows **MAY** overhang (`align` selects the overhang side); `align` `end` with `pad` `none` **MUST** be rejected; `step` present with `mode` `bins` **MUST** be rejected. `pad` `fill` **MUST** refuse when the dataset has no `_FillValue` / `missing_value` / `fill_value`; `pad` `nan` **MUST** refuse on integer dtypes. Windows with fewer than `min_count` real (non-pad) cells **MUST** finish as NaN (numeric reductions). Legacy `tumbling` / `sliding` **MUST** be rejected. Unknown `window.*` fields and unknown `pad` / `align` tokens **MUST** be rejected. Windowed tier-A/B folds **MUST** accept all wire dtypes (not only `f32`).
 
 **`group_by`:** either (1) an array of dimension names or decimal indices (one group per axis index; 0.4.2), or (2) an object `{ "by": "labels", "axes": [...] }` that collapses repeated footer coordinate labels into one group per distinct value (0.6.2). Requires a reduction. Together with the reduction axes, group axes **MUST** partition rank. Missing coords for the labels form **MUST** fail closed (no silent fall-through to index grouping). Unknown `group_by.*` fields and unknown `by` tokens **MUST** be rejected. **MUST NOT** combine with `window`, `transform`, covariance, or correlation.
 
@@ -292,10 +292,12 @@ Optional second-language smoke (catalog + one chunk, not a query engine): [`conf
 | Pack **0.6.0** | Windowed stats (`window` wire) |
 | Pack **0.6.1** | `window.mode` `bins`/`rolling` + multi-dataset `align` |
 | Pack **0.6.2** | Label-value `group_by` (`by: labels`) |
+| Pack **0.6.3** | Window `pad` / `step` / `align` / `min_count` + multi-dtype |
 | Crate **0.5.4** | Hygiene + `parse_query_json` fuzz (layout / query wire / pack milestone unchanged) |
 | Crate / pack **0.6.0** | Closed `window` query wire + conformance accept/reject (THI-595); layout / package / ABI unchanged |
 | Crate / pack **0.6.1** | `window.mode` `bins`/`rolling` + multi-dataset `align` (THI-594); layout / package / ABI unchanged |
 | Crate / pack **0.6.2** | Label-value `group_by` (THI-596); layout / package / ABI unchanged |
+| Crate / pack **0.6.3** | Window `pad` / `step` / `align` / `min_count` + multi-dtype (THI-606); layout / package / ABI unchanged |
 | `layout_version` | On-disk container (still **1**) |
 | `protocol_version` | Package roles (still **2**) |
 | `TET_ABI_VERSION` | C shared library (still **1** at 0.6.x) |

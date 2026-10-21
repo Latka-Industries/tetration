@@ -157,6 +157,24 @@ where
         "mode".to_owned(),
         serde_json::Value::String(window.mode.as_wire_str().to_owned()),
     );
+    if window.pad != crate::query::types::WindowPad::None {
+        obj.insert(
+            "pad".to_owned(),
+            serde_json::Value::String(window.pad.as_wire_str().to_owned()),
+        );
+    }
+    if let Some(step) = window.step {
+        obj.insert("step".to_owned(), serde_json::json!(step));
+    }
+    if window.align != crate::query::types::WindowAlign::Start {
+        obj.insert(
+            "align".to_owned(),
+            serde_json::Value::String(window.align.as_wire_str().to_owned()),
+        );
+    }
+    if window.min_count != 1 {
+        obj.insert("min_count".to_owned(), serde_json::json!(window.min_count));
+    }
     map.serialize_entry("window", &serde_json::Value::Object(obj))?;
     Ok(())
 }

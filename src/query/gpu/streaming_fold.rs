@@ -358,6 +358,7 @@ fn rebuild_plan_for_decode(chunks: &[PlannedChunkIo], geom: ReadPlanGeom) -> Rea
         logical_element_count: geom.logical_element_count,
         cell_filter: None,
         label_group_remap: None,
+        dataset_fill: None,
     }
 }
 

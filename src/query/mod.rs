@@ -72,5 +72,5 @@ pub use types::{
     ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint, ExecutionHints, GroupBySpec,
     Operation, OutputHint, OutputHints, PlannedChunkIo, QueryDocument, QueryExecutionPreview,
     QueryResponse, ReadPlan, TetError, TransformMethod, ValueCompareOp, ValueFilter,
-    ValuePredicate, WindowMode, WindowSpec, WriteHints, WriteTarget,
+    ValuePredicate, WindowAlign, WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
 };

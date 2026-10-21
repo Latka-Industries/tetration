@@ -168,6 +168,7 @@ fn resolve_device_auto_large_prefers_metal_when_enabled() {
         logical_element_count: elems,
         cell_filter: None,
         label_group_remap: None,
+        dataset_fill: None,
     };
     let route = resolve_device_route(
         Some(&crate::query::ExecutionHints {
@@ -215,6 +216,7 @@ fn resolve_device_auto_huge_selection_still_routes_gpu_for_streaming_fold() {
         logical_element_count: elems,
         cell_filter: None,
         label_group_remap: None,
+        dataset_fill: None,
     };
     let route = resolve_device_route(
         Some(&crate::query::ExecutionHints {

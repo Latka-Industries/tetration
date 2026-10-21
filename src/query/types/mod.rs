@@ -12,7 +12,7 @@ pub(crate) use cell_filter::{CellPredicate, INTEGER_FILTER_FILL_MSG, fold_keeps_
 pub use document::{
     AlignSpec, AxisSlice, ExecutionDeviceHint, ExecutionHints, GroupBySpec, Operation, OutputHint,
     OutputHints, PipelineStep, QueryDocument, ValueCompareOp, ValueFilter, ValuePredicate,
-    WindowMode, WindowSpec, WriteHints, WriteTarget,
+    WindowAlign, WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
 };
 pub use error::TetError;
 pub(crate) use plan::LabelGroupRemap;

@@ -25,6 +25,7 @@ fn sample_plan(chunks: Vec<PlannedChunkIo>, shape: u64) -> ReadPlan {
         logical_element_count: shape as usize,
         cell_filter: None,
         label_group_remap: None,
+        dataset_fill: None,
     }
 }
 

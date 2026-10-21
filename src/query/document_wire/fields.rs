@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::super::document::QueryLimits;
 use super::super::types::{
     AlignSpec, AxisSlice, ExecutionDeviceHint, ExecutionHints, GroupBySpec, OutputHint,
-    OutputHints, TetError, WindowMode, WindowSpec, WriteHints, WriteTarget,
+    OutputHints, TetError, WindowAlign, WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
 };
 use super::operation::parse_axis_spec_item;
 
@@ -146,7 +146,10 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
         .as_object()
         .ok_or_else(|| TetError::Validation("`window` must be a JSON object".into()))?;
     for key in obj.keys() {
-        if !matches!(key.as_str(), "axis" | "size" | "mode") {
+        if !matches!(
+            key.as_str(),
+            "axis" | "size" | "mode" | "pad" | "step" | "align" | "min_count"
+        ) {
             return Err(TetError::Validation(format!(
                 "unknown field `window.{key}`"
             )));
@@ -190,7 +193,70 @@ pub(super) fn parse_window(v: &Value) -> Result<WindowSpec, TetError> {
             WindowMode::parse(s)?
         }
     };
-    Ok(WindowSpec { axis, size, mode })
+    let pad = match obj.get("pad") {
+        None => WindowPad::None,
+        Some(v) => {
+            let s = v
+                .as_str()
+                .ok_or_else(|| TetError::Validation("`window.pad` must be a string".into()))?;
+            WindowPad::parse(s)?
+        }
+    };
+    let step = match obj.get("step") {
+        None => None,
+        Some(v) => {
+            let s = parse_u64_field("window.step", v)?;
+            if s == 0 {
+                return Err(TetError::Validation("`window.step` must be >= 1".into()));
+            }
+            Some(s)
+        }
+    };
+    if mode == WindowMode::Bins && step.is_some() {
+        return Err(TetError::Validation(
+            "`window.step` is only valid with mode \"rolling\"".into(),
+        ));
+    }
+    let align = match obj.get("align") {
+        None => WindowAlign::Start,
+        Some(v) => {
+            let s = v
+                .as_str()
+                .ok_or_else(|| TetError::Validation("`window.align` must be a string".into()))?;
+            WindowAlign::parse(s)?
+        }
+    };
+    if mode == WindowMode::Rolling && pad == WindowPad::None && align == WindowAlign::End {
+        return Err(TetError::Validation(
+            "`window.align` \"end\" with mode \"rolling\" requires pad other than \"none\"".into(),
+        ));
+    }
+    let min_count = match obj.get("min_count") {
+        None => 1,
+        Some(v) => {
+            let c = parse_u64_field("window.min_count", v)?;
+            if c == 0 {
+                return Err(TetError::Validation(
+                    "`window.min_count` must be >= 1".into(),
+                ));
+            }
+            if c > size {
+                return Err(TetError::Validation(format!(
+                    "`window.min_count` ({c}) exceeds window.size ({size})"
+                )));
+            }
+            c
+        }
+    };
+    Ok(WindowSpec {
+        axis,
+        size,
+        mode,
+        pad,
+        step,
+        align,
+        min_count,
+    })
 }
 
 pub(super) fn parse_spill(v: &Value) -> Result<OutputHints, TetError> {
