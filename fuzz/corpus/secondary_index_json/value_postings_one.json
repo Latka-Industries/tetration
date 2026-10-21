@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "generation": 1,
+  "packed_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "indexes": [
+    {
+      "kind": "value_postings",
+      "dataset_id": 0,
+      "dtype": 1,
+      "postings": [
+        {"value_le": "0000803f", "chunks": [[0, 0]]}
+      ]
+    }
+  ]
+}

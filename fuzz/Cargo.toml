@@ -9,6 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+serde_json = "1"
 tempfile = "3"
 # No HDF5/NetCDF for the fuzz binary (native deps + slower builds).
 tetration = { path = "..", default-features = false }
@@ -37,6 +38,13 @@ bench = false
 [[bin]]
 name = "parse_query_json"
 path = "fuzz_targets/parse_query_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "secondary_index_json"
+path = "fuzz_targets/secondary_index_json.rs"
 test = false
 doc = false
 bench = false

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "generation": 1,
+  "packed_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "indexes": [
+    {"kind": "future_kind_v99", "payload": {"x": 1}}
+  ]
+}

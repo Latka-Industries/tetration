@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "generation": 1,
+  "packed_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "indexes": [
+    {
+      "kind": "sorted_axis_range",
+      "dataset_id": 0,
+      "axis": 0,
+      "ascending": true,
+      "segments": [
+        {
+          "lo_le": "0000000000000000",
+          "hi_le": "000000000000f03f",
+          "chunks": [[0]]
+        }
+      ]
+    }
+  ]
+}
