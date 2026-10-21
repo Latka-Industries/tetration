@@ -266,7 +266,7 @@ fn sorted_axis_entries_for_summary(
                 monotonic_numeric_axis(meta, axis, dataset.shape[axis])
             else {
                 continue;
-            };
+            }; // lookup uses shape extent when dim_names are absent (HDF5 CF import)
             let segments = axis_segments(summary, dataset_id as u64, dataset, axis, &values)?;
             if segments.is_empty() {
                 continue;
@@ -290,7 +290,7 @@ fn monotonic_numeric_axis(
     axis: usize,
     extent: u64,
 ) -> Option<(Vec<f64>, bool)> {
-    let coord = coord_axis_for_dimension(meta, axis)?;
+    let coord = coord_axis_for_dimension(meta, axis, Some(extent))?;
     let extent_usize = usize::try_from(extent).ok()?;
     if coord.labels.len() != extent_usize || extent_usize == 0 {
         return None;
@@ -317,7 +317,11 @@ fn monotonic_numeric_axis(
     }
 }
 
-fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&CoordAxisV1> {
+fn coord_axis_for_dimension(
+    meta: &DatasetMetadataV1,
+    d: usize,
+    extent: Option<u64>,
+) -> Option<&CoordAxisV1> {
     let coords = meta.coords.as_ref()?;
     if let Some(names) = &meta.dim_names
         && let Some(name) = names.get(d)
@@ -325,7 +329,15 @@ fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&Coord
     {
         return Some(c);
     }
-    coords.get(d.to_string().as_str())
+    if let Some(c) = coords.get(d.to_string().as_str()) {
+        return Some(c);
+    }
+    // HDF5 CF import stores coords under axis names without dim_names. Match by
+    // length only when exactly one axis has that extent (avoids lat/lon/time ties).
+    let extent = extent.and_then(|e| usize::try_from(e).ok())?;
+    let mut matches = coords.values().filter(|c| c.labels.len() == extent);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }
 
 fn axis_segments(

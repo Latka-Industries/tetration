@@ -165,5 +165,14 @@ def main_bench(argv: list[str] | None = None) -> int:
     return main(["bench", *(argv if argv is not None else sys.argv[1:])])
 
 
+def main_bench_index(argv: list[str] | None = None) -> int:
+    """Entry for `bench-index` (THI-613 sorted-axis skip bench)."""
+    _ = argv
+    from benchmark.index_sorted import main as index_main
+
+    return index_main()
+
+
 if __name__ == "__main__":
     sys.exit(main())
+

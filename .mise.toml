@@ -141,6 +141,11 @@ run = "cargo build --release && uv run --directory fixtures bench-large h5 --tie
 description = "Alias for bench:windows (THI-608)"
 depends = ["bench:windows"]
 
+[tasks."bench:index"]
+description = "Sorted-axis range index skip bench (THI-613): present vs missing vs HDF5 peer"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-index"
+
 [tasks."bench:netcdf"]
 description = "Benchmark large + extra_large NetCDF only (device auto)"
 depends = ["fixtures:sync"]

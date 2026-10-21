@@ -109,6 +109,7 @@ mise run bench:cpu          # default ops (scalar+QC) on large+extra, all format
 mise run bench:scalar       # mean/sum/min/max/count/std/var only (CPU)
 mise run bench:transforms   # zscore…softmax vs fair NumPy peers — large, all formats, CPU
 mise run bench:windows      # h5 large only: window bins/rolling vs NumPy (CPU)
+mise run bench:index        # THI-613 sorted-axis skip: present vs missing vs HDF5 (~256 MiB)
 mise run bench:full         # ALL ops × large+extra × all formats — CPU; expect ≥1 hour
 mise run bench:metal        # macOS: --features tetration-metal, device metal (large tier only useful)
 mise run bench:gpu          # Linux+NVIDIA: --features tetration-gpu, device cuda

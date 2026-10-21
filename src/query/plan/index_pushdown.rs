@@ -84,6 +84,7 @@ pub(crate) fn sorted_axis_chunk_allowlist(
     index: &GenerationSecondaryIndex,
     dataset_id: u64,
     meta: &DatasetMetadataV1,
+    dataset_shape: &[u64],
     g0: &[u64],
     g1_exclusive: &[u64],
 ) -> Option<BTreeSet<Vec<u64>>> {
@@ -104,10 +105,16 @@ pub(crate) fn sorted_axis_chunk_allowlist(
         }
         saw_entry = true;
         let axis = usize::try_from(*axis).ok()?;
-        if axis >= g0.len() || axis >= g1_exclusive.len() {
+        if axis >= g0.len() || axis >= g1_exclusive.len() || axis >= dataset_shape.len() {
             return None;
         }
-        let (lo, hi) = selection_coord_span(meta, axis, g0[axis], g1_exclusive[axis])?;
+        let (lo, hi) = selection_coord_span(
+            meta,
+            axis,
+            dataset_shape[axis],
+            g0[axis],
+            g1_exclusive[axis],
+        )?;
         let mut set = BTreeSet::new();
         for seg in segments {
             let seg_lo = f64_from_le_hex(&seg.lo_le)?;
@@ -147,6 +154,7 @@ pub(crate) fn intersect_allowlists(
 fn selection_coord_span(
     meta: &DatasetMetadataV1,
     axis: usize,
+    axis_extent: u64,
     start: u64,
     stop_exclusive: u64,
 ) -> Option<(f64, f64)> {
@@ -154,9 +162,10 @@ fn selection_coord_span(
         // Empty selection: no coordinate can match.
         return Some((f64::INFINITY, f64::NEG_INFINITY));
     }
-    let coord = coord_axis_for_dimension(meta, axis)?;
     let start_i = usize::try_from(start).ok()?;
     let stop_i = usize::try_from(stop_exclusive).ok()?;
+    let extent = usize::try_from(axis_extent).ok()?;
+    let coord = coord_axis_for_dimension(meta, axis, Some(extent))?;
     if stop_i > coord.labels.len() {
         return None;
     }
@@ -176,7 +185,11 @@ fn selection_coord_span(
     Some((lo, hi))
 }
 
-fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&CoordAxisV1> {
+fn coord_axis_for_dimension(
+    meta: &DatasetMetadataV1,
+    d: usize,
+    extent: Option<usize>,
+) -> Option<&CoordAxisV1> {
     let coords = meta.coords.as_ref()?;
     if let Some(names) = &meta.dim_names
         && let Some(name) = names.get(d)
@@ -184,7 +197,13 @@ fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&Coord
     {
         return Some(c);
     }
-    coords.get(d.to_string().as_str())
+    if let Some(c) = coords.get(d.to_string().as_str()) {
+        return Some(c);
+    }
+    let extent = extent?;
+    let mut matches = coords.values().filter(|c| c.labels.len() == extent);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }
 
 fn f64_from_le_hex(hex: &str) -> Option<f64> {

@@ -152,6 +152,7 @@ pub(crate) fn build_read_plan(
                 index,
                 dataset_idx as u64,
                 meta,
+                geom.dataset_shape,
                 geom.g0,
                 geom.g1_exclusive,
             )
