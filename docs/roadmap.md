@@ -100,7 +100,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.6.4:** hygiene after the 0.6.x query wave — DRY window/fold paths, pedantic + window-edge fuzz, broader `mise bench:*` coverage (windows / transforms / scalar), and ephemeral `write: switch` spill cleanup (THI-607 / THI-608). Layout / package / C ABI / pack milestone unchanged (**0.6.3**). **tet-py 0.6.4** pins this crate.
 
-**In progress (0.6.5 / THI-613):** optional `sorted_axis_range` kind in `INDEX.json` — monotonic numeric footer coords → chunk allow-list for axis range selection; missing index → geometry only. See [`secondary_indexes.md`](secondary_indexes.md). Coordinate-label postings remain later ([THI-614](https://linear.app/thicclatka/issue/THI-614)).
+**Shipped in 0.6.5:** optional `sorted_axis_range` in `INDEX.json` + planner pushdown (THI-613); fold sum/mean dense-slab speedups; `bench:index` small/large vs HDF5+NumPy; `secondary_index_json` fuzz. Layout / package / C ABI / pack milestone unchanged (**0.6.3**). PyPI **tet-py** stays on **0.6.4** until pin after crates.io. Coordinate-label postings remain later ([THI-614](https://linear.app/thicclatka/issue/THI-614)).
 
 **Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Sorted-axis segments answer “which chunks cover this numeric coord span?” Indexes stay optional, verifiable, and outside the v1 byte layout.
 

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-10-21
+
+### Added
+
+- Optional `sorted_axis_range` kind in `INDEX.json`: monotonic numeric footer coords → chunk allow-list for axis range selection; missing index falls back to geometry only (THI-613). See [`docs/secondary_indexes.md`](docs/secondary_indexes.md).
+- `mise bench:index` (small ≈16 MiB select + large ≈0.4 GiB) vs HDF5+NumPy for sealed range sum accuracy/speed.
+- Fuzz: `secondary_index_json` target + label-range query seeds; `fuzz-clean` / `fuzz-reseed` live in `fuzz/scripts/` (mise calls them).
+
+### Changed
+
+- Fold: sum-only SIMD for Sum/Mean; dense multi-dim contiguous slab path for row-chunked tiles; default Rayon fold off below 32 MiB logical selection (explicit `fold_parallel: true` still wins).
+
+### Notes
+
+- Semver patch on the 0.6 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.6.3**). PyPI **tet-py** stays on **0.6.4** until pin after crates.io shows 0.6.5.
+
 ## [0.6.4] - 2026-10-21
 
 ### Changed
