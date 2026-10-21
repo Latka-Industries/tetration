@@ -1,4 +1,4 @@
-# THI-379 / THI-481 / THI-604: short cargo-fuzz smoke so the harness does not rot.
+# THI-379 / THI-481 / THI-604 / THI-613: short cargo-fuzz smoke so the harness does not rot.
 # Manual only — not worth burning Actions minutes every night for this repo.
 # Not on the PR Test Suite / MSRV matrix.
 name: Fuzz smoke
@@ -103,6 +103,39 @@ jobs:
       - name: Short query-wire fuzz smoke
         run: |
           cargo +nightly fuzz run parse_query_json -- \
+            -max_total_time=60 \
+            -timeout=10 \
+            -rss_limit_mb=2048
+
+  secondary-index-json:
+    name: secondary_index_json (60s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install nightly + rust-src
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            fuzz/target/
+          key: ${{ runner.os }}-fuzz-index-${{ hashFiles('**/Cargo.lock', 'fuzz/Cargo.lock') }}
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Short INDEX.json fuzz smoke
+        run: |
+          cargo +nightly fuzz run secondary_index_json -- \
             -max_total_time=60 \
             -timeout=10 \
             -rss_limit_mb=2048

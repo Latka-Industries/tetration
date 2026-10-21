@@ -32,7 +32,8 @@ nightly compiler`.
 | `verify_tet_bytes` | quick scan (`deep_decode: false`) | Hot loop — prefer this for file layout |
 | `verify_tet_bytes_deep` | `deep_decode: true` | Slower; decode walk |
 | `verify_tet_package` | package tree from length-prefixed blob | PROTOCOL / CURRENT / MANIFEST / packed.tet |
-| `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604; window pad/step/align/`min_count` seeds THI-607) |
+| `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604; window pad/step/align/`min_count` seeds THI-607; label-range seeds THI-613) |
+| `secondary_index_json` | `INDEX.json` bytes (capped) | Deserialize + encode / kind filters; unknown `kind` → `Unknown` (THI-613) |
 
 ### Package input shape (`verify_tet_package`)
 
@@ -56,20 +57,23 @@ empty `staging/` + `publishing/`) and calls `verify_tet_package`. Seeds are
 ```bash
 mise fuzz              # preferred (quick file target)
 mise fuzz-package      # package target (THI-481)
+mise fuzz-index        # INDEX.json / sorted_axis_range (THI-613)
 # or:
 cargo +nightly fuzz run verify_tet_bytes
 cargo +nightly fuzz run verify_tet_bytes_deep
 cargo +nightly fuzz run verify_tet_package
+cargo +nightly fuzz run secondary_index_json
 ```
 
 Seeds are under `corpus/verify_tet_bytes/`, `corpus/verify_tet_bytes_deep/`
-(`*.tet` from `fixtures/small/tet/` plus tiny reject stubs), and
-`corpus/verify_tet_package/` (`*.pkgfuzz`). LibFuzzer mutates more inputs beside
-them; those hash-named files and `artifacts/` are gitignored.
+(`*.tet` from `fixtures/small/tet/` plus tiny reject stubs),
+`corpus/verify_tet_package/` (`*.pkgfuzz`), `corpus/parse_query_json/` (`*.json`),
+and `corpus/secondary_index_json/` (`INDEX.json` stubs). LibFuzzer mutates more
+inputs beside them; those hash-named files and `artifacts/` are gitignored.
 
 ```bash
-mise fuzz-clean    # drop mutated corpus + crash artifacts; keep *.tet / *.pkgfuzz
-mise fuzz-reseed   # refresh seeds from fixtures/small/tet/ (+ package encode)
+mise fuzz-clean    # drop mutated corpus + crash artifacts; keep seed extensions
+mise fuzz-reseed   # refresh seeds via fuzz/scripts/fuzz-reseed.sh
 ```
 
 ## Build-only smoke
