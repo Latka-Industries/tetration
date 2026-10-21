@@ -343,6 +343,54 @@ pub struct ValueFilter {
     pub predicates: Vec<ValuePredicate>,
 }
 
+/// Sliding or tumbling window along one named axis (`window` wire key).
+///
+/// A window is a reduction over a span of one axis — not a new dataset, join, or SQL `OVER`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowSpec {
+    /// Dimension name or decimal index (resolved to a decimal index at plan time).
+    pub axis: String,
+    /// Positive window length in logical indices along [`Self::axis`].
+    pub size: u64,
+    /// How consecutive windows are placed along the axis.
+    pub mode: WindowMode,
+}
+
+/// Window placement along the windowed axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowMode {
+    /// Non-overlapping spans of `size` (last window may be shorter when extent is not divisible).
+    Tumbling,
+    /// Overlapping spans of `size` advancing by one index each step.
+    Sliding,
+}
+
+impl WindowMode {
+    /// Stable wire token (`tumbling` / `sliding`).
+    #[must_use]
+    pub const fn as_wire_str(self) -> &'static str {
+        match self {
+            Self::Tumbling => "tumbling",
+            Self::Sliding => "sliding",
+        }
+    }
+
+    /// Parse a closed mode token.
+    ///
+    /// # Errors
+    ///
+    /// [`TetError::Validation`] when the token is not `tumbling` or `sliding`.
+    pub fn parse(token: &str) -> Result<Self, TetError> {
+        match token {
+            "tumbling" => Ok(Self::Tumbling),
+            "sliding" => Ok(Self::Sliding),
+            _ => Err(TetError::Validation(format!(
+                "unknown window mode `{token}` (expected tumbling or sliding)"
+            ))),
+        }
+    }
+}
+
 /// Top-level JSON query document accepted by the engine and `tet query`.
 #[derive(Debug, Clone)]
 pub struct QueryDocument {
@@ -359,6 +407,11 @@ pub struct QueryDocument {
     /// Names or decimal indices. The reduction runs inside each group (streaming fold for
     /// tier-A/B). Together with the reduction axes they must partition the dataset rank.
     pub group_by: Option<Vec<String>>,
+    /// Optional windowed reduction along one axis (`window` wire key); see [`WindowSpec`].
+    ///
+    /// Mutually exclusive with [`Self::group_by`]. Empty reduction axes mean reduce only within
+    /// each window along the windowed axis (other axes are kept).
+    pub window: Option<WindowSpec>,
     /// Optional reduction over the logical selection.
     pub operation: Option<Operation>,
     /// Optional export spill (`spill` wire key); not used with transform ops.
@@ -369,24 +422,25 @@ pub struct QueryDocument {
     pub execution: Option<ExecutionHints>,
     /// Ordered steps when the document was written as a `pipeline`.
     ///
-    /// Lowered into `selection`, `filter`, `group_by`, `operation`, `spill`, and `write` at parse
-    /// time. Absent on flat documents.
+    /// Lowered into `selection`, `filter`, `group_by`, `window`, `operation`, `spill`, and `write`
+    /// at parse time. Absent on flat documents.
     pub pipeline: Option<Vec<PipelineStep>>,
 }
 
 /// One closed stage in a query `pipeline`.
 ///
-/// Order is fixed: `select`, then `filter`, then one reduction (`group_by` optional), then
-/// `spill` or `write`. Repeats and unknown stages are rejected.
+/// Order is fixed: `select`, then `filter`, then one reduction (`group_by` or `window` optional),
+/// then `spill` or `write`. Repeats and unknown stages are rejected.
 #[derive(Debug, Clone)]
 pub enum PipelineStep {
     /// Axis slices (`select` wire key).
     Select(Vec<AxisSlice>),
     /// Cell-value filter (`filter` wire key).
     Filter(ValueFilter),
-    /// One reduction, optionally partitioned by `group_by`.
+    /// One reduction, optionally partitioned by `group_by` or windowed along one axis.
     Reduce {
         group_by: Option<Vec<String>>,
+        window: Option<WindowSpec>,
         operation: Operation,
     },
     /// Export spill path (`spill` wire key).

@@ -221,6 +221,9 @@ pub struct QueryExecutionPreview {
     /// Number of groups when `group_by` is set (product of those axes' logical extents).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_count: Option<usize>,
+    /// Number of windows when `window` is set (tumbling or sliding count along the axis).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_count: Option<usize>,
     /// When set, full logical selection was spilled as row-major `f32` LE to this path.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spill_f32_path: Option<String>,

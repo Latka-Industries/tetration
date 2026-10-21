@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Query wire **`window`**: closed `{ axis, size, mode }` (`tumbling` | `sliding`) for windowed tier-A/B reductions along one named axis on a sealed generation (THI-595). Empty reduction axes reduce only within each window; `execution.window_count` reports the window axis length. Not valid with `group_by`, transform, covariance/correlation, or materialize-required ops. Pipeline reduce steps may carry `window`. Conformance pack milestone **0.6.0** adds accept + reject fixtures.
+
 ## [0.5.4] - 2026-10-20
 
 ### Changed

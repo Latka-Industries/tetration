@@ -8,7 +8,7 @@ use crate::catalog::MAX_NDIM;
 use super::document_wire::parse_query_value;
 use super::types::{
     AxisSlice, Operation, QueryDocument, TetError, ValueCompareOp, ValueFilter, ValuePredicate,
-    WriteHints, WriteTarget,
+    WindowSpec, WriteHints, WriteTarget,
 };
 
 /// How [`parse_query_text`] chooses a parser.
@@ -38,6 +38,8 @@ pub struct QueryLimits {
     pub max_group_by_keys: usize,
     /// Maximum number of steps in a top-level `pipeline` array.
     pub max_pipeline_steps: usize,
+    /// Maximum `window.size` accepted at parse time (extent checks happen at plan time).
+    pub max_window_size: u64,
 }
 
 impl QueryLimits {
@@ -50,6 +52,7 @@ impl QueryLimits {
         max_filter_predicates: 8,
         max_group_by_keys: 8,
         max_pipeline_steps: 8,
+        max_window_size: 1_048_576,
     };
 }
 
@@ -208,6 +211,14 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
     }
     if let Some(keys) = &doc.group_by {
         validate_group_by(keys, doc.operation.as_ref(), &limits)?;
+    }
+    if let Some(window) = &doc.window {
+        validate_window(
+            window,
+            doc.operation.as_ref(),
+            doc.group_by.is_some(),
+            &limits,
+        )?;
     }
     if let Some(op) = &doc.operation {
         validate_operation_axes_v1(op)?;
@@ -382,6 +393,46 @@ fn validate_group_by(
                 "`group_by` lists dimension `{key}` more than once"
             )));
         }
+    }
+    Ok(())
+}
+
+fn validate_window(
+    window: &WindowSpec,
+    op: Option<&Operation>,
+    has_group_by: bool,
+    limits: &QueryLimits,
+) -> Result<(), TetError> {
+    if has_group_by {
+        return Err(TetError::Validation(
+            "`window` cannot be combined with `group_by`".into(),
+        ));
+    }
+    validate_operation_axis_token(&window.axis)?;
+    if window.size == 0 {
+        return Err(TetError::Validation("`window.size` must be >= 1".into()));
+    }
+    if window.size > limits.max_window_size {
+        return Err(TetError::Validation(format!(
+            "`window.size` exceeds maximum ({} > {})",
+            window.size, limits.max_window_size
+        )));
+    }
+    let Some(op) = op else {
+        return Err(TetError::Validation(
+            "`window` requires a reduction (for example `\"sum\": []`)".into(),
+        ));
+    };
+    if op.requires_transform()
+        || op.requires_materialize()
+        || matches!(
+            op,
+            Operation::Covariance { .. } | Operation::Correlation { .. }
+        )
+    {
+        return Err(TetError::Validation(
+            "`window` is not valid with transform, materialize-required ops, covariance, or correlation".into(),
+        ));
     }
     Ok(())
 }

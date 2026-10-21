@@ -49,6 +49,9 @@ pub(crate) fn resolve_query_document_axes(
             *label = resolve_one_axis_label(label, dim_names, ndim)?;
         }
     }
+    if let Some(window) = doc.window.as_mut() {
+        window.axis = resolve_one_axis_label(&window.axis, dim_names, ndim)?;
+    }
     let Some(op) = doc.operation.as_mut() else {
         return Ok(());
     };
@@ -59,6 +62,7 @@ pub(crate) fn resolve_query_document_axes(
         resolve_null_count_fill(op, &BTreeMap::new())?;
     }
     apply_group_by_partition(doc, ndim)?;
+    apply_window_partition(doc, ndim)?;
     Ok(())
 }
 
@@ -95,6 +99,45 @@ fn apply_group_by_partition(doc: &mut QueryDocument, ndim: usize) -> Result<(), 
     if group_idx.len() + reduce_idx.len() != ndim {
         return Err(TetError::Validation(
             "`group_by` and the reduction axes must together cover every dimension".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Empty reduction axes become `[window_axis]`; non-empty lists must include the window axis.
+fn apply_window_partition(doc: &mut QueryDocument, ndim: usize) -> Result<(), TetError> {
+    let Some(window) = doc.window.as_ref() else {
+        return Ok(());
+    };
+    if doc.group_by.is_some() {
+        return Err(TetError::Validation(
+            "`window` cannot be combined with `group_by`".into(),
+        ));
+    }
+    let Some(op) = doc.operation.as_mut() else {
+        return Err(TetError::Validation(
+            "`window` requires a reduction (for example `\"sum\": []`)".into(),
+        ));
+    };
+    let window_axis = window.axis.parse::<usize>().map_err(|_| {
+        TetError::Validation(format!(
+            "invalid window axis {:?} after name resolution",
+            window.axis
+        ))
+    })?;
+    if window_axis >= ndim {
+        return Err(TetError::Validation(format!(
+            "window axis {window_axis} out of range for rank {ndim}"
+        )));
+    }
+    if op.axes().is_empty() {
+        *op.axes_mut() = vec![window_axis.to_string()];
+        return Ok(());
+    }
+    let reduce_idx = axis_index_set(op.axes())?;
+    if !reduce_idx.contains(&window_axis) {
+        return Err(TetError::Validation(
+            "`window` reduction axes must include the windowed axis (or use `[]` to reduce only that axis)".into(),
         ));
     }
     Ok(())

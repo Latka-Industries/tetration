@@ -80,6 +80,7 @@ fn assert_expect_number(ex: &crate::query::QueryExecutionPreview, key: &str, wan
         "execution.operation_sum" => ex.operation_sum,
         "execution.operation_var" => ex.operation_var,
         "execution.operation_element_count" => ex.operation_element_count.map(|n| n as f64),
+        "execution.window_count" => ex.window_count.map(|n| n as f64),
         other => panic!("unsupported expect key `{other}` — extend conformance runner"),
     };
     let got = got.unwrap_or_else(|| panic!("missing {key} in execution preview"));
@@ -87,6 +88,33 @@ fn assert_expect_number(ex: &crate::query::QueryExecutionPreview, key: &str, wan
         (got - want).abs() <= tol,
         "{key}: got {got} want {want} (tol {tol})"
     );
+}
+
+fn assert_expect_f64_array(
+    ex: &crate::query::QueryExecutionPreview,
+    key: &str,
+    want: &[f64],
+    tol: f64,
+) {
+    let got = match key {
+        "execution.operation_reduced_sum" => ex.operation_reduced_sum.as_deref(),
+        "execution.operation_reduced_mean" => ex.operation_reduced_mean.as_deref(),
+        other => panic!("unsupported array expect key `{other}` — extend conformance runner"),
+    };
+    let got = got.unwrap_or_else(|| panic!("missing {key} in execution preview"));
+    assert_eq!(
+        got.len(),
+        want.len(),
+        "{key}: len mismatch got {} want {}",
+        got.len(),
+        want.len()
+    );
+    for (i, (g, w)) in got.iter().zip(want.iter()).enumerate() {
+        assert!(
+            (g - w).abs() <= tol,
+            "{key}[{i}]: got {g} want {w} (tol {tol})"
+        );
+    }
 }
 
 fn run_accept(case: &AcceptCase) {
@@ -131,10 +159,22 @@ fn run_accept(case: &AcceptCase) {
         .as_ref()
         .unwrap_or_else(|| panic!("{}: query case needs expect", case.id));
     for (key, val) in expect {
-        let want = val
-            .as_f64()
-            .unwrap_or_else(|| panic!("{}: expect `{key}` must be a number", case.id));
-        assert_expect_number(ex, key, want, tol);
+        if let Some(arr) = val.as_array() {
+            let want: Vec<f64> = arr
+                .iter()
+                .map(|v| {
+                    v.as_f64().unwrap_or_else(|| {
+                        panic!("{}: expect `{key}` array entries must be numbers", case.id)
+                    })
+                })
+                .collect();
+            assert_expect_f64_array(ex, key, &want, tol);
+        } else {
+            let want = val
+                .as_f64()
+                .unwrap_or_else(|| panic!("{}: expect `{key}` must be a number or array", case.id));
+            assert_expect_number(ex, key, want, tol);
+        }
     }
 }
 
@@ -211,6 +251,10 @@ fn conformance_reject_query_files_exist() {
         "conformance/reject/queries/dual_sum_mean.json",
         "conformance/reject/queries/invalid_axis_label.json",
         "conformance/reject/queries/unknown_write_field.json",
+        "conformance/reject/queries/unknown_window_field.json",
+        "conformance/reject/queries/window_size_zero.json",
+        "conformance/reject/queries/window_without_reduction.json",
+        "conformance/reject/queries/window_with_group_by.json",
     ] {
         assert!(Path::new(&resolve(rel)).is_file());
     }
@@ -218,20 +262,21 @@ fn conformance_reject_query_files_exist() {
 
 #[test]
 fn conformance_accept_query_files_exist() {
-    assert!(
-        Path::new(&resolve(
-            "conformance/accept/queries/mean_strided_sample.json"
-        ))
-        .is_file()
-    );
+    for rel in [
+        "conformance/accept/queries/mean_strided_sample.json",
+        "conformance/accept/queries/window_tumbling_sum_col.json",
+        "conformance/accept/queries/window_sliding_sum_col.json",
+    ] {
+        assert!(Path::new(&resolve(rel)).is_file());
+    }
 }
 
 #[test]
-fn conformance_spec_milestone_is_0_5_3() {
+fn conformance_spec_milestone_is_0_6_0() {
     let path = repo_root().join("conformance/manifest.v1.json");
     let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(
         v.get("spec_milestone").and_then(|x| x.as_str()),
-        Some("0.5.3")
+        Some("0.6.0")
     );
 }

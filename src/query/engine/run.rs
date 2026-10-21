@@ -375,6 +375,7 @@ fn matched_dataset_execution(
             plan: ctx.read_plan,
             dtype: ctx.rec.dtype,
             operation: ctx.doc.operation.as_ref(),
+            window: ctx.doc.window.as_ref(),
             output: ctx.doc.output.as_ref(),
             write: ctx.doc.write.as_ref(),
             source_dataset: &ctx.doc.dataset,

@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use super::super::types::{
     ExecutionHints, Operation, OutputHint, OutputHints, PipelineStep, QueryDocument, ValueFilter,
-    ValuePredicate, WriteHints, WriteTarget,
+    ValuePredicate, WindowSpec, WriteHints, WriteTarget,
 };
 
 pub(super) struct QueryDocumentWire<'a> {
@@ -34,6 +34,7 @@ impl Serialize for QueryDocumentWire<'_> {
         } else if doc.selection.is_some()
             || doc.filter.is_some()
             || doc.group_by.is_some()
+            || doc.window.is_some()
             || doc.operation.is_some()
             || doc.output.is_some()
             || doc.write.is_some()
@@ -59,6 +60,9 @@ where
     }
     if let Some(keys) = &doc.group_by {
         map.serialize_entry("group_by", keys)?;
+    }
+    if let Some(window) = &doc.window {
+        serialize_window(map, window)?;
     }
     if let Some(op) = &doc.operation {
         serialize_operation(map, op)?;
@@ -91,6 +95,7 @@ fn pipeline_step_value(step: &PipelineStep) -> Result<Value, serde_json::Error> 
         selection: None,
         filter: None,
         group_by: None,
+        window: None,
         operation: None,
         output: None,
         write: None,
@@ -104,9 +109,11 @@ fn pipeline_step_value(step: &PipelineStep) -> Result<Value, serde_json::Error> 
         PipelineStep::Filter(filter) => scratch.filter = Some(filter.clone()),
         PipelineStep::Reduce {
             group_by,
+            window,
             operation,
         } => {
             scratch.group_by.clone_from(group_by);
+            scratch.window.clone_from(window);
             scratch.operation = Some(operation.clone());
         }
         PipelineStep::Spill(path) => {
@@ -125,6 +132,28 @@ fn pipeline_step_value(step: &PipelineStep) -> Result<Value, serde_json::Error> 
         }
         other => Ok(other),
     }
+}
+
+fn serialize_window<S>(map: &mut S, window: &WindowSpec) -> Result<(), S::Error>
+where
+    S: SerializeMap,
+{
+    let mut obj = serde_json::Map::new();
+    if let Ok(idx) = window.axis.parse::<u64>() {
+        obj.insert("axis".to_owned(), serde_json::json!(idx));
+    } else {
+        obj.insert(
+            "axis".to_owned(),
+            serde_json::Value::String(window.axis.clone()),
+        );
+    }
+    obj.insert("size".to_owned(), serde_json::json!(window.size));
+    obj.insert(
+        "mode".to_owned(),
+        serde_json::Value::String(window.mode.as_wire_str().to_owned()),
+    );
+    map.serialize_entry("window", &serde_json::Value::Object(obj))?;
+    Ok(())
 }
 
 fn serialize_filter<S>(map: &mut S, filter: &ValueFilter) -> Result<(), S::Error>

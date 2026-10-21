@@ -125,7 +125,7 @@ GROUP BY region
 
 **Design tension:** scientists want expressive analytics; the format wants a small, auditable control plane. Any extension should declare **tiers** (scalar fold vs materialize-required) and stay JSON/TOML-serializable for agents and FFI.
 
-**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. Windowed stats and multi-dataset alignment remain later. Filter-by-value pushdown shipped in 0.4.1.
+**Relation to v1:** [`join` vs append](query_engine.md) is already documented. Group-by over dimension names shipped in 0.4.2. **Windowed stats** along a named axis shipped in **0.6.0** (`window` wire). Multi-dataset alignment and label-value group-by remain later (0.6.1 / 0.6.2). Filter-by-value pushdown shipped in 0.4.1.
 
 ---
 

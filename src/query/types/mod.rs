@@ -11,8 +11,8 @@ pub(crate) use cell_filter::{CellPredicate, INTEGER_FILTER_FILL_MSG, fold_keeps_
 
 pub use document::{
     AxisSlice, ExecutionDeviceHint, ExecutionHints, Operation, OutputHint, OutputHints,
-    PipelineStep, QueryDocument, ValueCompareOp, ValueFilter, ValuePredicate, WriteHints,
-    WriteTarget,
+    PipelineStep, QueryDocument, ValueCompareOp, ValueFilter, ValuePredicate, WindowMode,
+    WindowSpec, WriteHints, WriteTarget,
 };
 pub use error::TetError;
 pub use plan::{CHUNK_TOUCH_POLICY, ChunkTouchPolicy, PlannedChunkIo, ReadPlan};
