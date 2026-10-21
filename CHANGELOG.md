@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-21
+
 ### Added
 
 - Query wire **`window`** edge controls: closed optional `pad` (`none` / `0` / `nan` / `fill`), `step` (rolling stride; refuse on bins), `align` (`start` / `end`), and `min_count` (THI-606). Windowed tier-A/B folds accept all wire dtypes (drops the 0.6.0 f32-only gate). Conformance pack milestone **0.6.3**.
+
+### Notes
+
+- Semver patch on the 0.6 line. PyPI **tet-py** stays on **0.6.2** until pin after crates.io shows 0.6.3.
 
 ## [0.6.2] - 2026-10-21
 
