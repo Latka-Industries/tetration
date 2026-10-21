@@ -286,9 +286,10 @@ Optional second-language smoke (catalog + one chunk, not a query engine): [`conf
 | Crate **0.5.2** | First release that freezes this SPEC enough to claim “compatible” via conformance |
 | Pack **0.5.3** | Larger accept / reject surface (same layout + query wire; see [`conformance/`](../conformance/README.md)) |
 | Crate **0.5.4** | Hygiene + `parse_query_json` fuzz (layout / query wire / pack milestone unchanged) |
+| Crate / pack **0.6.0** | Closed `window` query wire + conformance accept/reject (THI-595); layout / package / ABI unchanged |
 | `layout_version` | On-disk container (still **1**) |
 | `protocol_version` | Package roles (still **2**) |
-| `TET_ABI_VERSION` | C shared library (still **1** at 0.5.x) |
+| `TET_ABI_VERSION` | C shared library (still **1** at 0.6.x) |
 | Query wire | Evolves by additive closed keys or a documented major bump; unknown keys stay hard errors |
 
 Amendments require an explicit PR that updates this file and the linked normative docs together.
