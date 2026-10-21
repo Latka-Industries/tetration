@@ -11,7 +11,7 @@
 
 ### Notes
 
-- Semver patch: crate hygiene + fuzz coverage only. Layout / query ABI / conformance pack milestone unchanged (**0.5.3**). PyPI **tet-py** stays on **0.5.3** until after crates.io shows 0.5.4 (then pin).
+- Semver patch: crate hygiene + fuzz coverage only. Layout / query ABI / conformance pack milestone unchanged (**0.5.3**). PyPI **tet-py 0.5.4** pins this crate.
 
 ## [0.5.3] - 2026-10-20
 
