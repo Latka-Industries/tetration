@@ -10,7 +10,7 @@
 
 ### Notes
 
-- Semver minor: first query-wire change since the 0.5.2 SPEC freeze. PyPI **tet-py** stays on **0.5.4** until pin after crates.io shows 0.6.0.
+- Semver minor: first query-wire change since the 0.5.2 SPEC freeze. PyPI **tet-py 0.6.0** pins this crate.
 
 ## [0.5.4] - 2026-10-20
 
