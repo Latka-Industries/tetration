@@ -35,14 +35,13 @@ brew install tetration
 cargo install tetration
 ```
 
-**Library:**
+**Library** (pins the latest compatible release from crates.io):
 
-```toml
-[dependencies]
-tetration = "0.5"
+```bash
+cargo add tetration
 ```
 
-S3-compatible package stores are optional and off by default: `features = ["tetration-s3"]`.
+S3-compatible package stores are optional and off by default: `cargo add tetration --features tetration-s3`.
 
 ## First commands
 
