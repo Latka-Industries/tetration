@@ -166,11 +166,10 @@ def main_bench(argv: list[str] | None = None) -> int:
 
 
 def main_bench_index(argv: list[str] | None = None) -> int:
-    """Entry for `bench-index` (THI-613 sorted-axis skip bench)."""
-    _ = argv
+    """Entry for `bench-index` (THI-613: tet vs HDF5+NumPy on large/extra)."""
     from benchmark.index_sorted import main as index_main
 
-    return index_main()
+    return index_main(argv if argv is not None else sys.argv[1:])
 
 
 if __name__ == "__main__":

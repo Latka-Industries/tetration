@@ -1,12 +1,13 @@
-"""THI-613 bench: tet sealed query vs HDF5+NumPy on the same time-range sum.
+"""THI-613 bench: tet sealed range sum vs HDF5+NumPy on large / extra tiers.
 
-Primary question: is the built-in tet op accurate and performant against the
-fair source peer (h5py slab + NumPy sum)? Index present/missing is a secondary
-correctness check only — not the headline comparison.
+Primary question: is tet’s built-in selection + `sum` accurate and competitive
+vs h5py + NumPy on the same slab? Tiers match the main stress sizes (~6.7 GiB
+large, 20 GiB extra). Index present/missing is secondary correctness only.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -23,21 +24,17 @@ from benchmark.log import format_elapsed, log
 from benchmark.tet import tet_bin
 from generate.constants import FIXTURES_ROOT
 from generate.index_sorted import (
-    INDEX_H5,
-    INDEX_PKG,
     INDEX_SELECT_LEN,
     INDEX_SELECT_START,
     INDEX_SELECT_STOP,
-    INDEX_TET,
     INDEX_TIME,
-    INDEX_WIDTH,
+    IndexFixture,
+    IndexTier,
+    fixture_for,
     generate_sorted_axis_index,
 )
 
 RESULTS_DIR = FIXTURES_ROOT / "bench_results"
-INDEX_RESULTS = RESULTS_DIR / "index_sorted_axis.md"
-
-# Same relative tolerance style as fixtures/benchmark/constants.py sum ops.
 SUM_TOL_REL = 1e-2
 
 
@@ -67,7 +64,6 @@ def _must_ok(proc: subprocess.CompletedProcess[str], what: str) -> None:
 
 
 def query_body() -> str:
-    """Closed wire: label range on time + full x, streaming sum."""
     return json.dumps(
         {
             "dataset": "data",
@@ -103,46 +99,45 @@ def run_tet_query(tet: Path, pkg: Path) -> tuple[float, dict]:
         _must_ok(proc, "tet query")
         return json.loads(proc.stdout)
 
-    once()  # warm
+    once()
     t0 = time.perf_counter()
     payload = once()
     return time.perf_counter() - t0, payload
 
 
-def source_h5_numpy_sum() -> tuple[float, float]:
-    """Fair peer: open HDF5, read the same half-open time slab, NumPy sum."""
+def source_h5_numpy_sum(fx: IndexFixture) -> tuple[float, float]:
     start = int(INDEX_SELECT_START)
     stop = int(INDEX_SELECT_STOP)
 
     def once() -> float:
-        with h5py.File(INDEX_H5, "r") as f:
+        with h5py.File(fx.h5, "r") as f:
             arr = np.asarray(f["data"][start:stop, :], dtype=np.float64)
             return float(arr.sum())
 
-    once()  # warm (open + first read)
+    once()
     t0 = time.perf_counter()
     total = once()
     return time.perf_counter() - t0, total
 
 
-def build_package(tet: Path) -> None:
-    if INDEX_PKG.exists():
-        shutil.rmtree(INDEX_PKG)
-    if INDEX_TET.exists():
-        INDEX_TET.unlink()
-    log(f"convert → {INDEX_TET.name}")
+def build_package(tet: Path, fx: IndexFixture) -> None:
+    if fx.pkg.exists():
+        shutil.rmtree(fx.pkg)
+    if fx.tet.exists():
+        fx.tet.unlink()
+    log(f"convert → {fx.tet.name} ({fx.logical_gib:.2f} GiB)")
     t0 = time.perf_counter()
-    proc = _run([str(tet), "convert", str(INDEX_H5), str(INDEX_TET), "--jobs", "0"])
+    proc = _run([str(tet), "convert", str(fx.h5), str(fx.tet), "--jobs", "0"])
     _must_ok(proc, "tet convert")
     log(f"convert done in {format_elapsed(time.perf_counter() - t0)}")
 
-    log(f"ingest + publish → {INDEX_PKG.name}")
-    proc = _run(
-        [str(tet), "ingest", str(INDEX_TET), "--out", str(INDEX_PKG), "--jobs", "1"]
-    )
+    log(f"ingest + publish → {fx.pkg.name}")
+    t0 = time.perf_counter()
+    proc = _run([str(tet), "ingest", str(fx.tet), "--out", str(fx.pkg), "--jobs", "1"])
     _must_ok(proc, "tet ingest")
-    proc = _run([str(tet), "publish", str(INDEX_PKG)])
+    proc = _run([str(tet), "publish", str(fx.pkg)])
     _must_ok(proc, "tet publish")
+    log(f"publish done in {format_elapsed(time.perf_counter() - t0)}")
 
 
 def index_path(pkg: Path) -> Path:
@@ -158,7 +153,12 @@ def values_match(a: float, b: float) -> bool:
     return abs(a - b) <= SUM_TOL_REL * scale
 
 
+def results_path(tier: IndexTier) -> Path:
+    return RESULTS_DIR / f"index_sorted_axis_{tier}.md"
+
+
 def write_report(
+    fx: IndexFixture,
     *,
     git_rev: str,
     primary: list[Row],
@@ -166,18 +166,18 @@ def write_report(
     accurate: bool,
 ) -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    out = results_path(fx.tier)
     lines = [
-        "# Sorted-axis range query bench (THI-613)",
+        f"# Sorted-axis range query bench (THI-613) — {fx.tier}",
         "",
         "**Question:** is tet’s built-in range selection + `sum` accurate and "
         "competitive vs loading the same HDF5 slab with NumPy?",
         "",
         f"- git: `{git_rev}`",
-        f"- fixture: time={INDEX_TIME} × width={INDEX_WIDTH} f32 "
-        f"(~{INDEX_TIME * INDEX_WIDTH * 4 / (1024**2):.0f} MiB), "
-        f"chunk (1, {INDEX_WIDTH})",
-        f"- op: `sum` over time labels `[{INDEX_SELECT_START}, {INDEX_SELECT_STOP})` "
-        f"× full x ({INDEX_SELECT_LEN} time chunks)",
+        f"- tier: **{fx.tier}** ({fx.logical_gib:.2f} GiB logical; "
+        f"select ≈ {fx.select_gib:.2f} GiB = {INDEX_SELECT_LEN}/{INDEX_TIME} time steps)",
+        f"- shape: time={INDEX_TIME} × width={fx.width}, chunk (1, {fx.width})",
+        f"- op: `sum` over time labels `[{INDEX_SELECT_START}, {INDEX_SELECT_STOP})` × full x",
         f"- accuracy (tet vs h5+numpy): **{'pass' if accurate else 'FAIL'}**",
         "",
         "## Primary: tet vs HDF5 + NumPy",
@@ -197,7 +197,7 @@ def write_report(
             "",
             "## Secondary: index present vs missing (same tet query)",
             "",
-            "Answers must match. Timing here is not the product claim.",
+            "Answers must match. Not the product speed claim.",
             "",
             "| backend | seconds | sum | chunks | note |",
             "| --- | ---: | ---: | ---: | --- |",
@@ -211,17 +211,25 @@ def write_report(
             f"{row.note} |"
         )
     lines.append("")
-    INDEX_RESULTS.write_text("\n".join(lines), encoding="utf-8")
-    log(f"wrote {INDEX_RESULTS}")
+    out.write_text("\n".join(lines), encoding="utf-8")
+    log(f"wrote {out}")
 
 
-def run_index_bench() -> int:
+def run_index_bench(tier: IndexTier = "large", *, regenerate: bool = True) -> int:
     tet = tet_bin()
-    log("=== THI-613: tet range sum vs HDF5+NumPy ===")
-    generate_sorted_axis_index(quiet=False)
-    build_package(tet)
+    fx = fixture_for(tier)
+    log(
+        f"=== THI-613: tet range sum vs HDF5+NumPy [{tier}] "
+        f"({fx.logical_gib:.2f} GiB, select≈{fx.select_gib:.2f} GiB) ==="
+    )
+    if regenerate or not fx.h5.is_file():
+        generate_sorted_axis_index(tier, quiet=False)
+    else:
+        log(f"reusing existing {fx.h5}")
 
-    idx = index_path(INDEX_PKG)
+    build_package(tet, fx)
+
+    idx = index_path(fx.pkg)
     if not idx.is_file():
         raise RuntimeError(f"expected INDEX.json at {idx} after publish")
     doc = json.loads(idx.read_text(encoding="utf-8"))
@@ -229,8 +237,8 @@ def run_index_bench() -> int:
     if "sorted_axis_range" not in kinds:
         raise RuntimeError(f"INDEX.json missing sorted_axis_range; kinds={kinds}")
 
-    log("tet: sealed package, selection + sum (index present)")
-    tet_s, payload = run_tet_query(tet, INDEX_PKG)
+    log("tet: sealed package, selection + sum")
+    tet_s, payload = run_tet_query(tet, fx.pkg)
     plan = payload.get("read_plan") or {}
     exe = payload.get("execution") or {}
     tet_sum = exe.get("operation_sum")
@@ -246,7 +254,7 @@ def run_index_bench() -> int:
     ]
 
     log("source: HDF5 + NumPy same slab sum")
-    h5_s, h5_sum = source_h5_numpy_sum()
+    h5_s, h5_sum = source_h5_numpy_sum(fx)
     primary.append(
         Row(
             backend="hdf5+numpy",
@@ -257,11 +265,10 @@ def run_index_bench() -> int:
         )
     )
 
-    # Secondary: drop INDEX.json; answers must still match.
     backup = idx.with_suffix(".json.bak")
     shutil.move(idx, backup)
     log("tet: same query with INDEX.json removed (fallback)")
-    miss_s, miss_payload = run_tet_query(tet, INDEX_PKG)
+    miss_s, miss_payload = run_tet_query(tet, fx.pkg)
     shutil.move(backup, idx)
     miss_exe = miss_payload.get("execution") or {}
     miss_plan = miss_payload.get("read_plan") or {}
@@ -283,7 +290,7 @@ def run_index_bench() -> int:
         ),
     ]
 
-    if tet_sum is None or h5_sum is None or miss_sum is None:
+    if tet_sum is None or miss_sum is None:
         log("error: missing sum values")
         return 1
 
@@ -303,6 +310,7 @@ def run_index_bench() -> int:
         git_rev = "unknown"
 
     write_report(
+        fx,
         git_rev=git_rev,
         primary=primary,
         secondary=secondary,
@@ -316,16 +324,30 @@ def run_index_bench() -> int:
     if accurate and primary[0].seconds > 0:
         ratio = primary[1].seconds / primary[0].seconds
         log(
-            f"primary: tet {primary[0].seconds:.4f}s vs hdf5+numpy "
+            f"primary [{tier}]: tet {primary[0].seconds:.4f}s vs hdf5+numpy "
             f"{primary[1].seconds:.4f}s (numpy/tet = {ratio:.2f}x)"
         )
     return 0 if accurate else 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    _ = argv
+    parser = argparse.ArgumentParser(
+        description="THI-613: tet range sum vs HDF5+NumPy (large ≈6.7 GiB, extra 20 GiB)",
+    )
+    parser.add_argument(
+        "--tier",
+        choices=("large", "extra"),
+        default="large",
+        help="fixture size: large ≈6.7 GiB (default), extra = 20 GiB",
+    )
+    parser.add_argument(
+        "--reuse-h5",
+        action="store_true",
+        help="skip regenerating HDF5 when the file already exists",
+    )
+    args = parser.parse_args(argv)
     try:
-        return run_index_bench()
+        return run_index_bench(args.tier, regenerate=not args.reuse_h5)
     except Exception as exc:  # noqa: BLE001
         print(f"bench-index failed: {exc}", file=sys.stderr)
         return 1
