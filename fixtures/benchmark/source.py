@@ -1,4 +1,10 @@
-"""Native source reads for benchmark comparisons."""
+"""Native source peers for benchmark comparisons.
+
+Scalar/QC ops stream 16 MiB slabs into running stats. Window ops fold NumPy slabs
+to match tetration bins/rolling wire. Transform ops run a fair two-pass+write peer
+(pass-1 stats, then apply + spill f32 LE) so source times include the same I/O class
+as `.tet` `write: switch`.
+"""
 
 from __future__ import annotations
 
@@ -146,6 +152,7 @@ def _fold_source(case: BenchCase) -> RunningStats:
 
 
 def reduce_source_op(case: BenchCase, op: OpName) -> tuple[float, float]:
+    """Warm+timed source peer for `op`. Returns `(seconds, comparable_value)`."""
     meta = op_meta(op)
     if not meta.bench_source:
         raise ValueError(meta.note or "source not supported")
@@ -186,6 +193,7 @@ def reduce_source_op(case: BenchCase, op: OpName) -> tuple[float, float]:
 
 
 def _source_length(case: BenchCase) -> int:
+    """Leading-axis extent of the native `data` array (window peer geometry)."""
     match case.format:
         case "h5":
             import h5py
@@ -282,6 +290,7 @@ def _window_sum_total(
 
 
 def _l1_norm(case: BenchCase) -> float:
+    """Streaming L1 over source slabs (transform pass-1 peer)."""
     total = 0.0
     slabs, _ = _iter_source_slabs(case)
     for slab in slabs:
@@ -290,6 +299,7 @@ def _l1_norm(case: BenchCase) -> float:
 
 
 def _l2_norm(case: BenchCase) -> float:
+    """Streaming L2 over source slabs (transform pass-1 peer)."""
     total = 0.0
     slabs, _ = _iter_source_slabs(case)
     for slab in slabs:
@@ -298,7 +308,10 @@ def _l2_norm(case: BenchCase) -> float:
 
 
 def _transform_two_pass(case: BenchCase, method: str) -> float:
-    """Pass-1 stats + pass-2 apply written to a temp f32 file; return pass-1 scalar."""
+    """Fair transform peer: pass-1 stats, then apply+write f32 LE; return pass-1 scalar.
+
+    Timed path includes the write so source seconds match `.tet` spill I/O class.
+    """
     if method == "l1":
         pass1 = _l1_norm(case)
         apply = lambda x, n1=pass1: x / n1 if n1 != 0.0 else np.nan

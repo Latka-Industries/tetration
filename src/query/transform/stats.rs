@@ -121,9 +121,10 @@ fn assign_first_scalar(target: &mut Option<f64>, values: &[f64]) {
     }
 }
 
-/// Softmax pass-1: `sum(exp(x - max))` per reduced cell.
+/// Softmax pass-1: `sum(exp(x - max))` per reduced cell (after the max fold).
 ///
-/// Uses the same Rayon chunk policy as scalar/partial folds when in-core.
+/// Parallel when [`parallel::use_parallel_fold`] says so; otherwise visits chunks in
+/// [`FoldIoPolicy::prefer_ordered_chunk_io`] order — same policy as scalar/partial folds.
 fn fold_softmax_sum_exp(
     input: &CollectStatsInput<'_>,
     max: &[f64],
@@ -272,7 +273,7 @@ fn collect_stats_for_method(
         TransformMethod::L2 => {
             stats.norm_l2 = fold_stat_vec(&mut total_bytes, input, ReductionKind::NormL2, partial)?;
         }
-        // Reuse scalar/partial fold policy (parallel / linear_scan) — same path as mean.
+        // Shift basis is a plain min fold (same I/O policy as mean).
         TransformMethod::Log1p | TransformMethod::Sqrt => {
             stats.min = fold_stat_vec(&mut total_bytes, input, ReductionKind::Min, partial)?;
         }

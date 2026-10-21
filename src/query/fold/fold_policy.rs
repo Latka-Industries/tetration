@@ -95,7 +95,11 @@ impl FoldIoPolicy {
         })
     }
 
-    /// Prefer payload-offset chunk order (sequential fold or out-of-core linear scan).
+    /// True when chunk visits should follow ascending `payload_offset` order.
+    ///
+    /// Covers both `sequential_io` (multi-chunk sequential fold) and `linear_scan`
+    /// (out-of-core contiguous raw span). Callers that only care about visit order —
+    /// not which sequential mode — should use this instead of or-ing the flags.
     #[must_use]
     pub const fn prefer_ordered_chunk_io(self) -> bool {
         self.sequential_io || self.linear_scan

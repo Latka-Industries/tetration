@@ -19,7 +19,9 @@ impl TransformWarnings {
         }
     }
 
-    /// Merge per-chunk warning bags (parallel pass-2).
+    /// Merge a per-chunk bag into `self` (Rayon transform pass-2 join).
+    ///
+    /// Counts always accumulate; listed indices stop at [`MAX_LISTED_DIV_BY_ZERO_INDICES`].
     pub(crate) fn merge_from(&mut self, other: &Self) {
         self.div_by_zero_count = self
             .div_by_zero_count

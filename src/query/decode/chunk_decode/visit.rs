@@ -238,7 +238,14 @@ where
     visit_planned_chunk_elem::<f64, _>(mmap, plan, c, visit)
 }
 
-/// Visit `f32` or `f64` planned chunks, promoting samples to `f64` for the callback.
+/// Visit selected `f32` or `f64` samples in a planned chunk, promoting to `f64`.
+///
+/// Shared by transform softmax pass-1 and window folds that accumulate in `f64`.
+///
+/// # Errors
+///
+/// Returns [`TetError::Validation`] when `dtype` is not `f32`/`f64`, or propagates
+/// decode / visit failures from the typed visitors.
 pub(crate) fn visit_planned_chunk_float_as_f64<F>(
     mmap: &[u8],
     plan: &ReadPlan,

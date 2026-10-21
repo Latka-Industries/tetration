@@ -87,6 +87,7 @@ where
     Ok((out, truncated, total_bytes_read_from_disk))
 }
 
+/// Sequential per-chunk scatter into `out` (single-threaded materialize / transform path).
 pub(crate) fn scatter_fill_chunks<T, S>(
     mmap: &[u8],
     plan: &ReadPlan,

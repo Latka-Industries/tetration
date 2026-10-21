@@ -279,11 +279,11 @@ fn scan_window_cells(
     let visit = WindowVisit::from_dtype(ctx.dtype);
     let mut saw_any = false;
     let mut total_bytes: u64 = 0;
-    // Out-of-core linear_scan / sequential_io: one accumulator, payload-offset order.
+    // Ordered I/O when policy asks (sequential_io or out-of-core linear_scan).
     let chunk_order =
         fold_policy::chunk_indices_for_fold(ctx.plan, ctx.policy.prefer_ordered_chunk_io());
     let mut real_counts = vec![0_u64; ctx.layout.out_len];
-    // Rank-1 + full reduce: linear index *is* the window axis coord; output index is `w`.
+    // Rank-1 + reduce window axis only: `li` is the axis coord; output index is `w`.
     let rank1_full =
         shape.len() == 1 && ctx.layout.window_axis == 0 && ctx.layout.reduce_set.len() == 1;
 

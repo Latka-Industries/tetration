@@ -83,7 +83,10 @@ fn transform_f64(
     })
 }
 
-/// Shared sequential / parallel scatter for transform pass-2.
+/// Scatter transform pass-2 into `out`: sequential for one chunk, Rayon otherwise.
+///
+/// Parallel path gives each chunk a local [`TransformWarnings`] bag and a disjoint
+/// view of `out` (planned chunks never share logical indices). Bags merge after join.
 fn transform_scatter_fill<T, V>(
     mmap: &[u8],
     plan: &ReadPlan,
@@ -202,7 +205,9 @@ pub(crate) fn transform_read_plan_f64_le_ram(
     Ok((out, bytes))
 }
 
-/// Spill helper: `spill_read_plan_pod_le_impl` requires `Fn`, so warnings live in a [`RefCell`].
+/// Spill transformed POD via [`spill_read_plan_pod_le_impl`].
+///
+/// That helper takes `Fn` (not `FnMut`), so warnings ride in a [`RefCell`] for the closure.
 fn spill_transformed<T, F>(
     mmap: &[u8],
     plan: &ReadPlan,

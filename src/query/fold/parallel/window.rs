@@ -1,4 +1,8 @@
-//! Parallel chunk-streaming windowed fold (Rayon), same shape as partial-axis parallel.
+//! Parallel chunk-streaming windowed fold (Rayon).
+//!
+//! Same worker / merge shape as partial-axis parallel folds: each chunk owns a local
+//! accumulator replica + `real_counts`, then merges after the Rayon join. Gated by
+//! [`parallel_window_memory_ok`] so huge `window_count` stays on the sequential path.
 
 use rayon::prelude::*;
 
@@ -23,19 +27,20 @@ use crate::utils::dtype::ElementDtype;
 /// stays on the single-buffer sequential path (memory-conscious).
 const MAX_PARALLEL_REPLICA_BYTES: usize = 64 * 1024 * 1024;
 
+/// Whether per-worker accumulator replicas fit under [`MAX_PARALLEL_REPLICA_BYTES`].
 #[must_use]
 pub(crate) fn parallel_window_memory_ok(out_len: usize, workers: Option<usize>) -> bool {
     let threads = workers.unwrap_or_else(rayon::current_num_threads).max(1);
     let cell = std::mem::size_of::<reduction::ValueAccum>()
         .max(std::mem::size_of::<reduction::ArgIndexAccum>());
-    // cells + real_counts replicas across workers
+    // One ValueAccum/ArgIndexAccum + one real_counts u64 per output cell, per worker.
     out_len
         .saturating_mul(threads)
         .saturating_mul(cell.saturating_add(std::mem::size_of::<u64>()))
         <= MAX_PARALLEL_REPLICA_BYTES
 }
 
-/// Parallel scan result — caller injects pad / applies `min_count` / finishes.
+/// Merged parallel scan result — caller injects pad, applies `min_count`, finishes.
 pub(crate) struct WindowParallelScan {
     pub value_cells: Option<Vec<reduction::ValueAccum>>,
     pub arg_cells: Option<Vec<reduction::ArgIndexAccum>>,
@@ -150,6 +155,7 @@ struct WindowChunkArg {
     real_counts: Vec<u64>,
 }
 
+/// Push `v` into every covering window cell for logical index `li`.
 fn scatter_value(
     ctx: &WindowParallelCtx<'_>,
     cells: &mut [reduction::ValueAccum],
@@ -157,6 +163,7 @@ fn scatter_value(
     li: usize,
     v: f64,
 ) -> Result<(), TetError> {
+    // Rank-1 full reduce: `li` is the window-axis coord and output index is `w`.
     if ctx.rank1_full {
         let axis_c =
             u64::try_from(li).map_err(|_| TetError::Validation("axis coord overflow".into()))?;
@@ -179,6 +186,7 @@ fn scatter_value(
     Ok(())
 }
 
+/// Push arg-index `(fiber, v)` into every covering window cell for logical index `li`.
 fn scatter_arg(
     ctx: &WindowParallelCtx<'_>,
     cells: &mut [reduction::ArgIndexAccum],
@@ -378,7 +386,14 @@ fn validate_parallel_preview(
     }
 }
 
-/// Parallel windowed scan over planned chunks. Caller finishes with pad / `min_count`.
+/// Rayon windowed scan over planned chunks.
+///
+/// Returns merged accumulators + `real_counts`; the sequential window fold still
+/// injects pad values, applies `min_count`, and builds the operation preview fields.
+///
+/// # Errors
+///
+/// Propagates decode, geometry, and preview validation failures.
 pub(crate) fn scan_window_cells_parallel(
     mmap: &[u8],
     plan: &ReadPlan,
@@ -391,6 +406,7 @@ pub(crate) fn scan_window_cells_parallel(
     let shape = &plan.logical_selection_shape;
     let preview_cap = max_preview.min(plan.logical_element_count);
     let visit = WindowVisit::from_dtype(dtype);
+    // Rank-1 + reduce window axis only: skip multi-dim coordinate decode.
     let rank1_full = shape.len() == 1 && layout.window_axis == 0 && layout.reduce_set.len() == 1;
 
     let mut preview = allocate_preview(dtype, preview_cap);

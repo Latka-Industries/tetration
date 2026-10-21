@@ -1,4 +1,4 @@
-"""Benchmark constants and types."""
+"""Benchmark constants, op registry, and `--ops` / `--tier` parsing."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ DEFAULT_TET_DEVICE = "auto"
 
 POP_DDOF = 0
 
-# Must stay within QueryLimits::DEFAULT.max_window_size (1_048_576).
+# Window size for `window_*` bench ops. Must stay ≤ QueryLimits::DEFAULT.max_window_size.
 WINDOW_BENCH_SIZE = 1_048_576
 
 TRANSFORM_METHODS: tuple[str, ...] = (
@@ -43,7 +43,7 @@ TRANSFORM_METHODS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class OpMeta:
-    """Per-op bench metadata."""
+    """Per-op bench metadata used by harness + report rows."""
 
     result_key: str
     tolerance: float
@@ -54,14 +54,17 @@ class OpMeta:
     note: str | None = None
     # Extra closed query keys merged into the document (window / align / group_by).
     query_fields: dict[str, Any] = field(default_factory=dict)
+    # How to pull a comparable scalar from tet execution JSON / source peer.
     value_mode: ValueMode = "scalar"
 
 
 def _scalar(key: str, result_key: str, tol: float, **kw) -> OpMeta:
+    """Register a streaming scalar / QC fold op."""
     return OpMeta(result_key=result_key, tolerance=tol, **kw)
 
 
 def _transform(method: str, result_key: str, tol: float, **kw) -> OpMeta:
+    """Register a two-pass transform (+ write) op; `result_key` is the pass-1 stat."""
     return OpMeta(
         result_key=result_key,
         tolerance=tol,
@@ -72,6 +75,7 @@ def _transform(method: str, result_key: str, tol: float, **kw) -> OpMeta:
 
 
 def _window(mode: str, *, size: int = WINDOW_BENCH_SIZE, step: int | None = None) -> OpMeta:
+    """Register a 1-D window sum op (`bins` or `rolling`) along axis 0."""
     window: dict[str, Any] = {"axis": 0, "size": size, "mode": mode}
     if step is not None:
         window["step"] = step

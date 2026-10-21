@@ -34,6 +34,7 @@ def git_short_rev() -> str:
 
 
 def query_json(op: OpName, *, device: str | None) -> str:
+    """Build closed query JSON for `op` (scalar / transform+write / window fields)."""
     meta = op_meta(op)
     doc: dict = {
         "dataset": "data",
@@ -64,6 +65,7 @@ def _device_label(execution: dict) -> str:
 
 
 def extract_tet_value(op: OpName, execution: dict) -> float | None:
+    """Pull the comparable scalar from tet execution JSON using `OpMeta.value_mode`."""
     meta = op_meta(op)
     if meta.value_mode == "window_count":
         raw = execution.get("window_count")

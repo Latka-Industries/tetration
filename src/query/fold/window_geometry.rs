@@ -272,8 +272,13 @@ pub(crate) fn window_reduced_index(
 
 /// Half-open `[first, last)` window-index range covering axis coordinate `c`.
 ///
-/// Empty when `first == last`. Rolling uses closed-form bounds (not a scan over
-/// `window_count`) so large extents stay O(covering windows) per cell.
+/// Empty when `first == last`. Bins map to a singleton range; rolling uses closed-form
+/// bounds (not a scan over `window_count`) so large extents stay O(covering windows)
+/// per cell — critical for 1 MiB window benches on multi-GiB tensors.
+///
+/// # Errors
+///
+/// Propagates overflow / invalid `step` from the rolling closed form.
 pub(crate) fn covering_window_bounds(
     c: u64,
     layout: &WindowAxisLayout,

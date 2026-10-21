@@ -1,4 +1,8 @@
 //! Parallel chunk-streaming scalar, partial-axis, and windowed folds (Rayon).
+//!
+//! Workers visit planned chunks concurrently. Preview / transform scatter buffers are
+//! shared via [`disjoint_buffer_mut`] — safe only because each chunk owns a disjoint
+//! set of logical indices.
 
 mod merge;
 mod partial;
@@ -10,6 +14,7 @@ mod workers;
 pub(crate) use partial::{
     fold_read_plan_partial_operation_f64_parallel, fold_read_plan_partial_operation_parallel,
 };
+/// Alias of preview's disjoint raw-slice helper for non-preview buffers (e.g. transform pass-2).
 pub(crate) use preview::disjoint_preview_mut as disjoint_buffer_mut;
 pub(crate) use scalar::{
     fold_read_plan_scalar_operation_f16_parallel, fold_read_plan_scalar_operation_f64_parallel,
