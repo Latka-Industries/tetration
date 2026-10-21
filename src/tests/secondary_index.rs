@@ -402,6 +402,35 @@ fn publish_writes_sorted_axis_range_for_monotonic_coords() {
 }
 
 #[test]
+fn sorted_axis_selection_matches_with_or_without_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("range.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    // 6 values, chunk size 2 → 3 chunks; labels 0,10,20,30,40,50
+    publish_f32_with_sorted_time(&pkg, 1, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let packed = pkg.packed_tet_path(1);
+    let bytes = fs::read(&packed).unwrap();
+    // Labels "20.0".."40.0" → indices 2..4 → chunk 1 only; sum = 3+4 = 7
+    let query = r#"{"dataset":"a","selection":[{"start_label":"20.0","stop_label":"40.0"}],"sum":[]}"#;
+
+    let hit = execute_sum(&packed, &bytes, query);
+    let plan = hit.read_plan.expect("plan");
+    assert_eq!(plan.chunk_count, 1);
+    assert_eq!(plan.chunks[0].chunk_index, vec![1]);
+    assert_eq!(hit.execution.expect("execution").operation_sum, Some(7.0));
+
+    fs::remove_file(pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
+    let fallback = execute_sum(&packed, &bytes, query);
+    let fallback_plan = fallback.read_plan.expect("plan");
+    assert_eq!(fallback_plan.chunk_count, 1);
+    assert_eq!(fallback_plan.index_filter_skipped_chunks, 0);
+    assert_eq!(
+        fallback.execution.expect("execution").operation_sum,
+        Some(7.0)
+    );
+}
+
+#[test]
 fn unsorted_coords_omit_sorted_axis_kind() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("unsorted.tet.d")).unwrap();

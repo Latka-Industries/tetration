@@ -310,6 +310,7 @@ fn build_matched_read_plan(
                 .get(&doc.dataset)
                 .and_then(|meta| crate::query::resolve_axes::fill_from_attrs(&meta.attrs)),
             index,
+            dataset_meta: summary.metadata.datasets.get(&doc.dataset),
         },
     )
 }
