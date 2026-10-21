@@ -6,7 +6,7 @@ Stable **`extern "C"`** entry points for non-Rust runtimes. The Rust crate (`tet
 
 ## Python
 
-Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (crate **0.6.1**; PyPI **tet-py** stays on **0.6.0** until pin after crates.io). Embedders that only need the library can build with `--no-default-features` (omit **`tetration-cli`**) plus the features they need (`tetration-s3`, `tetration-ffi`, …).
+Official Python bindings are **not** built from this repository. They live in [**tet-py**](https://github.com/Latka-Industries/tet-py): PyPI package **`tet-py`**, **`import tet`**, wheels built with PyO3 / maturin and a pinned **`tetration`** release on [crates.io](https://crates.io/crates/tetration) (crate **0.6.1**; PyPI **tet-py 0.6.1**). Embedders that only need the library can build with `--no-default-features` (omit **`tetration-cli`**) plus the features they need (`tetration-s3`, `tetration-ffi`, …).
 
 **Shipped in tet-py 0.2.0:** `tet.open`, JSON/TOML query + reductions, NumPy read (ram / spill / sidecar + zero-copy `memmap` for single-chunk raw), `TetWriter` / `write_dataset`, `preview=N` on reductions. Pins this crate’s writer protocol v2 (`.tet.d` packages, shard publish, package verify) and materialize/preflight work (THI-21).
 
