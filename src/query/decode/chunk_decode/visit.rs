@@ -76,9 +76,10 @@ where
     E: ChunkElem,
     F: FnMut(usize, E) -> Result<(), TetError>,
 {
-    if prep.ndim == 1
-        && let Some(li_base) =
-            dense_tile_logical_base(plan, &prep.chunk_coord[..prep.ndim], &prep.tile)?
+    // Any rank: a tile fully inside a unit-step selection is contiguous in both
+    // payload order and logical row-major index (not just ndim == 1).
+    if let Some(li_base) =
+        dense_tile_logical_base(plan, &prep.chunk_coord[..prep.ndim], &prep.tile)?
     {
         for k in 0..prep.nelem {
             visit(li_base + k, E::read_at(&prep.raw_bytes, k))?;
@@ -118,9 +119,10 @@ where
     let prep = prepare_chunk::<E>(mmap, plan, c)?;
     let preview_len = preview.len();
     let filter_cells = plan.cell_filter.is_some();
-    if prep.ndim == 1
-        && let Some(li_base) =
-            dense_tile_logical_base(plan, &prep.chunk_coord[..prep.ndim], &prep.tile)?
+    // Multi-dim tiles that sit fully inside a unit-step box are contiguous too —
+    // parallel scalar fold must hit slab SIMD here, not per-element striding.
+    if let Some(li_base) =
+        dense_tile_logical_base(plan, &prep.chunk_coord[..prep.ndim], &prep.tile)?
     {
         if filter_cells {
             for k in 0..prep.nelem {

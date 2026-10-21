@@ -30,6 +30,9 @@ pub(crate) fn logical_index_unit_step(
 
 /// When the tile at `chunk_coord` is fully inside the selection box and step is `1`, return the
 /// logical row-major index of the tile's first element.
+///
+/// Valid at any rank: a fully contained tile is contiguous in payload order and in logical
+/// indices (`li_base .. li_base + nelem`), so fold/visit can take the slab fast path.
 pub(crate) fn dense_tile_logical_base(
     plan: &ReadPlan,
     chunk_coord: &[u64],
