@@ -10,7 +10,7 @@
 
 ### Notes
 
-- Semver patch on the 0.6 line. PyPI **tet-py** stays on **0.6.2** until pin after crates.io shows 0.6.3.
+- Semver patch on the 0.6 line. PyPI **tet-py 0.6.3** pins this crate.
 
 ## [0.6.2] - 2026-10-21
 
