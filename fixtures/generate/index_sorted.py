@@ -1,8 +1,13 @@
 """Sorted-axis index bench fixtures (THI-613): HDF5 with monotonic time coords.
 
 Footer coord labels cap at 64, so time stays length 64 and **width** carries the
-bytes to match the main bench tiers (~6.7 GiB large / 20 GiB extra). One chunk
-per time step so a label-range select reads a known fraction of the file.
+bytes. Tiers:
+
+- **small** — ~256 MiB file, select ≈16 MiB (microbench / fixed-cost)
+- **large** — ~6.7 GiB, select ≈0.42 GiB
+- **extra** — 20 GiB, select ≈1.25 GiB
+
+One chunk per time step so a label-range select reads a known fraction.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from generate.constants import (
     SEED_LARGE,
 )
 
-IndexTier = Literal["large", "extra"]
+IndexTier = Literal["small", "large", "extra"]
 
 # Must stay ≤ MetadataLimitsV1.coord_labels_per_axis (64).
 INDEX_TIME = 64
@@ -31,6 +36,9 @@ INDEX_TIME = 64
 INDEX_SELECT_START = "10"
 INDEX_SELECT_STOP = "14"
 INDEX_SELECT_LEN = 4  # stop - start → 4/64 of logical bytes
+
+# Fixed width for the small microbench (~4 MiB f32 per time step → 16 MiB select).
+SMALL_INDEX_WIDTH = 1_048_576
 
 
 @dataclass(frozen=True)
@@ -55,22 +63,33 @@ class IndexFixture:
     def select_gib(self) -> float:
         return self.select_bytes / (1024**3)
 
+    @property
+    def select_mib(self) -> float:
+        return self.select_bytes / (1024**2)
+
 
 def fixture_for(tier: IndexTier) -> IndexFixture:
-    """Paths + geometry for `large` (~6.7 GiB) or `extra` (20 GiB)."""
-    if tier == "large":
+    """Paths + geometry for `small` / `large` / `extra`."""
+    if tier == "small":
+        width = SMALL_INDEX_WIDTH
+        logical_bytes = INDEX_TIME * width * FLOAT32_BYTES
+        root = FIXTURES_ROOT / "large" / "index_small"
+    elif tier == "large":
         logical = LARGE_PER_FORMAT_BYTES
         root = FIXTURES_ROOT / "large" / "index"
+        width = logical // (INDEX_TIME * FLOAT32_BYTES)
+        if width < 1:
+            raise ValueError("logical size too small for INDEX_TIME")
+        logical_bytes = INDEX_TIME * width * FLOAT32_BYTES
     elif tier == "extra":
         logical = EXTRA_LARGE_LOGICAL_BYTES
         root = FIXTURES_ROOT / "extra_large" / "index"
+        width = logical // (INDEX_TIME * FLOAT32_BYTES)
+        if width < 1:
+            raise ValueError("logical size too small for INDEX_TIME")
+        logical_bytes = INDEX_TIME * width * FLOAT32_BYTES
     else:
-        raise ValueError(f"unknown index tier {tier!r}; choose large or extra")
-    # Round width down so total elems fit time × width × 4 ≤ logical.
-    width = logical // (INDEX_TIME * FLOAT32_BYTES)
-    if width < 1:
-        raise ValueError("logical size too small for INDEX_TIME")
-    logical_bytes = INDEX_TIME * width * FLOAT32_BYTES
+        raise ValueError(f"unknown index tier {tier!r}; choose small, large, or extra")
     return IndexFixture(
         tier=tier,
         logical_bytes=logical_bytes,
@@ -87,13 +106,14 @@ def write_sorted_axis_h5(fx: IndexFixture, *, quiet: bool = False) -> None:
     fx.h5.parent.mkdir(parents=True, exist_ok=True)
     if fx.h5.is_file():
         fx.h5.unlink()
-    rng = np.random.default_rng(SEED_LARGE + 613 + (0 if fx.tier == "large" else 1))
+    seed_off = {"small": 0, "large": 1, "extra": 2}[fx.tier]
+    rng = np.random.default_rng(SEED_LARGE + 613 + seed_off)
     # Write x in slabs so peak RAM stays modest on the 20 GiB path.
     slab = min(fx.width, 16 * 1024 * 1024)
     if not quiet:
         print(
             f"HDF5 sorted-axis [{fx.tier}]: {fx.h5} "
-            f"({fx.logical_gib:.2f} GiB logical, select≈{fx.select_gib:.2f} GiB, "
+            f"({fx.logical_gib:.2f} GiB logical, select≈{fx.select_mib:.1f} MiB, "
             f"time={INDEX_TIME}, width={fx.width}, chunks=(1, {fx.width}))"
         )
     with h5py.File(fx.h5, "w") as f:

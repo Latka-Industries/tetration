@@ -1,8 +1,12 @@
-"""THI-613 bench: tet sealed range sum vs HDF5+NumPy on large / extra tiers.
+"""THI-613 bench: tet sealed range sum vs HDF5+NumPy on small / large / extra.
 
 Primary question: is tet’s built-in selection + `sum` accurate and competitive
-vs h5py + NumPy on the same slab? Tiers match the main stress sizes (~6.7 GiB
-large, 20 GiB extra). Index present/missing is secondary correctness only.
+vs h5py + NumPy on the same slab?
+
+- **small** — select ≈16 MiB (fixed-cost / CLI microbench)
+- **large** / **extra** — stress sizes (CLI spawn is noise)
+
+Times the release `tet` binary only — not tet-py (bindings lag the crate).
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -63,19 +68,21 @@ def _must_ok(proc: subprocess.CompletedProcess[str], what: str) -> None:
         raise RuntimeError(f"{what} failed:\n{proc.stderr or proc.stdout}")
 
 
+def query_doc() -> dict[str, Any]:
+    return {
+        "dataset": "data",
+        "layout_version": 1,
+        "selection": [
+            {"start_label": INDEX_SELECT_START, "stop_label": INDEX_SELECT_STOP},
+            {},
+        ],
+        "sum": [],
+        "execution": {"device": "cpu"},
+    }
+
+
 def query_body() -> str:
-    return json.dumps(
-        {
-            "dataset": "data",
-            "layout_version": 1,
-            "selection": [
-                {"start_label": INDEX_SELECT_START, "stop_label": INDEX_SELECT_STOP},
-                {},
-            ],
-            "sum": [],
-            "execution": {"device": "cpu"},
-        }
-    )
+    return json.dumps(query_doc())
 
 
 def run_tet_query(tet: Path, pkg: Path) -> tuple[float, dict]:
@@ -167,6 +174,11 @@ def write_report(
 ) -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out = results_path(fx.tier)
+    select_note = (
+        f"select ≈ {fx.select_mib:.1f} MiB"
+        if fx.tier == "small"
+        else f"select ≈ {fx.select_gib:.2f} GiB"
+    )
     lines = [
         f"# Sorted-axis range query bench (THI-613) — {fx.tier}",
         "",
@@ -175,7 +187,7 @@ def write_report(
         "",
         f"- git: `{git_rev}`",
         f"- tier: **{fx.tier}** ({fx.logical_gib:.2f} GiB logical; "
-        f"select ≈ {fx.select_gib:.2f} GiB = {INDEX_SELECT_LEN}/{INDEX_TIME} time steps)",
+        f"{select_note} = {INDEX_SELECT_LEN}/{INDEX_TIME} time steps)",
         f"- shape: time={INDEX_TIME} × width={fx.width}, chunk (1, {fx.width})",
         f"- op: `sum` over time labels `[{INDEX_SELECT_START}, {INDEX_SELECT_STOP})` × full x",
         f"- accuracy (tet vs h5+numpy): **{'pass' if accurate else 'FAIL'}**",
@@ -215,12 +227,17 @@ def write_report(
     log(f"wrote {out}")
 
 
-def run_index_bench(tier: IndexTier = "large", *, regenerate: bool = True) -> int:
+def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     tet = tet_bin()
     fx = fixture_for(tier)
+    select_note = (
+        f"select≈{fx.select_mib:.1f} MiB"
+        if tier == "small"
+        else f"select≈{fx.select_gib:.2f} GiB"
+    )
     log(
         f"=== THI-613: tet range sum vs HDF5+NumPy [{tier}] "
-        f"({fx.logical_gib:.2f} GiB, select≈{fx.select_gib:.2f} GiB) ==="
+        f"({fx.logical_gib:.2f} GiB, {select_note}) ==="
     )
     if regenerate or not fx.h5.is_file():
         generate_sorted_axis_index(tier, quiet=False)
@@ -243,13 +260,14 @@ def run_index_bench(tier: IndexTier = "large", *, regenerate: bool = True) -> in
     exe = payload.get("execution") or {}
     tet_sum = exe.get("operation_sum")
     tet_chunks = plan.get("chunk_count")
+    fold_par = exe.get("fold_parallel")
     primary = [
         Row(
             backend="tet",
             seconds=tet_s,
             value=tet_sum,
             chunk_count=tet_chunks,
-            note="query on package (sorted_axis_range sealed)",
+            note=f"tet query CLI; fold_parallel={fold_par}",
         )
     ]
 
@@ -261,7 +279,7 @@ def run_index_bench(tier: IndexTier = "large", *, regenerate: bool = True) -> in
             seconds=h5_s,
             value=h5_sum,
             chunk_count=INDEX_SELECT_LEN,
-            note="h5py read + np.sum (fair peer)",
+            note="h5py read + np.sum (in-process)",
         )
     )
 
@@ -332,13 +350,16 @@ def run_index_bench(tier: IndexTier = "large", *, regenerate: bool = True) -> in
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="THI-613: tet range sum vs HDF5+NumPy (large ≈6.7 GiB, extra 20 GiB)",
+        description=(
+            "THI-613: tet range sum vs HDF5+NumPy "
+            "(small ≈16 MiB select, large ≈0.4 GiB, extra ≈1.25 GiB)"
+        ),
     )
     parser.add_argument(
         "--tier",
-        choices=("large", "extra"),
-        default="large",
-        help="fixture size: large ≈6.7 GiB (default), extra = 20 GiB",
+        choices=("small", "large", "extra", "both"),
+        default="both",
+        help="fixture size; 'both' runs small then large (default)",
     )
     parser.add_argument(
         "--reuse-h5",
@@ -346,8 +367,16 @@ def main(argv: list[str] | None = None) -> int:
         help="skip regenerating HDF5 when the file already exists",
     )
     args = parser.parse_args(argv)
+    tiers: tuple[IndexTier, ...]
+    if args.tier == "both":
+        tiers = ("small", "large")
+    else:
+        tiers = (args.tier,)  # type: ignore[assignment]
     try:
-        return run_index_bench(args.tier, regenerate=not args.reuse_h5)
+        rc = 0
+        for tier in tiers:
+            rc = run_index_bench(tier, regenerate=not args.reuse_h5) or rc
+        return rc
     except Exception as exc:  # noqa: BLE001
         print(f"bench-index failed: {exc}", file=sys.stderr)
         return 1

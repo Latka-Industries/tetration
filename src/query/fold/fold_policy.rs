@@ -8,6 +8,13 @@ use crate::utils::dtype::ElementDtype;
 /// Share of [`ExecutionBudget::host_available_ram_bytes`] treated as in-core page-cache headroom.
 pub const IN_CORE_IO_HEADROOM_BPS: u64 = 8500;
 
+/// Default Rayon fold stays off below this logical selection size.
+///
+/// Tiny multi-chunk plans (e.g. ~16 MiB index microbench) pay more for thread fan-out
+/// than they gain; large selects (hundreds of MiB+) still parallelize. Explicit
+/// `execution.fold_parallel: true` overrides this floor.
+pub const PARALLEL_MIN_LOGICAL_BYTES: u64 = 32 * 1024 * 1024;
+
 /// Whether the logical selection is likely served from page cache vs storage-bound.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IoRegime {
@@ -80,7 +87,9 @@ impl FoldIoPolicy {
                 Some(true) => multi_chunk,
                 Some(false) => false,
                 None if !multi_chunk => false,
-                None => true,
+                // Default: only fan out when the selection is large enough that
+                // Rayon overhead is amortized (keeps ~16 MiB microbenches sequential).
+                None => multi_chunk && logical_bytes >= PARALLEL_MIN_LOGICAL_BYTES,
             }
         };
 
