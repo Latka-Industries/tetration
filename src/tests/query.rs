@@ -2322,7 +2322,9 @@ fn plan_query_zscore_switch_spills_when_over_budget() {
     .unwrap();
     let ex = plan.execution.as_ref().unwrap();
     assert_eq!(ex.memory_strategy, Some("transform_spill"));
-    assert!(ex.spill_f32_path.is_some());
+    // `write: switch` without an explicit path uses an ephemeral cache spill that is
+    // deleted when the query ends — no durable export path in the response.
+    assert!(ex.spill_f32_path.is_none());
     assert_eq!(ex.spill_f32_bytes, Some(24));
 }
 

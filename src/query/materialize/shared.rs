@@ -87,14 +87,15 @@ where
     Ok((out, truncated, total_bytes_read_from_disk))
 }
 
+/// Sequential per-chunk scatter into `out` (single-threaded materialize / transform path).
 pub(crate) fn scatter_fill_chunks<T, S>(
     mmap: &[u8],
     plan: &ReadPlan,
     out: &mut [T],
-    scatter_chunk: S,
+    mut scatter_chunk: S,
 ) -> Result<u64, TetError>
 where
-    S: Fn(
+    S: FnMut(
         &[u8],
         &ReadPlan,
         &crate::query::types::PlannedChunkIo,

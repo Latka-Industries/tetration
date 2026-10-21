@@ -238,6 +238,35 @@ where
     visit_planned_chunk_elem::<f64, _>(mmap, plan, c, visit)
 }
 
+/// Visit selected `f32` or `f64` samples in a planned chunk, promoting to `f64`.
+///
+/// Shared by transform softmax pass-1 and window folds that accumulate in `f64`.
+///
+/// # Errors
+///
+/// Returns [`TetError::Validation`] when `dtype` is not `f32`/`f64`, or propagates
+/// decode / visit failures from the typed visitors.
+pub(crate) fn visit_planned_chunk_float_as_f64<F>(
+    mmap: &[u8],
+    plan: &ReadPlan,
+    c: &PlannedChunkIo,
+    dtype: crate::utils::dtype::ElementDtype,
+    mut visit: F,
+) -> Result<u64, TetError>
+where
+    F: FnMut(usize, f64) -> Result<(), TetError>,
+{
+    match dtype {
+        crate::utils::dtype::ElementDtype::F32 => {
+            visit_planned_chunk(mmap, plan, c, |li, v| visit(li, f64::from(v)))
+        }
+        crate::utils::dtype::ElementDtype::F64 => visit_planned_chunk_f64(mmap, plan, c, visit),
+        _ => Err(TetError::Validation(
+            "visit_planned_chunk_float_as_f64 requires f32 or f64".into(),
+        )),
+    }
+}
+
 /// Visit each selected `i32` in a planned chunk.
 pub(crate) fn visit_planned_chunk_i32<F>(
     mmap: &[u8],

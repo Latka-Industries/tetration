@@ -15,12 +15,12 @@ pub(crate) use prepare::{decode_planned_chunk_bytes, planned_chunk_stored_slice}
 #[allow(unused_imports)]
 pub(crate) use visit::{
     fold_planned_chunk_f32, fold_planned_chunk_f64, visit_planned_chunk, visit_planned_chunk_f16,
-    visit_planned_chunk_f16_as_f64, visit_planned_chunk_f64, visit_planned_chunk_i16,
-    visit_planned_chunk_i16_as_f64, visit_planned_chunk_i32, visit_planned_chunk_i32_as_f64,
-    visit_planned_chunk_i64, visit_planned_chunk_i64_as_f64, visit_planned_chunk_u8,
-    visit_planned_chunk_u8_as_f64, visit_planned_chunk_u16, visit_planned_chunk_u16_as_f64,
-    visit_planned_chunk_u32, visit_planned_chunk_u32_as_f64, visit_planned_chunk_u64,
-    visit_planned_chunk_u64_as_f64,
+    visit_planned_chunk_f16_as_f64, visit_planned_chunk_f64, visit_planned_chunk_float_as_f64,
+    visit_planned_chunk_i16, visit_planned_chunk_i16_as_f64, visit_planned_chunk_i32,
+    visit_planned_chunk_i32_as_f64, visit_planned_chunk_i64, visit_planned_chunk_i64_as_f64,
+    visit_planned_chunk_u8, visit_planned_chunk_u8_as_f64, visit_planned_chunk_u16,
+    visit_planned_chunk_u16_as_f64, visit_planned_chunk_u32, visit_planned_chunk_u32_as_f64,
+    visit_planned_chunk_u64, visit_planned_chunk_u64_as_f64,
 };
 
 pub(crate) use scatter::{

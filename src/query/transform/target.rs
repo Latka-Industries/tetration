@@ -2,7 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::query::engine::{budget::ExecutionBudget, spill_policy::SpillPathAllowlist};
+use crate::query::engine::{
+    budget::ExecutionBudget,
+    spill_policy::{SpillPathAllowlist, TempSpillFile},
+};
 use crate::query::types::{ReadPlan, TetError, WriteHints, WriteTarget};
 use crate::utils::dtype::ElementDtype;
 
@@ -11,7 +14,13 @@ use super::sidecar::{self, SidecarContext, SidecarPaths};
 /// Where pass 2 should materialize the transformed logical selection.
 pub(crate) enum ResolvedTransformOutput {
     Ram,
+    /// User-export spill (`write: spill` or an explicit `path`) — file is kept.
     Spill(PathBuf),
+    /// Engine-managed temp for `write: switch` when the selection exceeds budget.
+    ///
+    /// Wrapped in [`TempSpillFile`] so the cache file is removed when the query ends
+    /// (same contract as materialize temp spills).
+    EphemeralSpill(TempSpillFile),
     Sidecar(SidecarPaths),
 }
 
@@ -58,14 +67,23 @@ pub(crate) fn resolve_transform_output(
             }
             Ok((ResolvedTransformOutput::Ram, WriteTarget::Ram))
         }
+        // Explicit spill is a user export: keep the file (path hint or durable auto path).
         WriteTarget::Spill => {
-            let path = resolve_spill_path(path_hint, allowlist)?;
+            let path = resolve_persistent_spill_path(path_hint, allowlist)?;
             Ok((ResolvedTransformOutput::Spill(path), WriteTarget::Spill))
         }
         WriteTarget::Switch => {
             if exceeds {
-                let path = resolve_spill_path(path_hint, allowlist)?;
-                Ok((ResolvedTransformOutput::Spill(path), WriteTarget::Switch))
+                // Budget overflow under switch: engine temp spill, deleted when the query ends.
+                // An explicit path is still treated as a durable export.
+                let output = if path_hint.is_some() {
+                    ResolvedTransformOutput::Spill(resolve_persistent_spill_path(
+                        path_hint, allowlist,
+                    )?)
+                } else {
+                    ResolvedTransformOutput::EphemeralSpill(TempSpillFile::create(allowlist)?)
+                };
+                Ok((output, WriteTarget::Switch))
             } else {
                 Ok((ResolvedTransformOutput::Ram, WriteTarget::Switch))
             }
@@ -74,12 +92,13 @@ pub(crate) fn resolve_transform_output(
     }
 }
 
-fn resolve_spill_path(
+fn resolve_persistent_spill_path(
     path_hint: Option<&str>,
     allowlist: &SpillPathAllowlist,
 ) -> Result<PathBuf, TetError> {
     match path_hint {
         Some(handle) => allowlist.validate(Path::new(handle)),
+        // Durable auto path for `write: spill` without `path` (export via response `spill_path`).
         None => allowlist.allocate_temp_spill_path(),
     }
 }

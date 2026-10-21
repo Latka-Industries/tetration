@@ -34,12 +34,15 @@ def git_short_rev() -> str:
 
 
 def query_json(op: OpName, *, device: str | None) -> str:
+    """Build closed query JSON for `op` (scalar / transform+write / window fields)."""
     meta = op_meta(op)
     doc: dict = {
         "dataset": "data",
         "layout_version": 1,
     }
-    if meta.is_transform:
+    if meta.query_fields:
+        doc.update(meta.query_fields)
+    elif meta.is_transform:
         doc["transform"] = {"method": meta.transform_method}
         # switch: RAM when budget allows, else spill (needed for multi-GiB tensors).
         doc["write"] = "switch"
@@ -62,7 +65,18 @@ def _device_label(execution: dict) -> str:
 
 
 def extract_tet_value(op: OpName, execution: dict) -> float | None:
+    """Pull the comparable scalar from tet execution JSON using `OpMeta.value_mode`."""
     meta = op_meta(op)
+    if meta.value_mode == "window_count":
+        raw = execution.get("window_count")
+        return None if raw is None else float(raw)
+    if meta.value_mode == "reduced_sum_total":
+        raw = execution.get("operation_reduced_sum")
+        if raw is None:
+            return None
+        if isinstance(raw, list):
+            return float(sum(float(x) for x in raw))
+        return float(raw)
     raw = execution.get(meta.result_key)
     if raw is None:
         return None
@@ -97,7 +111,8 @@ def run_tet_op(
     if tet_device:
         cmd.extend(["--device", tet_device])
     body = query_json(op, device=tet_device)
-    label = op_meta(op).transform_method or op
+    meta = op_meta(op)
+    label = meta.transform_method or op
 
     def once() -> dict:
         proc = subprocess.run(

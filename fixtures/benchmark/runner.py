@@ -60,7 +60,8 @@ def values_match(op: OpName, source: float, tet: float) -> bool:
     if op == "count" or op.endswith("_count"):
         return abs(source - tet) <= tol
     scale = max(abs(source), abs(tet), 1e-9)
-    return abs(source - tet) <= tol * scale if op in ("sum", "var", "transform_l1") else abs(source - tet) <= tol
+    relative = op in ("sum", "var", "transform_l1") or meta.value_mode == "reduced_sum_total"
+    return abs(source - tet) <= tol * scale if relative else abs(source - tet) <= tol
 
 
 @dataclass

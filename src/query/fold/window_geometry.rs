@@ -270,7 +270,59 @@ pub(crate) fn window_reduced_index(
     linear_rm_index(&out_c, &layout.out_shape)
 }
 
+/// Half-open `[first, last)` window-index range covering axis coordinate `c`.
+///
+/// Empty when `first == last`. Bins map to a singleton range; rolling uses closed-form
+/// bounds (not a scan over `window_count`) so large extents stay O(covering windows)
+/// per cell — critical for 1 MiB window benches on multi-GiB tensors.
+///
+/// # Errors
+///
+/// Propagates overflow / invalid `step` from the rolling closed form.
+pub(crate) fn covering_window_bounds(
+    c: u64,
+    layout: &WindowAxisLayout,
+) -> Result<(usize, usize), TetError> {
+    match layout.mode {
+        WindowMode::Bins => {
+            let w = bins_window_for_coord(layout, c)?;
+            Ok((w, w + 1))
+        }
+        WindowMode::Rolling => rolling_covering_bounds(c, layout),
+    }
+}
+
+fn rolling_covering_bounds(c: u64, layout: &WindowAxisLayout) -> Result<(usize, usize), TetError> {
+    let c_i = i64::try_from(c).map_err(|_| TetError::Validation("axis coord overflow".into()))?;
+    let size_i = i64::try_from(layout.size)
+        .map_err(|_| TetError::Validation("window.size overflows i64".into()))?;
+    let step_i = i64::try_from(layout.step)
+        .map_err(|_| TetError::Validation("window.step overflows i64".into()))?;
+    if step_i < 1 {
+        return Err(TetError::Validation("window.step must be >= 1".into()));
+    }
+    let first = layout.first_start;
+    let wc = i64::try_from(layout.window_count)
+        .map_err(|_| TetError::Validation("window count overflows i64".into()))?;
+    // start(w) = first + w*step. Cell c ∈ window w iff start <= c < start+size:
+    //   w_max = floor((c - first) / step)
+    //   w_min = floor((c - size - first) / step) + 1
+    let w_max = (c_i - first).div_euclid(step_i);
+    let w_min = (c_i - size_i - first).div_euclid(step_i) + 1;
+    let lo = w_min.max(0);
+    let hi = w_max.min(wc - 1);
+    if lo > hi || wc == 0 {
+        return Ok((0, 0));
+    }
+    Ok((
+        usize::try_from(lo).map_err(|_| TetError::Validation("window index overflow".into()))?,
+        usize::try_from(hi + 1)
+            .map_err(|_| TetError::Validation("window index overflow".into()))?,
+    ))
+}
+
 /// Window indices that include `coords[window_axis]` for this layout.
+#[cfg(test)]
 pub(crate) fn windows_covering(
     coords: &[usize],
     layout: &WindowAxisLayout,
@@ -279,30 +331,8 @@ pub(crate) fn windows_covering(
         .get(layout.window_axis)
         .ok_or_else(|| TetError::Validation("coordinate rank mismatch for window fold".into()))?;
     let c = u64::try_from(c).map_err(|_| TetError::Validation("axis coord overflow".into()))?;
-    match layout.mode {
-        WindowMode::Bins => {
-            let w = bins_window_for_coord(layout, c)?;
-            Ok(vec![w])
-        }
-        WindowMode::Rolling => {
-            let c_i =
-                i64::try_from(c).map_err(|_| TetError::Validation("axis coord overflow".into()))?;
-            let size_i = i64::try_from(layout.size)
-                .map_err(|_| TetError::Validation("window.size overflows i64".into()))?;
-            // Cell c belongs to window w when start(w) <= c < start(w)+size.
-            let mut out = Vec::new();
-            for w in 0..layout.window_count {
-                let start = window_start(layout, w);
-                if start > c_i {
-                    break;
-                }
-                if c_i < start + size_i {
-                    out.push(w);
-                }
-            }
-            Ok(out)
-        }
-    }
+    let (first, last) = covering_window_bounds(c, layout)?;
+    Ok((first..last).collect())
 }
 
 fn bins_window_for_coord(layout: &WindowAxisLayout, c: u64) -> Result<usize, TetError> {
@@ -408,5 +438,69 @@ mod tests {
         };
         // Cell 2 is in window 0 ([0,3)) and window 1 ([2,5)).
         assert_eq!(windows_covering(&[2], &layout).unwrap(), vec![0, 1]);
+        assert_eq!(covering_window_bounds(2, &layout).unwrap(), (0, 2));
+        assert_eq!(covering_window_bounds(0, &layout).unwrap(), (0, 1));
+        assert_eq!(covering_window_bounds(4, &layout).unwrap(), (1, 2));
+    }
+
+    #[test]
+    fn rolling_covering_matches_scan_with_pad_overhang() {
+        // extent 5, size 3, step 1, pad start overhang: first_start = 1-3 = -2.
+        let layout = WindowAxisLayout {
+            window_axis: 0,
+            size: 3,
+            mode: WindowMode::Rolling,
+            pad: WindowPad::Zero,
+            step: 1,
+            align: WindowAlign::Start,
+            min_count: 1,
+            window_count: 5,
+            first_start: -2,
+            other_reduce_product: 1,
+            reduce_set: BTreeSet::from([0]),
+            out_shape: vec![5],
+            out_len: 5,
+            out_window_dim: 0,
+            extent: 5,
+        };
+        for c in 0..5u64 {
+            let (lo, hi) = covering_window_bounds(c, &layout).unwrap();
+            let mut scanned = Vec::new();
+            let c_i = i64::try_from(c).unwrap();
+            for w in 0..layout.window_count {
+                let start = window_start(&layout, w);
+                if start <= c_i && c_i < start + 3 {
+                    scanned.push(w);
+                }
+            }
+            assert_eq!((lo..hi).collect::<Vec<_>>(), scanned, "c={c}");
+        }
+    }
+
+    #[test]
+    fn rolling_nonoverlap_step_eq_size_is_singleton() {
+        let layout = WindowAxisLayout {
+            window_axis: 0,
+            size: 4,
+            mode: WindowMode::Rolling,
+            pad: WindowPad::None,
+            step: 4,
+            align: WindowAlign::Start,
+            min_count: 1,
+            window_count: 2,
+            first_start: 0,
+            other_reduce_product: 1,
+            reduce_set: BTreeSet::from([0]),
+            out_shape: vec![2],
+            out_len: 2,
+            out_window_dim: 0,
+            extent: 9,
+        };
+        assert_eq!(covering_window_bounds(0, &layout).unwrap(), (0, 1));
+        assert_eq!(covering_window_bounds(3, &layout).unwrap(), (0, 1));
+        assert_eq!(covering_window_bounds(4, &layout).unwrap(), (1, 2));
+        assert_eq!(covering_window_bounds(7, &layout).unwrap(), (1, 2));
+        // Tail past last full window: no covering windows under pad none.
+        assert_eq!(covering_window_bounds(8, &layout).unwrap(), (0, 0));
     }
 }

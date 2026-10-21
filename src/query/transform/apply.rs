@@ -2,32 +2,27 @@
 //!
 //! Each element is rewritten using pass-1 stats ([`TransformStats`]). Non-finite inputs
 //! are preserved; invalid divides and negative `sqrt` shifts become **NaN** and append
-//! to [`TransformWarnings`].
+//! to [`TransformWarnings`]. Multi-chunk plans use Rayon scatter (disjoint logical
+//! indices), matching parallel fold I/O.
 
 use std::cell::RefCell;
 use std::path::Path;
 
+use rayon::prelude::*;
+
 use crate::query::decode::chunk_decode::{visit_planned_chunk, visit_planned_chunk_f64};
+use crate::query::dispatch::accumulate_chunk_read_bytes;
+use crate::query::fold::parallel::disjoint_buffer_mut;
 use crate::query::fold::partial_geometry;
 use crate::query::materialize::shared::{
     scatter_fill_chunks, spill_byte_len_from_elem_count, spill_read_plan_pod_le_impl,
 };
-use crate::query::types::{ReadPlan, TetError, TransformMethod, fold_keeps_cell};
+use crate::query::materialize::validate_read_plan_geometry;
+use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, TransformMethod, fold_keeps_cell};
 use crate::utils::{f32_le, f64_le};
 
 use super::stats::TransformStats;
 use super::warnings::TransformWarnings;
-
-/// Run scatter-fill with a shared [`RefCell`] so chunk visitors can record warnings.
-fn with_warnings_cell<R>(
-    warnings: &mut TransformWarnings,
-    f: impl FnOnce(&RefCell<TransformWarnings>) -> Result<R, TetError>,
-) -> Result<R, TetError> {
-    let cell = RefCell::new(std::mem::take(warnings));
-    let out = f(&cell)?;
-    *warnings = cell.into_inner();
-    Ok(out)
-}
 
 /// Divide when `denom` is finite and non-zero; otherwise record the logical index and return NaN.
 fn div_or_nan(numer: f64, denom: f64, li: usize, warnings: &mut TransformWarnings) -> f64 {
@@ -88,23 +83,69 @@ fn transform_f64(
     })
 }
 
+/// Scatter transform pass-2 into `out`: sequential for one chunk, Rayon otherwise.
+///
+/// Parallel path gives each chunk a local [`TransformWarnings`] bag and a disjoint
+/// view of `out` (planned chunks never share logical indices). Bags merge after join.
+fn transform_scatter_fill<T, V>(
+    mmap: &[u8],
+    plan: &ReadPlan,
+    out: &mut [T],
+    warnings: &mut TransformWarnings,
+    visit_chunk: V,
+) -> Result<u64, TetError>
+where
+    T: Copy + Send,
+    V: Fn(
+            &[u8],
+            &ReadPlan,
+            &PlannedChunkIo,
+            &mut [T],
+            &mut TransformWarnings,
+        ) -> Result<u64, TetError>
+        + Sync,
+{
+    if plan.chunks.len() <= 1 {
+        return scatter_fill_chunks(mmap, plan, out, |mmap, plan, c, out| {
+            visit_chunk(mmap, plan, c, out, warnings)
+        });
+    }
+    validate_read_plan_geometry(plan, out.len())?;
+    let out_addr = out.as_mut_ptr() as usize;
+    let out_len = out.len();
+    let parts: Vec<(u64, TransformWarnings)> = plan
+        .chunks
+        .par_iter()
+        .map(|c| {
+            let mut local = TransformWarnings::default();
+            let slice = disjoint_buffer_mut::<T>(out_addr, out_len);
+            let bytes = visit_chunk(mmap, plan, c, slice, &mut local)?;
+            Ok((bytes, local))
+        })
+        .collect::<Result<Vec<_>, TetError>>()?;
+    let mut total = 0u64;
+    for (bytes, local) in parts {
+        accumulate_chunk_read_bytes(&mut total, bytes)?;
+        warnings.merge_from(&local);
+    }
+    Ok(total)
+}
+
 fn transform_scatter_fill_f32(
     mmap: &[u8],
     plan: &ReadPlan,
     out: &mut [f32],
     stats: &TransformStats,
-    warnings: &RefCell<TransformWarnings>,
+    warnings: &mut TransformWarnings,
 ) -> Result<u64, TetError> {
     let shape = plan.logical_selection_shape.clone();
-    scatter_fill_chunks(mmap, plan, out, |mmap, plan, c, out| {
+    transform_scatter_fill(mmap, plan, out, warnings, |mmap, plan, c, out, warnings| {
         visit_planned_chunk(mmap, plan, c, |li, v| {
             if !fold_keeps_cell(plan.cell_filter, f64::from(v)) {
                 out[li] = f32::NAN;
                 return Ok(());
             }
-            let y =
-                transform_f64(f64::from(v), li, &shape, stats, &mut warnings.borrow_mut())? as f32;
-            out[li] = y;
+            out[li] = transform_f64(f64::from(v), li, &shape, stats, warnings)? as f32;
             Ok(())
         })
     })
@@ -115,16 +156,16 @@ fn transform_scatter_fill_f64(
     plan: &ReadPlan,
     out: &mut [f64],
     stats: &TransformStats,
-    warnings: &RefCell<TransformWarnings>,
+    warnings: &mut TransformWarnings,
 ) -> Result<u64, TetError> {
     let shape = plan.logical_selection_shape.clone();
-    scatter_fill_chunks(mmap, plan, out, |mmap, plan, c, out| {
+    transform_scatter_fill(mmap, plan, out, warnings, |mmap, plan, c, out, warnings| {
         visit_planned_chunk_f64(mmap, plan, c, |li, v| {
             if !fold_keeps_cell(plan.cell_filter, v) {
                 out[li] = f64::NAN;
                 return Ok(());
             }
-            out[li] = transform_f64(v, li, &shape, stats, &mut warnings.borrow_mut())?;
+            out[li] = transform_f64(v, li, &shape, stats, warnings)?;
             Ok(())
         })
     })
@@ -141,12 +182,10 @@ pub(crate) fn transform_read_plan_f32_le_ram(
     stats: &TransformStats,
     warnings: &mut TransformWarnings,
 ) -> Result<(Vec<f32>, u64), TetError> {
-    with_warnings_cell(warnings, |cell| {
-        let n = plan.logical_element_count;
-        let mut out = vec![f32::NAN; n];
-        let bytes = transform_scatter_fill_f32(mmap, plan, &mut out, stats, cell)?;
-        Ok((out, bytes))
-    })
+    let n = plan.logical_element_count;
+    let mut out = vec![f32::NAN; n];
+    let bytes = transform_scatter_fill_f32(mmap, plan, &mut out, stats, warnings)?;
+    Ok((out, bytes))
 }
 
 /// Materialize the transformed logical selection into a dense `f64` vector.
@@ -160,12 +199,38 @@ pub(crate) fn transform_read_plan_f64_le_ram(
     stats: &TransformStats,
     warnings: &mut TransformWarnings,
 ) -> Result<(Vec<f64>, u64), TetError> {
-    with_warnings_cell(warnings, |cell| {
-        let n = plan.logical_element_count;
-        let mut out = vec![f64::NAN; n];
-        let bytes = transform_scatter_fill_f64(mmap, plan, &mut out, stats, cell)?;
-        Ok((out, bytes))
-    })
+    let n = plan.logical_element_count;
+    let mut out = vec![f64::NAN; n];
+    let bytes = transform_scatter_fill_f64(mmap, plan, &mut out, stats, warnings)?;
+    Ok((out, bytes))
+}
+
+/// Spill transformed POD via [`spill_read_plan_pod_le_impl`].
+///
+/// That helper takes `Fn` (not `FnMut`), so warnings ride in a [`RefCell`] for the closure.
+fn spill_transformed<T, F>(
+    mmap: &[u8],
+    plan: &ReadPlan,
+    path: &Path,
+    byte_len: u64,
+    warnings: &mut TransformWarnings,
+    scatter: F,
+) -> Result<u64, TetError>
+where
+    T: bytemuck::Pod + Copy,
+    F: Fn(&[u8], &ReadPlan, &mut [T], &mut TransformWarnings) -> Result<u64, TetError>,
+{
+    let bag = RefCell::new(std::mem::take(warnings));
+    let bytes = spill_read_plan_pod_le_impl(
+        mmap,
+        plan,
+        path,
+        byte_len,
+        |mmap, plan, out| scatter(mmap, plan, out, &mut bag.borrow_mut()),
+        None, // intentional NaNs from div-by-zero; skip materialized completeness check
+    )?;
+    *warnings = bag.into_inner();
+    Ok(bytes)
 }
 
 /// Spill the transformed logical selection as row-major little-endian POD to `path`.
@@ -180,20 +245,16 @@ pub(crate) fn transform_spill_f32_le(
     stats: &TransformStats,
     warnings: &mut TransformWarnings,
 ) -> Result<u64, TetError> {
-    with_warnings_cell(warnings, |cell| {
-        let byte_len = spill_byte_len_from_elem_count(
-            plan.logical_element_count,
-            f32_le::bytes_from_elem_count,
-        )?;
-        spill_read_plan_pod_le_impl(
-            mmap,
-            plan,
-            path,
-            byte_len,
-            |mmap, plan, out| transform_scatter_fill_f32(mmap, plan, out, stats, cell),
-            None, // intentional NaNs from div-by-zero; skip materialized completeness check
-        )
-    })
+    let byte_len =
+        spill_byte_len_from_elem_count(plan.logical_element_count, f32_le::bytes_from_elem_count)?;
+    spill_transformed(
+        mmap,
+        plan,
+        path,
+        byte_len,
+        warnings,
+        |mmap, plan, out, warnings| transform_scatter_fill_f32(mmap, plan, out, stats, warnings),
+    )
 }
 
 /// Spill the transformed logical selection as row-major `f64` LE to `path`.
@@ -208,18 +269,14 @@ pub(crate) fn transform_spill_f64_le(
     stats: &TransformStats,
     warnings: &mut TransformWarnings,
 ) -> Result<u64, TetError> {
-    with_warnings_cell(warnings, |cell| {
-        let byte_len = spill_byte_len_from_elem_count(
-            plan.logical_element_count,
-            f64_le::bytes_from_elem_count,
-        )?;
-        spill_read_plan_pod_le_impl(
-            mmap,
-            plan,
-            path,
-            byte_len,
-            |mmap, plan, out| transform_scatter_fill_f64(mmap, plan, out, stats, cell),
-            None, // intentional NaNs from div-by-zero; skip materialized completeness check
-        )
-    })
+    let byte_len =
+        spill_byte_len_from_elem_count(plan.logical_element_count, f64_le::bytes_from_elem_count)?;
+    spill_transformed(
+        mmap,
+        plan,
+        path,
+        byte_len,
+        warnings,
+        |mmap, plan, out, warnings| transform_scatter_fill_f64(mmap, plan, out, stats, warnings),
+    )
 }

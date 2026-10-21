@@ -689,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "tetration"
-version = "0.5.3"
+version = "0.6.3"
 dependencies = [
  "argus-chunk",
  "bytemuck",

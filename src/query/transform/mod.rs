@@ -127,6 +127,16 @@ fn run_pass2(
         (ElementDtype::F32 | ElementDtype::F64, target::ResolvedTransformOutput::Spill(path)) => {
             spill_pass2(input, stats, &path)
         }
+        (
+            ElementDtype::F32 | ElementDtype::F64,
+            target::ResolvedTransformOutput::EphemeralSpill(temp),
+        ) => {
+            // Preview is read inside spill_pass2; Drop then removes the cache file.
+            let mut outcome = spill_pass2(input, stats, temp.path())?;
+            outcome.spill_path = None; // ephemeral — not an export path
+            drop(temp);
+            Ok(outcome)
+        }
         (ElementDtype::F32, target::ResolvedTransformOutput::Sidecar(paths)) => {
             sidecar_pass2(input, stats, &paths, ElementDtype::F32)
         }

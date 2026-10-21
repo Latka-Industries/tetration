@@ -7,7 +7,13 @@ import argparse
 import os
 import sys
 
-from benchmark.constants import DEFAULT_FORMATS, DEFAULT_OPS, DEFAULT_TET_DEVICE, FormatName
+from benchmark.constants import (
+    DEFAULT_FORMATS,
+    DEFAULT_OPS,
+    DEFAULT_TET_DEVICE,
+    FormatName,
+    OP_GROUPS,
+)
 from benchmark.dispatch import run_benchmark
 from generate.dispatch import GENERATE_TARGETS, run_target
 
@@ -47,8 +53,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "bench",
         help="benchmark native source ops vs `.tet` query",
         description=(
-            "For each tier/format: generate once, convert once, then time tier-A/B "
-            "scalar ops on source (when comparable) and `.tet`."
+            "For each selected tier/format: generate once, convert once, then time "
+            "ops on native source (when comparable) and `.tet`. Use --tier / --ops "
+            "to run a slice (e.g. windows on large h5 only) instead of the full matrix."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  bench-large h5 --tier large --ops windows --tet-device cpu\n"
+            "  bench-large --tier large --ops mean,sum\n"
+            "  bench-large --tier all --ops all\n"
+            "  bench-large h5 netcdf --tier extra --ops default\n"
+            f"op groups: {', '.join(sorted(OP_GROUPS))}"
         ),
     )
     bench.add_argument(
@@ -59,12 +75,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="formats to bench (default: h5 netcdf zarr)",
     )
     bench.add_argument(
+        "--tier",
+        choices=("large", "extra", "all"),
+        default="all",
+        help="workload size: large (~6.7 GiB), extra (~20 GiB), or all (default: all)",
+    )
+    bench.add_argument(
         "--ops",
         nargs="*",
         metavar="OP",
         help=(
-            "ops or groups: scalar, qc, transforms, all; or comma-separated names "
-            f"(default: {', '.join(DEFAULT_OPS)})"
+            "ops and/or groups (repeatable / comma-ok). Groups: "
+            f"{', '.join(sorted(OP_GROUPS))}. "
+            f"Default group when omitted: default ({', '.join(DEFAULT_OPS)})"
         ),
     )
     bench.add_argument(
@@ -122,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_benchmark(
             formats=formats,
             ops=args.ops,
+            tiers=args.tier,
             skip_ops=skip_ops,
             jobs=args.jobs,
             tet_device=args.tet_device,

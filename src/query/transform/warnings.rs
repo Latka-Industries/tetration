@@ -18,4 +18,19 @@ impl TransformWarnings {
             self.div_by_zero_indices.push(logical_index);
         }
     }
+
+    /// Merge a per-chunk bag into `self` (Rayon transform pass-2 join).
+    ///
+    /// Counts always accumulate; listed indices stop at [`MAX_LISTED_DIV_BY_ZERO_INDICES`].
+    pub(crate) fn merge_from(&mut self, other: &Self) {
+        self.div_by_zero_count = self
+            .div_by_zero_count
+            .saturating_add(other.div_by_zero_count);
+        for &idx in &other.div_by_zero_indices {
+            if self.div_by_zero_indices.len() >= MAX_LISTED_DIV_BY_ZERO_INDICES {
+                break;
+            }
+            self.div_by_zero_indices.push(idx);
+        }
+    }
 }

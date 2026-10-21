@@ -39,21 +39,27 @@ def _extra_basename(format: FormatName) -> str:
     return f"tensor_20gb.{format if format != 'netcdf' else 'nc'}"
 
 
-def cases_for(format: FormatName) -> tuple[BenchCase, BenchCase]:
-    large = BenchCase(
-        format=format,
-        tier="large",
-        src=FIXTURES_ROOT / "large" / format / _large_basename(format),
-        tet_out=FIXTURES_ROOT / "large" / format / "tensor_large.tet",
-        gen_target=f"large-{format}",
-        logical_bytes=LARGE_PER_FORMAT_BYTES,
-    )
-    extra = BenchCase(
-        format=format,
-        tier="extra",
-        src=FIXTURES_ROOT / "extra_large" / format / _extra_basename(format),
-        tet_out=FIXTURES_ROOT / "extra_large" / format / "tensor_20gb.tet",
-        gen_target=f"extra-large-{format}",
-        logical_bytes=EXTRA_LARGE_LOGICAL_BYTES,
-    )
-    return large, extra
+def cases_for(
+    format: FormatName,
+    *,
+    tiers: tuple[TierName, ...] = ("large", "extra"),
+) -> tuple[BenchCase, ...]:
+    by_tier: dict[TierName, BenchCase] = {
+        "large": BenchCase(
+            format=format,
+            tier="large",
+            src=FIXTURES_ROOT / "large" / format / _large_basename(format),
+            tet_out=FIXTURES_ROOT / "large" / format / "tensor_large.tet",
+            gen_target=f"large-{format}",
+            logical_bytes=LARGE_PER_FORMAT_BYTES,
+        ),
+        "extra": BenchCase(
+            format=format,
+            tier="extra",
+            src=FIXTURES_ROOT / "extra_large" / format / _extra_basename(format),
+            tet_out=FIXTURES_ROOT / "extra_large" / format / "tensor_20gb.tet",
+            gen_target=f"extra-large-{format}",
+            logical_bytes=EXTRA_LARGE_LOGICAL_BYTES,
+        ),
+    }
+    return tuple(by_tier[t] for t in tiers)

@@ -88,7 +88,7 @@ Sequential per **tier**, then wipe the whole **format** tree before the next for
 6. **Delete `.tet`**
 7. After both tiers (large + extra): **delete `large/{format}/` and `extra_large/{format}/`**
 
-**Primary comparison:** full-tensor ops on the native file vs **`.tet`** query — see `fixtures/benchmark/constants.py` (`OP_REGISTRY`). **Default** `--ops`: scalar tier-A/B (`mean`, `sum`, `min`, `max`, `count`, `std`, `var`) plus QC (`nan_mean`, `nan_std`, `any_inf`, `inf_count`, `nan_count`). **Transforms** (two-pass `transform` + `write: switch`) are opt-in: `--ops transforms` or `--ops all`.  
+**Primary comparison:** full-tensor ops on the native file vs **`.tet`** query — see `fixtures/benchmark/constants.py` (`OP_REGISTRY`). Slice the matrix with **`--tier large|extra|all`** and **`--ops`** groups (`default`, `scalar`, `qc`, `transforms`, `windows` / `query06`, `all`) or named ops. **Default** ops: scalar + QC. **Windows** (`window_bins_sum`, `window_rolling_sum`) compare NumPy slab folds vs `.tet` (same axis/size/mode). `align` + label `group_by` need richer fixtures before they join this matrix.  
 **Secondary:** **convert** time (one-time import).
 
 `.tet` query timing uses **`execution.device: auto`** by default (`tet query --device auto`); override with `--tet-device cpu` or `TET_BENCH_DEVICE`. Reports include a **device** column (`device_used` and fallback reason when CPU wins).
@@ -105,13 +105,20 @@ For CPU-only timing comparisons, use **`mise run bench:cpu`**. GPU backends are 
 ```bash
 mise run bench              # alias for bench:auto (all formats)
 mise run bench:auto         # execution.device auto (Metal on macOS with tetration-metal, else CUDA/CPU)
-mise run bench:cpu          # force CPU streaming fold (recommended baseline)
+mise run bench:cpu          # default ops (scalar+QC) on large+extra, all formats, CPU
+mise run bench:scalar       # mean/sum/min/max/count/std/var only (CPU)
+mise run bench:transforms   # zscore…softmax vs fair NumPy peers — large, all formats, CPU
+mise run bench:windows      # h5 large only: window bins/rolling vs NumPy (CPU)
+mise run bench:full         # ALL ops × large+extra × all formats — CPU; expect ≥1 hour
 mise run bench:metal        # macOS: --features tetration-metal, device metal (large tier only useful)
 mise run bench:gpu          # Linux+NVIDIA: --features tetration-gpu, device cuda
 mise run bench:h5           # one format only (auto device)
 uv run --directory fixtures bench-large --run-id my-run   # archived under bench_results/runs/
 uv run --directory fixtures bench-large --skip-mean   # convert timing only
 uv run --directory fixtures bench-large --ops transforms   # + transform_zscore, …, transform_softmax
+uv run --directory fixtures bench-large h5 --tier large --ops windows --tet-device cpu
+uv run --directory fixtures bench-large --tier large --ops mean,sum
+uv run --directory fixtures bench-large --tier all --ops all
 uv run --directory fixtures bench-large --ops all h5     # every registered op, HDF5 only
 # or: uv run --directory fixtures tet-fixtures bench --skip-ops
 # same device flags via uv: bench-large --tet-device cpu
