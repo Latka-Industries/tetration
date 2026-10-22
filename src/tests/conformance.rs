@@ -304,11 +304,11 @@ fn conformance_accept_query_files_exist() {
 }
 
 #[test]
-fn conformance_spec_milestone_is_0_6_3() {
+fn conformance_spec_milestone_is_0_7_0() {
     let path = repo_root().join("conformance/manifest.v1.json");
     let v: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(
         v.get("spec_milestone").and_then(|x| x.as_str()),
-        Some("0.6.3")
+        Some("0.7.0")
     );
 }

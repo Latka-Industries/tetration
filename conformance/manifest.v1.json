@@ -1,12 +1,25 @@
 {
   "pack_version": 1,
-  "spec_milestone": "0.6.3",
-  "description": "Layout v1 verify + closed query wire answers (THI-606 window pad/step/align/min_count + dtype on THI-596 pack)",
+  "spec_milestone": "0.7.0",
+  "description": "Layout v1 + history_version=2 embedded ZONE/INDEX (THI-627) on 0.6.3 query pack",
   "accept": [
     {
       "id": "sample-verify",
       "tet": "fixtures/small/tet/sample.tet",
       "verify": "ok"
+    },
+    {
+      "id": "embedded-zone-verify",
+      "tet": "fixtures/small/tet/embedded_zone.tet",
+      "verify": "ok"
+    },
+    {
+      "id": "embedded-zone-filter-sum",
+      "tet": "fixtures/small/tet/embedded_zone.tet",
+      "query": "conformance/accept/queries/filter_gt5_sum_a.json",
+      "expect": {
+        "execution.operation_sum": 21.0
+      }
     },
     {
       "id": "sample-mean",
@@ -156,7 +169,10 @@
       "query": "conformance/accept/queries/group_by_labels_col_sum.json",
       "expect": {
         "execution.group_count": 2,
-        "execution.operation_reduced_sum": [12.0, 9.0]
+        "execution.operation_reduced_sum": [
+          12.0,
+          9.0
+        ]
       }
     },
     {
@@ -165,7 +181,10 @@
       "query": "conformance/accept/queries/window_rolling_step2_sum_col.json",
       "expect": {
         "execution.window_count": 1,
-        "execution.operation_reduced_sum": [3.0, 9.0]
+        "execution.operation_reduced_sum": [
+          3.0,
+          9.0
+        ]
       }
     },
     {
@@ -174,7 +193,12 @@
       "query": "conformance/accept/queries/window_bins_pad0_sum_col.json",
       "expect": {
         "execution.window_count": 2,
-        "execution.operation_reduced_sum": [3.0, 3.0, 9.0, 6.0]
+        "execution.operation_reduced_sum": [
+          3.0,
+          3.0,
+          9.0,
+          6.0
+        ]
       }
     },
     {
@@ -183,7 +207,12 @@
       "query": "conformance/accept/queries/window_bins_align_end_sum_col.json",
       "expect": {
         "execution.window_count": 2,
-        "execution.operation_reduced_sum": [1.0, 5.0, 4.0, 11.0]
+        "execution.operation_reduced_sum": [
+          1.0,
+          5.0,
+          4.0,
+          11.0
+        ]
       }
     },
     {
@@ -192,7 +221,12 @@
       "query": "conformance/accept/queries/window_bins_sum_col_a.json",
       "expect": {
         "execution.window_count": 2,
-        "execution.operation_reduced_sum": [3.0, 3.0, 9.0, 6.0]
+        "execution.operation_reduced_sum": [
+          3.0,
+          3.0,
+          9.0,
+          6.0
+        ]
       }
     }
   ],

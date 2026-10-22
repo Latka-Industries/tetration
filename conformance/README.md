@@ -1,6 +1,6 @@
-# Tetration conformance pack (0.6.0)
+# Tetration conformance pack (0.7.0)
 
-**Status:** normative pack format (THI-592; grown in THI-605 / THI-595).  
+**Status:** normative pack format (THI-592; grown through THI-627).  
 **SPEC:** [`SPEC/README.md`](../SPEC/README.md) · [`SPEC/COMPATIBILITY.md`](../SPEC/COMPATIBILITY.md).
 
 This directory is the **portable** description of “compatible”: accept fixtures with expected query answers, reject fixtures that must fail verify or query parse. The reference Rust reader gates CI by running [`src/tests/conformance.rs`](../src/tests/conformance.rs) against [`manifest.v1.json`](manifest.v1.json).
@@ -54,7 +54,7 @@ Supported `expect` keys today (reference runner):
 
 Float compares use absolute tolerance `1e-5` unless `expect_tol` is set on the case.
 
-**0.6.3 accept surface (summary):** 0.6.2 cases plus window `step` / `pad` / `align` accept fixtures and a u8 windowed sum. Reject pack covers unknown `pad` / `align`, `step` on bins, and prior window/align/group_by rejects.
+**0.7.0 accept surface (summary):** 0.6.3 cases plus `embedded_zone.tet` (ZONE/INDEX in the sealed image via `history_version = 2`) — verify + filtered sum without package sidecars. Reject pack unchanged from 0.6.3 for query wire.
 
 ### `reject_verify[]`
 

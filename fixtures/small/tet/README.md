@@ -5,6 +5,7 @@ Tracked binaries for **manual** CLI checks and `src/tests/small_tet_fixtures.rs`
 | File                 | Role                                                                     |
 | -------------------- | ------------------------------------------------------------------------ |
 | `sample.tet`         | Multichunk `f32` `[2,3]` / tiles `[2,2]` (values 1..6)                   |
+| `embedded_zone.tet`  | 1-D `f32` `[4]` / chunks `[2]` with embedded ZONE/INDEX (`history_version=2`, 0.7.0) |
 | `large.tet`          | `f32` `[34,64]` / `[4,4]` → **144** chunks (quick verify samples 128)    |
 | `plan.tet`           | Same as `sample` + **invalid** history footer (`tet repair` plan target) |
 | `multichunk_u8.tet`  | Multichunk `u8`, values 1..6                                             |
