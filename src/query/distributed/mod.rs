@@ -4,7 +4,8 @@
 //! generation** — never re-resolve `CURRENT` mid-query. Tier-C ops and transforms are
 //! refused; see [`operation_is_shard_mergeable`].
 //!
-//! Phase 14 / THI-576 + THI-575.
+//! Product boundary: [`docs/distributed_boundary.md`](../../../docs/distributed_boundary.md).
+//! Phase 14 / THI-576 + THI-575; 0.7.1 lock THI-615 / THI-616.
 
 mod harness;
 mod job;
