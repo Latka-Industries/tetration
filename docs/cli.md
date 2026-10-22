@@ -10,6 +10,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
 | [`tet semantics`](#tet-semantics) `scaffold\|set`  | —      | Declare science/media attrs / scaffold caller policy         |
+| [`tet worker`](#tet-worker) `[--job PATH]`         | —      | Distributed harness: `WorkerJobV1` JSON → `WorkerPartialV1` JSON |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet` (auto-embeds ZONE/INDEX) |
 | [`tet index`](#tet-index) `<path.tet>`             | —      | (Re)embed or `--clear` ZONE/INDEX footer spills (0.7.0)     |
 | [`tet export`](#tet-export) `<in.tet> <out>`       | —      | `.tet` → Zarr v3 / HDF5 / NetCDF (from output path)         |
@@ -123,6 +124,16 @@ Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spe
 | `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
 
 Worked recording fixture: `fixtures/small/tet/recording.tet` (`frame_rate`, `time_axis`, provenance).
+
+## `tet worker`
+
+Localhost distributed harness (THI-618). Reads one `WorkerJobV1` JSON (`--job PATH`, or stdin), opens the pin path, folds the shard plan, writes `WorkerPartialV1` JSON to stdout. Not a cluster scheduler — see [`distributed_boundary.md`](distributed_boundary.md) and [`query::distributed`](../src/query/distributed/README.md).
+
+| Flag | Effect |
+| ---- | ------ |
+| `--job PATH` | Job JSON file (`-` or omit = stdin) |
+
+Smoke: `mise distributed:smoke` (in-process + N-process integration test).
 
 ## `tet convert`
 

@@ -274,6 +274,15 @@ pub enum Commands {
     Qhist(QhistArgs),
     /// Declared science/media attrs and caller-policy stubs (not a plugin host).
     Semantics(SemanticsArgs),
+    /// Run one distributed worker job (`WorkerJobV1` JSON → `WorkerPartialV1` JSON).
+    ///
+    /// Localhost harness for the thin distributed protocol (0.7.1). Reads job JSON from
+    /// `--job PATH` or stdin; writes the partial to stdout. Not a cluster scheduler.
+    Worker {
+        /// Path to `WorkerJobV1` JSON (`-` or omit = stdin).
+        #[arg(long, value_name = "PATH")]
+        job: Option<PathBuf>,
+    },
 }
 
 /// `tet semantics` — declare footer attrs / scaffold `tet-semantics.toml|json`.

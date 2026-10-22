@@ -25,6 +25,8 @@ mod semantics;
 mod util;
 #[path = "tet/verify.rs"]
 mod verify;
+#[path = "tet/worker.rs"]
+mod worker;
 
 use std::process::ExitCode;
 
@@ -45,10 +47,12 @@ use repair::{RepairRunOpts, run_repair};
 use semantics::run_semantics;
 use util::{cli_error, query_input_format, read_query_payload, resolve_stdout};
 use verify::{VerifyOutputMode, VerifyRunOpts, run_verify};
+use worker::run_worker;
 
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Commands::Semantics(args) => run_semantics(args.cmd),
+        Commands::Worker { job } => run_worker(job),
         cmd @ (Commands::Info { .. }
         | Commands::Query { .. }
         | Commands::Qhist(_)
@@ -153,7 +157,8 @@ fn run_read(cmd: Commands) -> Result<(), String> {
         | Commands::Compact { .. }
         | Commands::Pack { .. }
         | Commands::Gc { .. }
-        | Commands::Semantics(_) => unreachable!("read commands only"),
+        | Commands::Semantics(_)
+        | Commands::Worker { .. } => unreachable!("read commands only"),
     }
 }
 
@@ -271,7 +276,8 @@ fn run_write(cmd: Commands) -> Result<(), String> {
         | Commands::Qhist(_)
         | Commands::Verify { .. }
         | Commands::Repair { .. }
-        | Commands::Semantics(_) => unreachable!("write commands only"),
+        | Commands::Semantics(_)
+        | Commands::Worker { .. } => unreachable!("write commands only"),
     }
 }
 

@@ -21,6 +21,10 @@ run = "cargo run --example gen_small_tet_fixtures"
 description = "Run SPEC conformance pack (THI-592)"
 run = "cargo test --lib conformance"
 
+[tasks."distributed:smoke"]
+description = "In-process + localhost N-process distributed fold harness (THI-618)"
+run = "cargo test --lib distributed && cargo test --test distributed_multiprocess"
+
 [tasks."smoke:py"]
 description = "Python stdlib SPEC smoke reader (THI-589)"
 run = "python3 conformance/smoke/read_catalog_chunk.py fixtures/small/tet/sample.tet"

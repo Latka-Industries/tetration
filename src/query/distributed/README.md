@@ -13,6 +13,8 @@ shards. Not a cluster scheduler.
 | `WorkerJobV1` / `WorkerPinV1` / `WorkerPartialV1` | JSON job + pin + partial (protocol `1`) |
 | `FoldPartialState` + `merge_fold_partials` / `finish_fold_partial` | Associative tier-A/B merge |
 | `execute_sharded_scalar_fold_local` | In-process N-shard harness (no RPC) |
+| `execute_worker_job_v1` | Run one job against a local pin (library + `tet worker`) |
+| `execute_sharded_scalar_fold_multiprocess` | Spawn N `tet worker` processes; merge partials |
 | `refuse_distributed_spill` | Spill/sidecar/switch write targets → clear error |
 
 ## Pin rule
@@ -49,7 +51,16 @@ let preview = execute_sharded_scalar_fold_local(
 ```
 
 Tests in `src/tests/distributed.rs` assert N-shard results match monolithic execute for
-sum / mean / var / min / arg_min.
+sum / mean / var / min / arg_min. Integration test `tests/distributed_multiprocess.rs`
+spawns real `tet worker` processes (`mise distributed:smoke`).
+
+## CLI
+
+```bash
+# Job JSON on stdin or --job PATH; WorkerPartialV1 JSON on stdout
+tet worker --job shard0.json
+tet worker < shard0.json
+```
 
 ## Spill policy (locked 0.7.1)
 
@@ -59,7 +70,6 @@ sum / mean / var / min / arg_min.
 ## Non-goals (through 0.7.3 unless reopened)
 
 - Network RPC / worker daemon product
-- Localhost multi-process harness (follows this boundary lock)
 - Distributed materialize, transform, median/quantile/histogram (unless a later RFC opens them)
 - Worker-local spill files or a shared distributed filesystem
 - Advancing `CURRENT` while a query is open
