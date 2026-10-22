@@ -7,7 +7,7 @@ use super::fields::{
     parse_align, parse_execution, parse_group_by, parse_selection, parse_spill, parse_u32_field,
     parse_window, parse_write,
 };
-use super::filter::parse_filter;
+use super::filter::{parse_filter, parse_label_filter};
 use super::keys::{OP_KEYS, is_allowed_key, is_flat_analytic_key};
 use super::operation::parse_operation;
 use super::pipeline::{lower_pipeline, parse_pipeline};
@@ -74,6 +74,7 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
             dataset,
             selection: lowered.selection,
             filter: lowered.filter,
+            label_filter: None,
             group_by: lowered.group_by,
             window: lowered.window,
             align: None,
@@ -93,6 +94,11 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
     let filter = match obj.get("filter") {
         None => None,
         Some(v) => Some(parse_filter(v)?),
+    };
+
+    let label_filter = match obj.get("label_filter") {
+        None => None,
+        Some(v) => Some(parse_label_filter(v)?),
     };
 
     let group_by = match obj.get("group_by") {
@@ -137,6 +143,7 @@ pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
         dataset,
         selection,
         filter,
+        label_filter,
         group_by,
         window,
         align,

@@ -89,6 +89,9 @@ fn plan_quiet_line(dataset: &str, plan: &ReadPlan) -> String {
     if plan.cell_filter.is_some() {
         parts.push("cell_filter=applied".to_string());
     }
+    if plan.label_eq.is_some() {
+        parts.push("label_filter=applied".to_string());
+    }
     parts.join(" ")
 }
 

@@ -14,7 +14,7 @@ use crate::query::{
     dispatch,
     fold::{fold_policy, parallel, reduction, shared},
     materialize::int::IntVisit,
-    types::{ReadPlan, TetError, WindowPad, WindowSpec, fold_keeps_cell},
+    types::{ReadPlan, TetError, WindowPad, WindowSpec, fold_keeps_element},
 };
 use crate::utils::dtype::ElementDtype;
 
@@ -292,7 +292,7 @@ fn scan_window_cells(
         let chunk_bytes = visit.visit_chunk(ctx.mmap, ctx.plan, c, |li, v| {
             saw_any = true;
             preview.store(li, v);
-            if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+            if !fold_keeps_element(ctx.plan, li, v) {
                 return Ok(());
             }
             if rank1_full {

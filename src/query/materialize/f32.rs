@@ -175,7 +175,7 @@ pub(crate) fn fold_read_plan_scalar_operation(
                     .ok_or_else(|| TetError::Validation("total bytes read overflow".into()))?;
             }
             fold::shared::validate_fold_preview(
-                !acc.is_empty() || plan.cell_filter.is_some(),
+                !acc.is_empty() || plan.cell_filter.is_some() || plan.label_eq.is_some(),
                 &preview,
                 preview_cap,
             )?;
@@ -193,7 +193,7 @@ pub(crate) fn fold_read_plan_scalar_operation(
                     .ok_or_else(|| TetError::Validation("total bytes read overflow".into()))?;
             }
             fold::shared::validate_fold_preview(
-                !acc.is_empty() || plan.cell_filter.is_some(),
+                !acc.is_empty() || plan.cell_filter.is_some() || plan.label_eq.is_some(),
                 &preview,
                 preview_cap,
             )?;

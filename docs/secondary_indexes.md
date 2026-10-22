@@ -43,7 +43,7 @@ Staging writers do not create or update `INDEX.json`. Compact/publish recomputes
 | `secondary_indexes` | Absent, `"omitted"`, or `"present"`. Any other string is unsupported. |
 | `secondary_indexes_sha256` | Lowercase hex SHA-256 of the `INDEX.json` bytes. Required when the value is `"present"`. |
 
-Constants for the impl children: file name `INDEX.json`; tokens `present` and `omitted`; document `version` **1**; kind strings `value_postings` (0.4.5) and `sorted_axis_range` (0.6.5); cardinality cap **64** (`VALUE_POSTINGS_MAX_CARDINALITY`) for value postings only.
+Constants for the impl children: file name `INDEX.json`; tokens `present` and `omitted`; document `version` **1**; kind strings `value_postings` (0.4.5), `sorted_axis_range` (0.6.5), and `coord_label_postings` (0.6.6); cardinality cap **64** (`VALUE_POSTINGS_MAX_CARDINALITY`) for value postings only.
 
 Discovery order for a package or store pin:
 
@@ -52,7 +52,7 @@ Discovery order for a package or store pin:
 3. `"present"` → read the sibling file or the store key above.
 4. Anything else, or a failed read → do not use the index. Fall back. Verify reports the manifest problem separately.
 5. Use the blob only when all of these hold: JSON parses, `version` is 1, `generation` is the pin, `packed_sha256` equals the sealed image, and the bytes match `secondary_indexes_sha256`. Any miss → fall back. A bad index must not drop chunks.
-6. Apply known kinds for the dataset being planned (`value_postings`, `sorted_axis_range`). No usable entry for that predicate class → fall back for that class. Unknown `kind` values are skipped.
+6. Apply known kinds for the dataset being planned (`value_postings`, `sorted_axis_range`, `coord_label_postings`). No usable entry for that predicate class → fall back for that class. Unknown `kind` values are skipped.
 
 The manifest token is the existence check. “A file happens to be there” is not.
 
@@ -131,7 +131,7 @@ Each entry lists **segments**: one per distinct chunk-grid coordinate along that
 | `lo_le` / `hi_le` | Lowercase hex of the `f64` little-endian min/max coordinate covering that chunk’s global indices on the axis (inclusive) |
 | `chunks` | Rank-length chunk-grid coordinates for every chunk that sits on that axis slab (same shape as zone `chunk_index`) |
 
-Sort segments by `lo_le` bit pattern when ascending, or by descending coordinate order when `ascending` is false. Sort `chunks` lexicographically. Sort all `indexes` by `dataset_id`, then kind (`value_postings` before `sorted_axis_range`), then `axis`, so two seals of the same image hash the same.
+Sort segments by `lo_le` bit pattern when ascending, or by descending coordinate order when `ascending` is false. Sort `chunks` lexicographically. Sort all `indexes` by `dataset_id`, then kind (`value_postings` before `sorted_axis_range` before `coord_label_postings`), then `axis`, so two seals of the same image hash the same.
 
 ### Example segment entry
 
@@ -165,6 +165,58 @@ Wire stays closed: `selection` `start` / `stop` / `start_label` / `stop_label` a
 
 Manifest / hash / version rules are unchanged from the table above. Deep recompute compares the full `indexes` list (every known kind), not only `value_postings`.
 
+## Coordinate-label postings (0.6.6 / THI-614)
+
+Same sidecar and manifest token. New `kind`: **`coord_label_postings`**.
+
+Footer `coords` are string labels (categorical keys such as station names, or any non-range equality key). When an axis has coords (same lookup as sorted-axis: `dim_names`, then `"0"`/`"1"`/…, then unique extent), seal emits one entry for that `(dataset_id, axis)` listing every distinct label and the chunks that contain at least one position with that label. Empty or missing coords → omit that axis. Axis label count is already capped at 64 (`coord_labels_per_axis`), so the entry always lists the full distinct set (no partial omit).
+
+This is **equality**, not a contiguous slice: pandas `df[df["station"] == "nyc"]`. It pairs with label `group_by` (0.6.2) as the categorical complement to `sorted_axis_range` (numeric range).
+
+### Example entry
+
+```json
+{
+  "kind": "coord_label_postings",
+  "dataset_id": 0,
+  "axis": 0,
+  "postings": [
+    { "label": "bos", "chunks": [[0], [2]] },
+    { "label": "nyc", "chunks": [[0], [1], [2]] }
+  ]
+}
+```
+
+Sort postings by `label`, chunks lexicographically. Kind order in `indexes`: `value_postings` (0), `sorted_axis_range` (1), `coord_label_postings` (2).
+
+### Query wire: `label_filter`
+
+Closed top-level key (cell `filter` stays cell-value only):
+
+```json
+{
+  "dataset": "temperature",
+  "label_filter": { "axis": "station", "eq": "nyc" },
+  "filter": { "gt": 0 },
+  "sum": []
+}
+```
+
+- `axis`: dimension name or decimal index (same resolver as elsewhere).
+- `eq`: exact string match on footer labels for that axis.
+- Closed keys only (`axis` / `eq`). AND with cell `filter` and geometric `selection`. OR is out of this cut.
+
+### Planner
+
+1. Geometric selection (and zone maps / value postings / sorted-axis) still produce candidates.
+2. When `label_filter` is set and a usable `coord_label_postings` entry exists for that dataset and axis, keep only chunks listed under `eq`. Drops count on `index_filter_skipped_chunks`.
+3. Missing entry, unknown label, unknown kind, or unusable blob → do not apply posting skip; still match positions from footer labels (correct answers, no index skip).
+4. Inside kept chunks, only cells whose global index on that axis has footer label `== eq` participate (AND with cell filter). Folds ignore non-matches; materialize/transform follow cell-filter dense rules (NaN / fill).
+
+### Verify
+
+Deep recompute includes `coord_label_postings` with the other known kinds. Manifest / hash / version rules unchanged.
+
 ## Verify (THI-571)
 
 Absence is advisory. A blob the manifest claims is required.
@@ -182,4 +234,4 @@ Staging is not checked. Seal is the only writer.
 
 ## Out of scope (still)
 
-Mandatory indexes. Updating an index without a new generation. Coordinate-label postings (`label → chunk` equality kind). Cell-value sorted-range indexes. A public index-builder API. Bytes inside `packed.tet`. Changing what `zone_filter_skipped_chunks` means.
+Mandatory indexes. Updating an index without a new generation. Cell-value sorted-range indexes. Label-filter OR / multi-label `in` lists. A public index-builder API. Bytes inside `packed.tet`. Changing what `zone_filter_skipped_chunks` means.

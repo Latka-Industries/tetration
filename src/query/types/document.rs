@@ -343,6 +343,18 @@ pub struct ValueFilter {
     pub predicates: Vec<ValuePredicate>,
 }
 
+/// Footer coordinate-label equality (`label_filter` wire key, 0.6.6 / THI-614).
+///
+/// Pandas-style `axis_labels == eq` (all matching positions, not a contiguous slice).
+/// AND-composed with cell [`ValueFilter`]. Closed keys: `axis`, `eq`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelFilterSpec {
+    /// Dimension name or decimal index (resolved to a decimal index at plan time).
+    pub axis: String,
+    /// Exact footer label string to match.
+    pub eq: String,
+}
+
 /// Bins or rolling window along one named axis (`window` wire key).
 ///
 /// A window is a reduction over a span of one axis — not a new dataset, join, or SQL `OVER`.
@@ -617,6 +629,8 @@ pub struct QueryDocument {
     pub selection: Option<Vec<AxisSlice>>,
     /// Optional cell-value filter (`filter` wire key); see [`ValueFilter`].
     pub filter: Option<ValueFilter>,
+    /// Optional footer label equality (`label_filter` wire key); see [`LabelFilterSpec`].
+    pub label_filter: Option<LabelFilterSpec>,
     /// Dimensions that identify each group (`group_by` wire key); see [`GroupBySpec`].
     ///
     /// Array form partitions by axis index. Object form `{ "by": "labels", "axes": [...] }`

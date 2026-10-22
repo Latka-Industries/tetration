@@ -20,7 +20,7 @@ use crate::query::decode::{chunk_decode, indexing};
 use crate::query::fold::window_geometry::{self, WindowAxisLayout};
 use crate::query::fold::{reduction, shared};
 use crate::query::materialize::int::IntVisit;
-use crate::query::types::{ReadPlan, TetError, fold_keeps_cell};
+use crate::query::types::{ReadPlan, TetError, fold_keeps_element};
 use crate::utils::dtype::ElementDtype;
 
 /// Soft cap on per-worker accumulator replicas (~64 MiB) so huge `window_count`
@@ -240,7 +240,7 @@ fn parallel_window_value(
                     saw_any = true;
                     ctx.visit
                         .write_preview(ctx.preview_addr, ctx.preview_len, li, v);
-                    if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                    if !fold_keeps_element(ctx.plan, li, v) {
                         return Ok(());
                     }
                     scatter_value(ctx, &mut cells, &mut real_counts, li, v)
@@ -291,7 +291,7 @@ fn parallel_window_arg(
                     saw_any = true;
                     ctx.visit
                         .write_preview(ctx.preview_addr, ctx.preview_len, li, v);
-                    if !fold_keeps_cell(ctx.plan.cell_filter, v) {
+                    if !fold_keeps_element(ctx.plan, li, v) {
                         return Ok(());
                     }
                     scatter_arg(ctx, &mut cells, &mut real_counts, li, v)

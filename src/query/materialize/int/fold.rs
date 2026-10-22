@@ -179,7 +179,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {
@@ -232,7 +232,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {
@@ -285,7 +285,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {
@@ -338,7 +338,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {
@@ -391,7 +391,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {
@@ -444,7 +444,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {
@@ -497,7 +497,7 @@ macro_rules! int_scalar_fold_run {
         for i in crate::query::fold::fold_policy::chunk_indices_for_fold($plan, $sequential_io) {
             let c = &$plan.chunks[i];
             let chunk_bytes = $visit.visit_chunk_as_f64($mmap, $plan, c, |li, v| {
-                if crate::query::types::fold_keeps_cell($plan.cell_filter, v) {
+                if crate::query::types::fold_keeps_element($plan, li, v) {
                     $on_value(&mut $acc, li, v, $kind);
                 }
                 if li < $preview_cap {

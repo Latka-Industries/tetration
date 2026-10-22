@@ -52,6 +52,9 @@ pub(crate) fn resolve_query_document_axes(
     if let Some(window) = doc.window.as_mut() {
         window.axis = resolve_one_axis_label(&window.axis, dim_names, ndim)?;
     }
+    if let Some(label_filter) = doc.label_filter.as_mut() {
+        label_filter.axis = resolve_one_axis_label(&label_filter.axis, dim_names, ndim)?;
+    }
     let Some(op) = doc.operation.as_mut() else {
         return Ok(());
     };

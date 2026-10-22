@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "generation": 1,
+  "packed_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "indexes": [
+    {
+      "kind": "coord_label_postings",
+      "dataset_id": 0,
+      "axis": 0,
+      "postings": [
+        {"label": "nyc", "chunks": [[0], [1]]}
+      ]
+    }
+  ]
+}

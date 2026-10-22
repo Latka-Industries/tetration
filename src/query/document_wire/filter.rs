@@ -1,9 +1,9 @@
-//! Parse `filter` predicates from the flat wire format.
+//! Parse `filter` / `label_filter` predicates from the flat wire format.
 
 use serde_json::Value;
 
 use super::super::document::QueryLimits;
-use super::super::types::{TetError, ValueCompareOp, ValueFilter, ValuePredicate};
+use super::super::types::{LabelFilterSpec, TetError, ValueCompareOp, ValueFilter, ValuePredicate};
 use super::keys::{FILTER_COMPARE_KEYS, is_filter_key};
 
 pub(super) fn parse_filter(v: &Value) -> Result<ValueFilter, TetError> {
@@ -84,4 +84,57 @@ fn parse_filter_true_flag(key: &str, v: &Value) -> Result<(), TetError> {
             "`filter.{key}` must be a boolean"
         ))),
     }
+}
+
+/// Parse closed `label_filter: { "axis": …, "eq": … }`.
+pub(super) fn parse_label_filter(v: &Value) -> Result<LabelFilterSpec, TetError> {
+    let obj = v
+        .as_object()
+        .ok_or_else(|| TetError::Validation("`label_filter` must be a JSON object".into()))?;
+    for key in obj.keys() {
+        if !matches!(key.as_str(), "axis" | "eq") {
+            return Err(TetError::Validation(format!(
+                "unknown field `label_filter.{key}` (expected axis or eq)"
+            )));
+        }
+    }
+    let axis = match obj.get("axis") {
+        None => {
+            return Err(TetError::Validation(
+                "`label_filter.axis` is required (dimension name or index)".into(),
+            ));
+        }
+        Some(v) => super::operation::parse_axis_spec_item(v).map_err(|e| match e {
+            TetError::Validation(msg) => {
+                TetError::Validation(format!("`label_filter.axis`: {msg}"))
+            }
+            other => other,
+        })?,
+    };
+    let eq = match obj.get("eq") {
+        None => {
+            return Err(TetError::Validation(
+                "`label_filter.eq` is required (footer label string)".into(),
+            ));
+        }
+        Some(v) => {
+            let s = v
+                .as_str()
+                .ok_or_else(|| TetError::Validation("`label_filter.eq` must be a string".into()))?;
+            if s.is_empty() {
+                return Err(TetError::Validation(
+                    "`label_filter.eq` must be a non-empty string".into(),
+                ));
+            }
+            if s.len() > QueryLimits::DEFAULT.max_dataset_name_len {
+                return Err(TetError::Validation(format!(
+                    "`label_filter.eq` exceeds maximum length ({} > {})",
+                    s.len(),
+                    QueryLimits::DEFAULT.max_dataset_name_len
+                )));
+            }
+            s.to_owned()
+        }
+    };
+    Ok(LabelFilterSpec { axis, eq })
 }

@@ -444,3 +444,131 @@ fn unsorted_coords_omit_sorted_axis_kind() {
         "unsorted coords must not emit sorted_axis_range"
     );
 }
+
+fn publish_f32_with_station_labels(
+    pkg: &TetPackage,
+    generation: u64,
+    vals: &[f32],
+    labels: &[&str],
+) {
+    assert_eq!(vals.len(), labels.len());
+    let mut ds =
+        TetDatasetWrite::f32_row_major("a", &[vals.len() as u64], &[2], f32_le(vals)).unwrap();
+    ds.dim_names = Some(vec!["station".to_owned()]);
+    let mut coords = BTreeMap::new();
+    coords.insert(
+        "station".to_owned(),
+        CoordAxisV1 {
+            labels: labels.iter().map(|s| (*s).to_owned()).collect(),
+        },
+    );
+    ds.coords = Some(coords);
+    let mut w = TetShardWriter::create(pkg, "s", "only").unwrap();
+    w.push_dataset(ds).unwrap();
+    w.seal().unwrap();
+    crate::catalog::publish_parts(pkg, generation, &["only".to_owned()]).unwrap();
+}
+
+#[test]
+fn publish_writes_coord_label_postings() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("labels.tet.d")).unwrap();
+    // nyc,bos,nyc,chi → chunks 0:[nyc,bos] 1:[nyc,chi]
+    publish_f32_with_station_labels(
+        &pkg,
+        1,
+        &[10.0, 11.0, 12.0, 13.0],
+        &["nyc", "bos", "nyc", "chi"],
+    );
+
+    let doc = read_secondary_index_file(&pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
+    let entry = doc
+        .indexes
+        .iter()
+        .find(|e| matches!(e, SecondaryIndexEntry::CoordLabelPostings { .. }))
+        .expect("coord_label_postings entry");
+    let SecondaryIndexEntry::CoordLabelPostings {
+        dataset_id,
+        axis,
+        postings,
+    } = entry
+    else {
+        unreachable!();
+    };
+    assert_eq!(*dataset_id, 0);
+    assert_eq!(*axis, 0);
+    assert_eq!(postings.len(), 3);
+    assert_eq!(postings[0].label, "bos");
+    assert_eq!(postings[0].chunks, vec![vec![0]]);
+    assert_eq!(postings[1].label, "chi");
+    assert_eq!(postings[1].chunks, vec![vec![1]]);
+    assert_eq!(postings[2].label, "nyc");
+    assert_eq!(postings[2].chunks, vec![vec![0], vec![1]]);
+
+    let report =
+        verify_tet_package_with_options(pkg.root(), VerifyOptions { deep_decode: true }).unwrap();
+    assert!(report.ok, "{:?}", report.findings);
+}
+
+#[test]
+fn label_filter_matches_with_or_without_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("label_eq.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    // 6 values, chunk 2 → 3 chunks; labels nyc,bos,nyc,chi,bos,nyc
+    // nyc at 0,2,5 → values 10+12+15 = 37; all 3 chunks
+    publish_f32_with_station_labels(
+        &pkg,
+        1,
+        &[10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+        &["nyc", "bos", "nyc", "chi", "bos", "nyc"],
+    );
+    let packed = pkg.packed_tet_path(1);
+    let bytes = fs::read(&packed).unwrap();
+    let query = r#"{"dataset":"a","label_filter":{"axis":"station","eq":"nyc"},"sum":[]}"#;
+
+    let hit = execute_sum(&packed, &bytes, query);
+    let plan = hit.read_plan.expect("plan");
+    assert_eq!(plan.chunk_count, 3);
+    assert_eq!(hit.execution.expect("execution").operation_sum, Some(37.0));
+
+    // bos only in chunks 0 and 2 → skip chunk 1
+    let bos = execute_sum(
+        &packed,
+        &bytes,
+        r#"{"dataset":"a","label_filter":{"axis":"station","eq":"bos"},"sum":[]}"#,
+    );
+    let bos_plan = bos.read_plan.expect("plan");
+    assert_eq!(bos_plan.chunk_count, 2);
+    assert_eq!(bos_plan.index_filter_skipped_chunks, 1);
+    assert_eq!(bos.execution.expect("execution").operation_sum, Some(25.0));
+
+    fs::remove_file(pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
+    let fallback = execute_sum(&packed, &bytes, query);
+    let fallback_plan = fallback.read_plan.expect("plan");
+    assert_eq!(fallback_plan.index_filter_skipped_chunks, 0);
+    assert_eq!(fallback_plan.chunk_count, 3);
+    assert_eq!(
+        fallback.execution.expect("execution").operation_sum,
+        Some(37.0)
+    );
+}
+
+#[test]
+fn label_filter_and_cell_filter() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("label_and.tet.d");
+    let pkg = TetPackage::create(&root).unwrap();
+    publish_f32_with_station_labels(
+        &pkg,
+        1,
+        &[10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+        &["nyc", "bos", "nyc", "chi", "bos", "nyc"],
+    );
+    let packed = pkg.packed_tet_path(1);
+    let bytes = fs::read(&packed).unwrap();
+    // nyc positions 10,12,15; gt 11 → 12+15 = 27
+    let query = r#"{"dataset":"a","label_filter":{"axis":"station","eq":"nyc"},"filter":{"gt":11},"sum":[]}"#;
+    let hit = execute_sum(&packed, &bytes, query);
+    assert_eq!(hit.execution.expect("execution").operation_sum, Some(27.0));
+}

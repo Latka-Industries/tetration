@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-21
+
+### Added
+
+- Optional `coord_label_postings` kind in `INDEX.json` + closed `label_filter: { axis, eq }` wire: pandas-style footer label equality with chunk allow-list skip; AND with cell `filter`; missing index falls back to footer scan (THI-614). See [`docs/secondary_indexes.md`](docs/secondary_indexes.md).
+- `mise bench:index*` label-eq present/missing case on the sorted-axis fixture; fuzz seeds for `coord_label_postings` and `label_filter`.
+
+### Notes
+
+- Semver patch on the 0.6 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.6.3**). PyPI **tet-py** pin after crates.io shows 0.6.6.
+
 ## [0.6.5] - 2026-10-21
 
 ### Added

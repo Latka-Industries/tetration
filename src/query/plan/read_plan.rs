@@ -5,10 +5,12 @@ use crate::catalog::{
     GenerationZoneMaps, MAX_NDIM, TetFileSummaryV1,
 };
 use crate::query::plan::index_pushdown::{
-    eq_chunk_allowlist, intersect_allowlists, sorted_axis_chunk_allowlist,
+    eq_chunk_allowlist, intersect_allowlists, label_eq_chunk_allowlist, sorted_axis_chunk_allowlist,
 };
 use crate::query::plan::zone_pushdown::zone_may_match_filter;
-use crate::query::types::{CellPredicate, PlannedChunkIo, ReadPlan, TetError, ValueFilter};
+use crate::query::types::{
+    CellPredicate, LabelEqPred, LabelFilterSpec, PlannedChunkIo, ReadPlan, TetError, ValueFilter,
+};
 
 pub(crate) struct ReadPlanGeometry<'a> {
     dataset_shape: &'a [u64],
@@ -41,11 +43,13 @@ pub(crate) struct ZonePushdown<'a> {
     pub zones: Option<&'a GenerationZoneMaps>,
     pub dtype: u32,
     pub filter: Option<&'a ValueFilter>,
+    /// Footer label equality (`label_filter`), axis already resolved to a decimal index.
+    pub label_filter: Option<&'a LabelFilterSpec>,
     /// Dataset fill (`_FillValue` / `missing_value` / `fill_value`) for cell-null tests.
     pub fill: Option<f64>,
     /// Sealed secondary index, when the open generation has a usable one.
     pub index: Option<&'a GenerationSecondaryIndex>,
-    /// Footer metadata for sorted-axis coord spans (labels → numeric range).
+    /// Footer metadata for sorted-axis / coord-label lookups.
     pub dataset_meta: Option<&'a DatasetMetadataV1>,
 }
 
@@ -158,7 +162,17 @@ pub(crate) fn build_read_plan(
             )
         })
     });
-    let allowlist = intersect_allowlists(eq_allow, sorted_allow);
+    let label_eq_pred = pushdown
+        .label_filter
+        .map(|lf| build_label_eq_pred(lf, pushdown.dataset_meta, geom.dataset_shape))
+        .transpose()?;
+    let label_allow = pushdown.label_filter.and_then(|lf| {
+        let axis: u32 = lf.axis.parse().ok()?;
+        pushdown
+            .index
+            .and_then(|index| label_eq_chunk_allowlist(index, dataset_idx as u64, axis, &lf.eq))
+    });
+    let allowlist = intersect_allowlists([eq_allow, sorted_allow, label_allow]);
     let mut chunks = Vec::with_capacity(coords.len());
     let mut total_stored: u64 = 0;
     let mut zone_filter_skipped_chunks = 0usize;
@@ -208,7 +222,75 @@ pub(crate) fn build_read_plan(
         cell_filter: pushdown
             .filter
             .map(|filter| CellPredicate::from_filter(filter, pushdown.fill)),
+        label_eq: label_eq_pred,
         label_group_remap: None,
         dataset_fill: pushdown.fill,
     })
+}
+
+fn build_label_eq_pred(
+    label_filter: &LabelFilterSpec,
+    meta: Option<&DatasetMetadataV1>,
+    dataset_shape: &[u64],
+) -> Result<LabelEqPred, TetError> {
+    let axis: usize = label_filter.axis.parse().map_err(|_| {
+        TetError::Validation(format!(
+            "invalid label_filter axis {:?} after name resolution",
+            label_filter.axis
+        ))
+    })?;
+    if axis >= dataset_shape.len() {
+        return Err(TetError::Validation(format!(
+            "label_filter axis {axis} out of range for rank {}",
+            dataset_shape.len()
+        )));
+    }
+    let meta = meta.ok_or_else(|| {
+        TetError::Validation(
+            "`label_filter` requires footer coordinate labels for this dataset".into(),
+        )
+    })?;
+    let extent = dataset_shape[axis];
+    let extent_usize = usize::try_from(extent)
+        .map_err(|_| TetError::Validation("dataset axis extent does not fit usize".into()))?;
+    let coord = coord_axis_for_label_filter(meta, axis, extent_usize).ok_or_else(|| {
+        TetError::Validation(format!(
+            "`label_filter` requires coordinate labels on axis {axis}"
+        ))
+    })?;
+    if coord.labels.len() != extent_usize {
+        return Err(TetError::Validation(format!(
+            "coordinate labels on axis {axis} have length {}, expected {extent_usize}",
+            coord.labels.len()
+        )));
+    }
+    if !coord.labels.iter().any(|l| l == &label_filter.eq) {
+        return Err(TetError::Validation(format!(
+            "unknown coordinate label {:?} on axis {axis} (axis has {} labels)",
+            label_filter.eq,
+            coord.labels.len()
+        )));
+    }
+    let matching: Vec<bool> = coord.labels.iter().map(|l| l == &label_filter.eq).collect();
+    Ok(LabelEqPred { axis, matching })
+}
+
+fn coord_axis_for_label_filter(
+    meta: &DatasetMetadataV1,
+    d: usize,
+    extent: usize,
+) -> Option<&crate::catalog::CoordAxisV1> {
+    let coords = meta.coords.as_ref()?;
+    if let Some(names) = &meta.dim_names
+        && let Some(name) = names.get(d)
+        && let Some(c) = coords.get(name)
+    {
+        return Some(c);
+    }
+    if let Some(c) = coords.get(d.to_string().as_str()) {
+        return Some(c);
+    }
+    let mut matches = coords.values().filter(|c| c.labels.len() == extent);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }

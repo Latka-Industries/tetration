@@ -1,7 +1,7 @@
 //! Scatter planned chunk payloads into logical float / integer buffers.
 
 use crate::query::types::{
-    CellPredicate, INTEGER_FILTER_FILL_MSG, PlannedChunkIo, ReadPlan, TetError, fold_keeps_cell,
+    CellPredicate, INTEGER_FILTER_FILL_MSG, PlannedChunkIo, ReadPlan, TetError, fold_keeps_element,
 };
 
 use super::elem::ChunkElem;
@@ -144,7 +144,7 @@ where
 {
     visit_planned_chunk_elem::<E, _>(mmap, plan, c, |li, v| {
         if li < out.len() {
-            out[li] = if fold_keeps_cell(plan.cell_filter, v.to_f64()) {
+            out[li] = if fold_keeps_element(plan, li, v.to_f64()) {
                 v
             } else {
                 E::filtered_mask()
@@ -163,16 +163,30 @@ fn scatter_chunk_into_option<E>(
 where
     E: IntScatter,
 {
-    let mask = plan.cell_filter.map(integer_filter_mask::<E>).transpose()?;
+    let mask = if plan.cell_filter.is_some() || plan.label_eq.is_some() {
+        Some(integer_filter_mask_for_plan::<E>(plan)?)
+    } else {
+        None
+    };
     visit_planned_chunk_elem::<E, _>(mmap, plan, c, |li, v| {
         if li < out.len() {
             out[li] = Some(match mask {
-                Some(masked) if !fold_keeps_cell(plan.cell_filter, v.to_f64()) => masked,
+                Some(masked) if !fold_keeps_element(plan, li, v.to_f64()) => masked,
                 _ => v,
             });
         }
         Ok(())
     })
+}
+
+fn integer_filter_mask_for_plan<E: IntScatter>(plan: &ReadPlan) -> Result<E, TetError> {
+    if let Some(pred) = plan.cell_filter {
+        return integer_filter_mask(pred);
+    }
+    let Some(fill) = plan.dataset_fill else {
+        return Err(TetError::Validation(INTEGER_FILTER_FILL_MSG.into()));
+    };
+    E::from_fill(fill)
 }
 
 pub(crate) fn scatter_chunk_into_plan(

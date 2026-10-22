@@ -304,6 +304,7 @@ fn build_matched_read_plan(
             zones,
             dtype: rec.dtype,
             filter: doc.filter.as_ref(),
+            label_filter: doc.label_filter.as_ref(),
             fill: summary
                 .metadata
                 .datasets
@@ -484,6 +485,9 @@ fn plan_query_matched_dataset(
     };
     if read_plan.cell_filter.is_some() {
         message.push_str("; cell filter applied to kept chunks");
+    }
+    if read_plan.label_eq.is_some() {
+        message.push_str("; label filter applied to kept chunks");
     }
     if read_plan.index_filter_skipped_chunks > 0 {
         use std::fmt::Write as _;

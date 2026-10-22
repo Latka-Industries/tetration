@@ -1,7 +1,10 @@
-"""THI-613 bench: tet sealed range sum vs HDF5+NumPy on small / large / extra.
+"""THI-613 / THI-614 bench: tet sealed sum vs HDF5+NumPy on small / large / extra.
 
 Primary question: is tet’s built-in selection + `sum` accurate and competitive
 vs h5py + NumPy on the same slab?
+
+Also runs a thin `label_filter` eq case (THI-614) on the same fixture — present vs
+missing index — without a second HDF5 harness.
 
 - **small** — select ≈16 MiB (fixed-cost / CLI microbench)
 - **large** / **extra** — stress sizes (CLI spawn is noise)
@@ -81,15 +84,30 @@ def query_doc() -> dict[str, Any]:
     }
 
 
+# Single time-label equality (THI-614); one chunk of the 64-step axis.
+LABEL_EQ_VALUE = INDEX_SELECT_START
+
+
+def label_eq_query_doc() -> dict[str, Any]:
+    return {
+        "dataset": "data",
+        "layout_version": 1,
+        # Decimal axis: CF imports may omit dim_names; coords still resolve by extent.
+        "label_filter": {"axis": "0", "eq": LABEL_EQ_VALUE},
+        "sum": [],
+        "execution": {"device": "cpu"},
+    }
+
+
 def query_body() -> str:
     return json.dumps(query_doc())
 
 
-def run_tet_query(tet: Path, pkg: Path) -> tuple[float, dict]:
+def run_tet_query(tet: Path, pkg: Path, body: str | None = None) -> tuple[float, dict]:
     cmd = [
         str(tet),
         "query",
-        query_body(),
+        body if body is not None else query_body(),
         "-t",
         str(pkg),
         "-x",
@@ -170,6 +188,7 @@ def write_report(
     git_rev: str,
     primary: list[Row],
     secondary: list[Row],
+    label_eq: list[Row],
     accurate: bool,
 ) -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -222,6 +241,24 @@ def write_report(
             f"{'-' if row.chunk_count is None else row.chunk_count} | "
             f"{row.note} |"
         )
+    lines.extend(
+        [
+            "",
+            f"## Label-eq (`label_filter` eq={LABEL_EQ_VALUE!r}, THI-614)",
+            "",
+            "Same package; present vs missing index. Answers must match.",
+            "",
+            "| backend | seconds | sum | chunks | note |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for row in label_eq:
+        lines.append(
+            f"| {row.backend} | {row.seconds:.4f} | "
+            f"{'-' if row.value is None else f'{row.value:.6g}'} | "
+            f"{'-' if row.chunk_count is None else row.chunk_count} | "
+            f"{row.note} |"
+        )
     lines.append("")
     out.write_text("\n".join(lines), encoding="utf-8")
     log(f"wrote {out}")
@@ -253,6 +290,8 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     kinds = [e.get("kind") for e in doc.get("indexes", [])]
     if "sorted_axis_range" not in kinds:
         raise RuntimeError(f"INDEX.json missing sorted_axis_range; kinds={kinds}")
+    if "coord_label_postings" not in kinds:
+        raise RuntimeError(f"INDEX.json missing coord_label_postings; kinds={kinds}")
 
     log("tet: sealed package, selection + sum")
     tet_s, payload = run_tet_query(tet, fx.pkg)
@@ -319,6 +358,44 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
         log(f"error: index present vs missing sum mismatch ({tet_sum} vs {miss_sum})")
         accurate = False
 
+    label_body = json.dumps(label_eq_query_doc())
+    log(f"tet: label_filter eq={LABEL_EQ_VALUE!r} (THI-614)")
+    le_s, le_payload = run_tet_query(tet, fx.pkg, label_body)
+    le_exe = le_payload.get("execution") or {}
+    le_plan = le_payload.get("read_plan") or {}
+    le_sum = le_exe.get("operation_sum")
+    le_skip = le_plan.get("index_filter_skipped_chunks")
+    backup = idx.with_suffix(".json.bak")
+    shutil.move(idx, backup)
+    log("tet: label_filter with INDEX.json removed")
+    le_miss_s, le_miss_payload = run_tet_query(tet, fx.pkg, label_body)
+    shutil.move(backup, idx)
+    le_miss_exe = le_miss_payload.get("execution") or {}
+    le_miss_plan = le_miss_payload.get("read_plan") or {}
+    le_miss_sum = le_miss_exe.get("operation_sum")
+    label_eq_rows = [
+        Row(
+            backend="tet label_eq (index present)",
+            seconds=le_s,
+            value=le_sum,
+            chunk_count=le_plan.get("chunk_count"),
+            note=f"index_filter_skipped={le_skip}",
+        ),
+        Row(
+            backend="tet label_eq (index missing)",
+            seconds=le_miss_s,
+            value=le_miss_sum,
+            chunk_count=le_miss_plan.get("chunk_count"),
+            note="footer scan; answer must match",
+        ),
+    ]
+    if le_sum is None or le_miss_sum is None:
+        log("error: missing label_eq sum values")
+        return 1
+    if not values_match(float(le_sum), float(le_miss_sum)):
+        log(f"error: label_eq present vs missing sum mismatch ({le_sum} vs {le_miss_sum})")
+        accurate = False
+
     try:
         git_rev = subprocess.check_output(
             ["git", "-C", str(FIXTURES_ROOT.parent), "rev-parse", "--short", "HEAD"],
@@ -332,9 +409,10 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
         git_rev=git_rev,
         primary=primary,
         secondary=secondary,
+        label_eq=label_eq_rows,
         accurate=accurate,
     )
-    for row in primary + secondary:
+    for row in primary + secondary + label_eq_rows:
         log(
             f"{row.backend}: {format_elapsed(row.seconds)}  sum={row.value}  "
             f"chunks={row.chunk_count}"

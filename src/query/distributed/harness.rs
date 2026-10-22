@@ -87,7 +87,7 @@ pub fn execute_sharded_scalar_fold_local(
     let n_shards = n_shards.max(1);
     let kind = ReductionKind::from(op);
     let specs = plan_chunk_shards(plan.chunks.len(), n_shards, partition);
-    let allow_empty = plan.cell_filter.is_some();
+    let allow_empty = plan.cell_filter.is_some() || plan.label_eq.is_some();
     let mut merged = FoldPartialState::empty();
     for spec in &specs {
         let shard_plan = split_read_plan(plan, spec);

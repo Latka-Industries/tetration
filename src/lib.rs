@@ -39,6 +39,10 @@
 //! [`query::ReadPlan::index_filter_skipped_chunks`](query::ReadPlan::index_filter_skipped_chunks).
 //! A missing or unusable index falls back to zone maps.
 //!
+//! **0.6.6:** optional `coord_label_postings` + closed `label_filter` wire (footer label
+//! equality / THI-614); AND with cell `filter`; planner skip via INDEX.json. Layout /
+//! package / C ABI / pack milestone unchanged from 0.6.3.
+//!
 //! **0.6.5:** optional `sorted_axis_range` secondary index + planner pushdown (THI-613); fold
 //! Sum/Mean dense multi-dim slab path and sum-only SIMD; `bench:index` vs HDF5+NumPy. Layout /
 //! package / C ABI / pack milestone unchanged from 0.6.3.
