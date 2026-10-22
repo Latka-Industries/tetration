@@ -88,17 +88,15 @@ A later cut **MAY** demote or drop required sidecars once embed verify is the pr
 
 `tet pack` that copies only `packed.tet` then preserves pushdown for the packed standalone file (the point of embed).
 
-## Writer surfaces (impl cuts)
-
-Normative intent for follow-on PRs (not implemented in this spec-only cut):
+## Writer surfaces
 
 | Surface | Expectation |
 | ------- | ----------- |
 | Package `seal_generation` / store seal | Embed into `packed.tet`; optional sidecar mirrors |
-| `TetWriterSession::commit` / convert | Emit embed when sealing a standalone `.tet` (or via a follow-up `tet index`) |
-| `tet index` (new or extended) | Build/rewrite embed for an existing sealed image |
+| `TetWriterSession::commit` / convert | **Auto-embed** when sealing a standalone `.tet` |
+| `tet index` / `tet index --clear` | Re-embed an older bare file, or drop embeds for a no-pushdown baseline |
 
-Staging / shard writers still do **not** update indexes; seal remains the moment of truth.
+Staging / shard writers still do **not** update indexes; seal (or convert/commit) remains the moment of truth.
 
 ## Verify
 
@@ -124,4 +122,4 @@ Absence of embed on a `history_version = 1` standalone file remains advisory (no
 
 ## Out of scope (this issue’s later cuts own them)
 
-Implementation of writer emit, query load, package mirror wiring, `tet index`, and conformance fixtures / pack milestone bump. Mandatory indexes. Live rewrite of sealed embeds without a new generation (packages) or an explicit re-index tool (standalone). Changing filter answer semantics.
+Mandatory indexes. Live rewrite of sealed package embeds without a new generation. Changing filter answer semantics.

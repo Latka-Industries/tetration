@@ -583,6 +583,7 @@ impl TetWriterSession {
             }
         }
         self.flush_footer(footer_metadata)?;
+        super::embed_indexes_in_tet(&self.path, super::EMBEDDED_STANDALONE_GENERATION)?;
         Ok(self.path)
     }
 
@@ -636,6 +637,7 @@ impl TetWriterSession {
             }
         }
         self.flush_footer(footer_metadata)?;
+        super::embed_indexes_in_tet(&self.path, super::EMBEDDED_STANDALONE_GENERATION)?;
         Ok(self.path)
     }
 }

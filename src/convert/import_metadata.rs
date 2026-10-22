@@ -4,8 +4,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::catalog::{
-    CatalogError, CoordAxisV1, DatasetMetadataV1, FileMetadataV1, FooterBlobV1, HistoryEvent,
-    MetadataLimitsV1, TetMetadataV1, unix_timestamp_now, write_footer_blob,
+    CatalogError, CoordAxisV1, DatasetMetadataV1, EMBEDDED_STANDALONE_GENERATION, FileMetadataV1,
+    FooterBlobV1, HistoryEvent, MetadataLimitsV1, TetMetadataV1, embed_indexes_in_tet,
+    unix_timestamp_now, write_footer_blob,
 };
 
 use super::shared::ImportPlan;
@@ -42,6 +43,8 @@ pub fn finish_convert_footer(
             metadata_ref: None,
         },
     )?;
+    // Standalone convert output must carry ZONE/INDEX for pushdown (0.7.0).
+    embed_indexes_in_tet(output, EMBEDDED_STANDALONE_GENERATION)?;
     Ok(vec![event])
 }
 

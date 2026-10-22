@@ -147,6 +147,7 @@ fn run_read(cmd: Commands) -> Result<(), String> {
         }),
         Commands::Export { .. }
         | Commands::Convert { .. }
+        | Commands::Index { .. }
         | Commands::Ingest { .. }
         | Commands::Publish { .. }
         | Commands::Compact { .. }
@@ -195,6 +196,7 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             strict,
             chunk_mib,
         } => run_convert(&input, &output, jobs, strict, chunk_mib),
+        Commands::Index { path, clear, quiet } => run_index(&path, clear, quiet),
         Commands::Ingest {
             inputs,
             out,
@@ -271,6 +273,34 @@ fn run_write(cmd: Commands) -> Result<(), String> {
         | Commands::Repair { .. }
         | Commands::Semantics(_) => unreachable!("write commands only"),
     }
+}
+
+fn run_index(path: &std::path::Path, clear: bool, quiet: bool) -> Result<(), String> {
+    if clear {
+        tetration::catalog::clear_embedded_indexes(path).map_err(cli_error)?;
+        if !quiet {
+            println!("cleared embedded ZONE/INDEX → {}", path.display());
+        }
+        return Ok(());
+    }
+    let embedded = tetration::catalog::embed_indexes_in_tet(
+        path,
+        tetration::catalog::EMBEDDED_STANDALONE_GENERATION,
+    )
+    .map_err(cli_error)?;
+    if !quiet {
+        let index = if embedded.secondary_index.bytes.is_some() {
+            "INDEX present"
+        } else {
+            "INDEX omitted"
+        };
+        println!(
+            "embedded ZONE + {index} → {} (packed_sha256={})",
+            path.display(),
+            &embedded.packed_sha256[..12.min(embedded.packed_sha256.len())]
+        );
+    }
+    Ok(())
 }
 
 fn main() -> ExitCode {

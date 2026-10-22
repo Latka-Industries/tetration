@@ -163,6 +163,19 @@ pub enum Commands {
         #[arg(long, value_name = "N")]
         chunk_mib: Option<u32>,
     },
+    /// Build or refresh embedded ZONE/INDEX spills on a sealed `.tet` (`history_version = 2`).
+    ///
+    /// Convert and writer commit already embed automatically (0.7.0). Use this to re-index an
+    /// older bare file, or `--clear` to drop embeds for a no-pushdown baseline.
+    Index {
+        /// Sealed `.tet` file.
+        path: PathBuf,
+        /// Drop embedded ZONE/INDEX (rewrite `history_version = 1` footer; keep history/metadata).
+        #[arg(long)]
+        clear: bool,
+        #[arg(short = 'q', long)]
+        quiet: bool,
+    },
     /// Ingest one or more `.tet` files into a `.tet.d` package as sealed staging parts.
     Ingest {
         /// Source `.tet` files (each becomes one staging part).
