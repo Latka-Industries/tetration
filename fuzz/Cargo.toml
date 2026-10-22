@@ -48,3 +48,10 @@ path = "fuzz_targets/secondary_index_json.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "secondary_index_seal"
+path = "fuzz_targets/secondary_index_seal.rs"
+test = false
+doc = false
+bench = false

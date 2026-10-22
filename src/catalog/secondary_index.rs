@@ -6,6 +6,10 @@
 //! token is `"present"` or `"omitted"`. A later generation gets a new document; sealed bytes
 //! are not edited in place.
 //!
+//! `value_postings` streams tile elements and stops once distinct non-null values would exceed
+//! [`VALUE_POSTINGS_MAX_CARDINALITY`] (do not pre-collect an entire chunk’s distinct set). Seal
+//! fuzz: `mise fuzz-index-seal`.
+//!
 //! Contract: [`docs/secondary_indexes.md`](../../docs/secondary_indexes.md) (THI-568 / THI-613 / THI-614).
 
 use std::collections::{BTreeMap, BTreeSet};
