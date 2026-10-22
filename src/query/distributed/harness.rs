@@ -1,4 +1,11 @@
-//! In-process and multi-process multi-shard scalar fold harnesses.
+//! In-process and localhost multi-process multi-shard scalar fold harnesses.
+//!
+//! - [`execute_sharded_scalar_fold_local`] — same-process N shards (no OS spawn).
+//! - [`execute_worker_job_v1`] / `tet worker` — one job JSON → one partial JSON.
+//! - [`execute_sharded_scalar_fold_multiprocess`] — spawn N `tet worker` children.
+//!
+//! Product boundary (spill refuse, no cluster product):
+//! [`docs/distributed_boundary.md`](../../../../docs/distributed_boundary.md).
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -191,15 +198,26 @@ pub fn execute_sharded_scalar_fold_local(
 }
 
 /// Inputs for [`execute_sharded_scalar_fold_multiprocess`].
+///
+/// `tet_path` must be a sealed local `.tet` (or path/`file://` URI the workers can mmap).
+/// `worker_bin` is typically the `tet` CLI (`CARGO_BIN_EXE_tet` in integration tests).
 #[derive(Debug, Clone, Copy)]
 pub struct MultiprocessFoldOpts<'a> {
+    /// Sealed `.tet` path shared by every worker pin.
     pub tet_path: &'a Path,
+    /// Full coordinator [`ReadPlan`] (before shard split).
     pub plan: &'a ReadPlan,
+    /// Query document (operation + dataset; must match `plan`).
     pub doc: &'a QueryDocument,
+    /// Reduction op (must be shard-mergeable).
     pub op: &'a Operation,
+    /// Number of worker processes (≥ 1 after clamp).
     pub n_shards: usize,
+    /// How to partition `plan.chunks` across workers.
     pub partition: ShardPartition,
+    /// Optional write hints; non-RAM targets are refused.
     pub write: Option<&'a WriteHints>,
+    /// Path to the `tet` binary (invoked as `tet worker`).
     pub worker_bin: &'a Path,
 }
 

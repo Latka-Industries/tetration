@@ -1,4 +1,9 @@
-//! `tet worker` — execute one `WorkerJobV1`, emit `WorkerPartialV1` JSON.
+//! `tet worker` — localhost distributed harness entry (THI-618).
+//!
+//! Reads one [`WorkerJobV1`](tetration::query::distributed::WorkerJobV1) JSON
+//! (`--job PATH` or stdin), folds the shard against the pin path, writes
+//! [`WorkerPartialV1`](tetration::query::distributed::WorkerPartialV1) JSON to stdout.
+//! Not a cluster scheduler — see crate `docs/distributed_boundary.md`.
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -9,6 +14,10 @@ use tetration::query::distributed::{
 };
 
 /// Run `tet worker`: read job JSON, fold shard, write partial JSON to stdout.
+///
+/// # Errors
+///
+/// I/O, JSON parse, or distributed fold validation failures as plain strings for the CLI.
 pub fn run_worker(job: Option<PathBuf>) -> Result<(), String> {
     let bytes = match job {
         Some(path) if path.as_os_str() != "-" => {
