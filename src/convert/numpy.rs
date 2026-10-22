@@ -174,15 +174,19 @@ pub(crate) fn convert_numpy_with_chunk_bytes(
         locs: locs.into(),
         plans: plans.clone().into(),
     };
-    write_plans_streaming(
+    let write_acc = write_plans_streaming(
         output,
         &plans,
         parallel_jobs,
         |job, buf| source.fill_tile(job, buf),
         Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
     )?;
-    let history =
-        super::import_metadata::finish_convert_footer(output, format.history_source(), &plans)?;
+    let history = super::import_metadata::finish_convert_footer_with_write_acc(
+        output,
+        format.history_source(),
+        &plans,
+        Some(write_acc),
+    )?;
 
     Ok(report(
         input,

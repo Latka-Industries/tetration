@@ -6,6 +6,9 @@ vs h5py + NumPy on the same slab?
 Also runs a thin `label_filter` eq case (THI-614) on the same fixture — present vs
 missing index — without a second HDF5 harness.
 
+Convert embeds ZONE/INDEX into the standalone `.tet` (0.7.0); no ingest/publish.
+“Index missing” uses `tet index --clear` on a copy so pushdown is actually off.
+
 - **small** — select ≈16 MiB (fixed-cost / CLI microbench)
 - **large** / **extra** — stress sizes (CLI spawn is noise)
 
@@ -111,7 +114,7 @@ def query_body(*, fold_parallel: bool | None = None) -> str:
 
 def run_tet_query(
     tet: Path,
-    pkg: Path,
+    tet_path: Path,
     body: str | None = None,
     *,
     warm: bool = True,
@@ -121,7 +124,7 @@ def run_tet_query(
         "query",
         body if body is not None else query_body(),
         "-t",
-        str(pkg),
+        str(tet_path),
         "-x",
         "--preview",
         "0",
@@ -143,12 +146,12 @@ def run_tet_query(
     return time.perf_counter() - t0, payload
 
 
-def warm_package(tet: Path, pkg: Path) -> None:
+def warm_tet(tet: Path, tet_path: Path) -> None:
     """Pull sealed bytes into page cache before timed runs (CLI spawn still paid)."""
-    log("warm: two throwaway range sums (page-cache packed.tet)")
+    log("warm: two throwaway range sums (page-cache .tet)")
     body = query_body(fold_parallel=False)
-    run_tet_query(tet, pkg, body, warm=False)
-    run_tet_query(tet, pkg, body, warm=False)
+    run_tet_query(tet, tet_path, body, warm=False)
+    run_tet_query(tet, tet_path, body, warm=False)
 
 
 def source_h5_numpy_sum(fx: IndexFixture) -> tuple[float, float]:
@@ -166,7 +169,8 @@ def source_h5_numpy_sum(fx: IndexFixture) -> tuple[float, float]:
     return time.perf_counter() - t0, total
 
 
-def build_package(tet: Path, fx: IndexFixture) -> None:
+def build_tet(tet: Path, fx: IndexFixture) -> None:
+    """Convert HDF5 → standalone `.tet` (ZONE/INDEX embedded at convert seal)."""
     if fx.pkg.exists():
         shutil.rmtree(fx.pkg)
     if fx.tet.exists():
@@ -177,21 +181,16 @@ def build_package(tet: Path, fx: IndexFixture) -> None:
     _must_ok(proc, "tet convert")
     log(f"convert done in {format_elapsed(time.perf_counter() - t0)}")
 
-    log(f"ingest + publish → {fx.pkg.name}")
-    t0 = time.perf_counter()
-    proc = _run([str(tet), "ingest", str(fx.tet), "--out", str(fx.pkg), "--jobs", "1"])
-    _must_ok(proc, "tet ingest")
-    proc = _run([str(tet), "publish", str(fx.pkg)])
-    _must_ok(proc, "tet publish")
-    log(f"publish done in {format_elapsed(time.perf_counter() - t0)}")
 
-
-def index_path(pkg: Path) -> Path:
-    gen = pkg / "generations"
-    dirs = sorted(p for p in gen.iterdir() if p.is_dir()) if gen.is_dir() else []
-    if not dirs:
-        raise RuntimeError(f"no generations under {pkg}")
-    return dirs[0] / "INDEX.json"
+def bare_tet_copy(tet: Path, src: Path) -> Path:
+    """Copy `src` and clear embeds so query cannot pushdown via footer spills."""
+    dest = src.with_name(src.stem + ".bare.tet")
+    if dest.exists():
+        dest.unlink()
+    shutil.copy2(src, dest)
+    proc = _run([str(tet), "index", "--clear", str(dest)])
+    _must_ok(proc, "tet index --clear")
+    return dest
 
 
 def values_match(a: float, b: float) -> bool:
@@ -329,23 +328,26 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     else:
         log(f"reusing existing {fx.h5}")
 
-    build_package(tet, fx)
+    build_tet(tet, fx)
+    if not fx.tet.is_file():
+        raise RuntimeError(f"expected converted .tet at {fx.tet}")
 
-    idx = index_path(fx.pkg)
-    if not idx.is_file():
-        raise RuntimeError(f"expected INDEX.json at {idx} after publish")
-    doc = json.loads(idx.read_text(encoding="utf-8"))
-    kinds = [e.get("kind") for e in doc.get("indexes", [])]
-    if "sorted_axis_range" not in kinds:
-        raise RuntimeError(f"INDEX.json missing sorted_axis_range; kinds={kinds}")
-    if "coord_label_postings" not in kinds:
-        raise RuntimeError(f"INDEX.json missing coord_label_postings; kinds={kinds}")
+    # Smoke: embedded INDEX must pushdown (label_eq → 1 chunk) before we time.
+    smoke_body = json.dumps(label_eq_query_doc(fold_parallel=False))
+    _, smoke = run_tet_query(tet, fx.tet, smoke_body, warm=False)
+    smoke_plan = smoke.get("read_plan") or {}
+    if int(smoke_plan.get("chunk_count") or 0) != 1:
+        raise RuntimeError(
+            f"convert did not embed usable INDEX (label_eq chunk_count="
+            f"{smoke_plan.get('chunk_count')})"
+        )
 
-    warm_package(tet, fx.pkg)
+    bare = bare_tet_copy(tet, fx.tet)
+    warm_tet(tet, fx.tet)
 
     log("tet ST: fold_parallel=false, range sum")
     st_body = query_body(fold_parallel=False)
-    tet_st_s, st_payload = run_tet_query(tet, fx.pkg, st_body, warm=False)
+    tet_st_s, st_payload = run_tet_query(tet, fx.tet, st_body, warm=False)
     st_plan = st_payload.get("read_plan") or {}
     st_exe = st_payload.get("execution") or {}
     tet_sum = st_exe.get("operation_sum")
@@ -353,7 +355,7 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
 
     log("tet parallel: fold_parallel=true, range sum")
     par_body = query_body(fold_parallel=True)
-    tet_par_s, par_payload = run_tet_query(tet, fx.pkg, par_body, warm=False)
+    tet_par_s, par_payload = run_tet_query(tet, fx.tet, par_body, warm=False)
     par_exe = par_payload.get("execution") or {}
     par_sum = par_exe.get("operation_sum")
     par_chunks = (par_payload.get("read_plan") or {}).get("chunk_count")
@@ -384,11 +386,8 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
         ),
     ]
 
-    backup = idx.with_suffix(".json.bak")
-    shutil.move(idx, backup)
-    log("tet: same query with INDEX.json removed (fallback, ST)")
-    miss_s, miss_payload = run_tet_query(tet, fx.pkg, st_body, warm=False)
-    shutil.move(backup, idx)
+    log("tet: same query with embeds cleared (fallback, ST)")
+    miss_s, miss_payload = run_tet_query(tet, bare, st_body, warm=False)
     miss_exe = miss_payload.get("execution") or {}
     miss_plan = miss_payload.get("read_plan") or {}
     miss_sum = miss_exe.get("operation_sum")
@@ -405,7 +404,7 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
             seconds=miss_s,
             value=miss_sum,
             chunk_count=miss_plan.get("chunk_count"),
-            note="geometry fallback; answer must match",
+            note="tet index --clear copy; geometry fallback",
         ),
     ]
 
@@ -425,16 +424,13 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
 
     label_body = json.dumps(label_eq_query_doc(fold_parallel=False))
     log(f"tet: label_filter eq={LABEL_EQ_VALUE!r} (THI-614)")
-    le_s, le_payload = run_tet_query(tet, fx.pkg, label_body, warm=False)
+    le_s, le_payload = run_tet_query(tet, fx.tet, label_body, warm=False)
     le_exe = le_payload.get("execution") or {}
     le_plan = le_payload.get("read_plan") or {}
     le_sum = le_exe.get("operation_sum")
     le_skip = le_plan.get("index_filter_skipped_chunks")
-    backup = idx.with_suffix(".json.bak")
-    shutil.move(idx, backup)
-    log("tet: label_filter with INDEX.json removed")
-    le_miss_s, le_miss_payload = run_tet_query(tet, fx.pkg, label_body, warm=False)
-    shutil.move(backup, idx)
+    log("tet: label_filter with embeds cleared")
+    le_miss_s, le_miss_payload = run_tet_query(tet, bare, label_body, warm=False)
     le_miss_exe = le_miss_payload.get("execution") or {}
     le_miss_plan = le_miss_payload.get("read_plan") or {}
     le_miss_sum = le_miss_exe.get("operation_sum")
@@ -460,7 +456,7 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     if not values_match(float(le_sum), float(le_miss_sum)):
         log(f"error: label_eq present vs missing sum mismatch ({le_sum} vs {le_miss_sum})")
         accurate = False
-    # Pushdown gate: unique time label → one chunk when INDEX loads via package path.
+    # Pushdown gate: unique time label → one chunk when embedded INDEX loads.
     le_chunks = le_plan.get("chunk_count")
     le_miss_chunks = le_miss_plan.get("chunk_count")
     if le_skip is None or int(le_skip) < 1:

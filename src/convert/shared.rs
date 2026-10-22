@@ -180,8 +180,9 @@ pub(crate) fn write_plans_streaming(
     parallel_jobs: usize,
     fill_tile: impl Fn(&StreamTileJob<'_>, &mut [u8]) -> Result<(), ConvertError> + Sync + Send,
     progress_hook: Option<&mut StreamWriteProgress<'_>>,
-) -> Result<(), ConvertError> {
+) -> Result<crate::catalog::StreamingWriteAcc, ConvertError> {
     let mut metas: Vec<ArrayWriteMeta<'_>> = Vec::with_capacity(plans.len());
+    let mut fills: Vec<Option<Vec<u8>>> = Vec::with_capacity(plans.len());
     for plan in plans {
         metas.push(ArrayWriteMeta::row_major(
             &plan.name,
@@ -189,6 +190,10 @@ pub(crate) fn write_plans_streaming(
             &plan.shape,
             &plan.chunk_shape,
             None,
+        ));
+        fills.push(crate::catalog::zone::fill_le_bytes(
+            plan.dtype.wire_tag(),
+            Some(&plan.import_attrs),
         ));
     }
     write_multi_raw_array_streaming(
@@ -201,6 +206,7 @@ pub(crate) fn write_plans_streaming(
             Err(e) => Err(CatalogError::Io(std::io::Error::other(e.to_string()))),
         },
         progress_hook,
+        Some(fills.as_slice()),
     )
     .map_err(ConvertError::from)
 }
