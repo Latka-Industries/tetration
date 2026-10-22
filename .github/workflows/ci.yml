@@ -1,18 +1,24 @@
 name: CI
 
+# Prefer `paths` (allowlist) over `paths-ignore`: run only when Rust build inputs change.
+# Include Cargo manifests + this workflow so lockfile/CI edits still get tested.
+# Docs-only / LICENSE / .gitignore PRs skip the suite (required checks stay pending — merge
+# with admin bypass or remove the required-check gate for docs PRs).
 on:
   push:
     branches: [main, master]
-    paths-ignore:
-      - "**/*.md"
-      - "LICENSE*"
-      - ".gitignore"
+    paths:
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [main, master]
-    paths-ignore:
-      - "**/*.md"
-      - "LICENSE*"
-      - ".gitignore"
+    paths:
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - ".github/workflows/ci.yml"
 
 jobs:
   test:
