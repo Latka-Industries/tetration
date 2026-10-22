@@ -157,15 +157,8 @@ pub fn seal_staged_generation_with_options(
     let refs: Vec<&Path> = part_paths.iter().map(PathBuf::as_path).collect();
     let packed_path = tmp.0.join("packed.tet");
     merge_tet_files(&packed_path, &refs)?;
+    let embedded = crate::catalog::embed_indexes_in_tet(&packed_path, generation)?;
     let packed = fs::read(&packed_path)?;
-    let packed_sha256 = sha256_hex(&packed);
-    let (zone_bytes, zone_sha) =
-        crate::catalog::zone::zone_maps_json_for_packed(&packed, generation, &packed_sha256)?;
-    let index = crate::catalog::secondary_index::prepare_secondary_index(
-        &packed,
-        generation,
-        &packed_sha256,
-    )?;
 
     publish_lock::begin_publish_store(store, generation, options)?;
     let lock = publish_lock::publishing_lock_key(generation);
@@ -174,11 +167,11 @@ pub fn seal_staged_generation_with_options(
         protocol_version: PACKAGE_PROTOCOL_VERSION,
         part_ids: part_ids.to_vec(),
         packed_byte_len: packed.len() as u64,
-        packed_sha256: Some(packed_sha256),
+        packed_sha256: Some(embedded.packed_sha256),
         zone_maps: Some(crate::catalog::ZONE_MAPS_REQUIRED.to_owned()),
-        zone_maps_sha256: Some(zone_sha),
-        secondary_indexes: Some(index.status.to_owned()),
-        secondary_indexes_sha256: index.sha256.clone(),
+        zone_maps_sha256: Some(embedded.zone_maps_sha256),
+        secondary_indexes: Some(embedded.secondary_index.status.to_owned()),
+        secondary_indexes_sha256: embedded.secondary_index.sha256.clone(),
     };
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|e| CatalogError::InvalidPackageProtocol(e.to_string()))?;
@@ -186,9 +179,9 @@ pub fn seal_staged_generation_with_options(
     store.write_part(&format!("{lock}/MANIFEST.json"), &manifest_bytes)?;
     store.write_part(
         &format!("{lock}/{}", crate::catalog::ZONE_MAPS_FILE),
-        &zone_bytes,
+        &embedded.zone_maps_json,
     )?;
-    if let Some(bytes) = &index.bytes {
+    if let Some(bytes) = &embedded.secondary_index.bytes {
         store.write_part(
             &format!("{lock}/{}", crate::catalog::SECONDARY_INDEX_FILE),
             bytes,
