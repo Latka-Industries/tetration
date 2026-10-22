@@ -1,7 +1,9 @@
-# `query::distributed` — shard a fold across workers (0.5.0)
+# `query::distributed` — shard a fold across workers
 
 Thin protocol for **one query** over **one pinned sealed generation**, split by chunk
 shards. Not a cluster scheduler.
+
+**Product boundary (0.7.1):** [`docs/distributed_boundary.md`](../../../docs/distributed_boundary.md) (THI-615 / THI-616).
 
 ## What ships
 
@@ -18,7 +20,7 @@ shards. Not a cluster scheduler.
 Workers open the **same** `(generation, object_key, object_len)` from [`WorkerPinV1`].
 Do not re-read package `CURRENT` mid-query.
 
-## Local demo (harness)
+## Local demo (in-process harness)
 
 ```rust
 use tetration::query::distributed::{
@@ -49,14 +51,16 @@ let preview = execute_sharded_scalar_fold_local(
 Tests in `src/tests/distributed.rs` assert N-shard results match monolithic execute for
 sum / mean / var / min / arg_min.
 
-## Non-goals (0.5.0)
-
-- RPC / networking (JSON shapes are the protocol skeleton)
-- Distributed materialize, transform, median/quantile/histogram
-- Worker-local spill files or a shared distributed filesystem
-- Advancing `CURRENT` while a query is open
-
-## Spill policy
+## Spill policy (locked 0.7.1)
 
 `write: ram` (or omit) only. `refuse_distributed_spill` rejects `spill` / `sidecar` /
-`switch`. Keep partials in RAM; finish scalars at the coordinator.
+`switch`. Keep partials in RAM; finish scalars at the coordinator. See the [boundary RFC](../../../docs/distributed_boundary.md).
+
+## Non-goals (through 0.7.3 unless reopened)
+
+- Network RPC / worker daemon product
+- Localhost multi-process harness (follows this boundary lock)
+- Distributed materialize, transform, median/quantile/histogram (unless a later RFC opens them)
+- Worker-local spill files or a shared distributed filesystem
+- Advancing `CURRENT` while a query is open
+- Docker/Kubernetes worker fleets
