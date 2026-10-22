@@ -1,6 +1,6 @@
 # Tetration normative SPEC (0.6.x)
 
-**Status:** draft for the **0.6.3** cut (window `pad` / `step` / `align` / `min_count` + multi-dtype; builds on 0.6.2 / 0.5.2 freeze).  
+**Status:** draft for the **0.7.0** cut (embedded ZONE/INDEX via `history_version = 2`; builds on 0.6.3 query pack / 0.5.2 freeze).  
 **Audience:** someone implementing a **compatible `.tet` reader** (or package open + pin) without reading the Rust crate.  
 **Language:** **MUST** / **MUST NOT** / **SHOULD** / **MAY** follow [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 
@@ -302,11 +302,13 @@ Optional second-language smoke (catalog + one chunk, not a query engine): [`conf
 | Pack **0.6.1** | `window.mode` `bins`/`rolling` + multi-dataset `align` |
 | Pack **0.6.2** | Label-value `group_by` (`by: labels`) |
 | Pack **0.6.3** | Window `pad` / `step` / `align` / `min_count` + multi-dtype |
+| Pack **0.7.0** | Embedded ZONE/INDEX footer spills (`history_version = 2`) |
 | Crate **0.5.4** | Hygiene + `parse_query_json` fuzz (layout / query wire / pack milestone unchanged) |
 | Crate / pack **0.6.0** | Closed `window` query wire + conformance accept/reject (THI-595); layout / package / ABI unchanged |
 | Crate / pack **0.6.1** | `window.mode` `bins`/`rolling` + multi-dataset `align` (THI-594); layout / package / ABI unchanged |
 | Crate / pack **0.6.2** | Label-value `group_by` (THI-596); layout / package / ABI unchanged |
 | Crate / pack **0.6.3** | Window `pad` / `step` / `align` / `min_count` + multi-dtype (THI-606); layout / package / ABI unchanged |
+| Crate / pack **0.7.0** | Embed zone + index in sealed `.tet` (THI-627); `layout_version` stays 1; `history_version = 2` |
 | `layout_version` | On-disk container (still **1**) |
 | `protocol_version` | Package roles (still **2**) |
 | `TET_ABI_VERSION` | C shared library (still **1** at 0.6.x) |

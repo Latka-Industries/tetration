@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use tetration::catalog::{
     CHUNK_PAYLOAD_CODEC_V1, DATASET_DTYPE_TAG_V1, FooterBlobV1, RawArrayWrite, TetMetadataV1,
-    write_footer_blob, write_raw_array_file, write_recording_fixture,
+    embed_indexes_in_tet, write_footer_blob, write_raw_array_file, write_recording_fixture,
 };
 
 fn write_multichunk_2x3(path: &PathBuf, dtype: u32, data: &[u8]) {
@@ -131,6 +131,25 @@ fn main() {
         &le_f16_1_to_6(),
     );
     write_recording_fixture(&dir.join("recording.tet")).unwrap();
+
+    // 0.7.0: two chunks [1,2] and [10,11] with ZONE/INDEX embedded in the image.
+    let embedded = dir.join("embedded_zone.tet");
+    let vals = [1.0f32, 2.0, 10.0, 11.0];
+    let data: Vec<u8> = vals.iter().flat_map(|v| v.to_le_bytes()).collect();
+    write_raw_array_file(
+        &embedded,
+        &RawArrayWrite {
+            name: "a",
+            dtype: DATASET_DTYPE_TAG_V1.f32,
+            shape: &[4],
+            chunk_shape: &[2],
+            chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
+            data: &data,
+            file_execution: None,
+        },
+    )
+    .unwrap();
+    embed_indexes_in_tet(&embedded, 0).unwrap();
 
     println!("wrote {}", dir.display());
 }
