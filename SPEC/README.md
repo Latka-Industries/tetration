@@ -1,6 +1,6 @@
 # Tetration normative SPEC (0.6.x)
 
-**Status:** draft for the **0.7.0** cut (embedded ZONE/INDEX via `history_version = 2`; builds on 0.6.3 query pack / 0.5.2 freeze).  
+**Status:** normative for the **0.7.0** cut (embedded ZONE/INDEX via `history_version = 2`; builds on 0.6.3 query pack / 0.5.2 freeze).  
 **Audience:** someone implementing a **compatible `.tet` reader** (or package open + pin) without reading the Rust crate.  
 **Language:** **MUST** / **MUST NOT** / **SHOULD** / **MAY** follow [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 

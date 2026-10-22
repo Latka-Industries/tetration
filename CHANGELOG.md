@@ -2,9 +2,26 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-22
+
+### Added
+
+- Embed zone maps + secondary indexes **inside** the sealed `.tet` as THST footer spills (`history_version = 2`): `zone_maps_ref` / `secondary_index_ref` point at UTF-8 `ZONE.json` / `INDEX.json` blobs in the image ([`docs/embedded_indexes.md`](docs/embedded_indexes.md), THI-627).
+- `embed_indexes_in_tet` writer API; package + store seal embed into `packed.tet` and keep generation sidecars as transitional mirrors.
+- Convert and writer commit auto-embed ZONE/INDEX into standalone `.tet` output (write-time zone stats; no second payload scan for zones).
+- Query discovery prefers embedded spills, then sidecars — standalone `.tet` / `tet pack` output can pushdown without a `.tet.d` package.
+- `tet index` / `tet index --clear` to (re)embed or drop spills on an existing file.
+- Conformance pack milestone **0.7.0** (`embedded_zone.tet` verify + filtered sum).
+- Fuzz target `secondary_index_seal` (`mise fuzz-index-seal`) builds a tiny packed `.tet` from mutated tiles and runs seal-time INDEX / embed.
+
+### Changed
+
 - Standalone embed (convert / writer / `tet index`) no longer SHA-256s the full `.tet` for `packed_sha256`; writes an all-zero placeholder. Package seal still hashes the pre-spill image for MANIFEST / sidecar binding.
 - Value-postings seal streams elements and aborts at the cardinality cap instead of collecting every distinct value in a chunk first (multi-GiB float converts no longer thrash on the first tile). Zone stats during parallel streaming write run in the fill workers.
-- Fuzz target `secondary_index_seal` (`mise fuzz-index-seal`) builds a tiny packed `.tet` from mutated tiles and runs seal-time INDEX / embed (covers the value-postings early-abort path).
+
+### Notes
+
+- Semver **minor**: layout theme (footer framing). `layout_version` stays **1**; `history_version = 2` when embeds are present (v1-only readers refuse). Package / C ABI unchanged. Pin **tet-py** separately after crates.io publish.
 
 ## [0.6.6] - 2026-10-21
 

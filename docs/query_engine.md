@@ -76,7 +76,7 @@ Errors always go to **stderr** with non-zero exit. See [CLI query output](#cli-q
 
 ## Store-backed reads (0.3.0 / Phase 12 foundation)
 
-**Current crate:** **0.6.6** (conformance pack milestone **0.6.3**). Store/package foundation shipped in **0.3.0**+; zone maps **0.4.0**, cell `filter` **0.4.1**/**0.4.4**, value postings **0.4.5**, distributed fold library **0.5.0**, windows / align / label `group_by` **0.6.0–0.6.3**, `sorted_axis_range` **0.6.5**, `coord_label_postings` + `label_filter` **0.6.6**. Per-cut detail: [`CHANGELOG.md`](../CHANGELOG.md).
+**Current crate:** **0.7.0** (conformance pack milestone **0.7.0**). Store/package foundation shipped in **0.3.0**+; zone maps **0.4.0**, cell `filter` **0.4.1**/**0.4.4**, value postings **0.4.5**, distributed fold library **0.5.0**, windows / align / label `group_by` **0.6.0–0.6.3**, `sorted_axis_range` **0.6.5**, `coord_label_postings` + `label_filter` **0.6.6**, **embedded ZONE/INDEX** in sealed `.tet` (**0.7.0**). Per-cut detail: [`CHANGELOG.md`](../CHANGELOG.md).
 
 Embedders can plan and execute against a pinned package object using [`PackageStore`](../src/catalog/store/mod.rs) range gets:
 
