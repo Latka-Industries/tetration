@@ -109,7 +109,7 @@ impl ValueAccum {
             ReductionKind::NanCount => nan_count_scalar = Some(usize_as_f64(self.match_count)),
             ReductionKind::InfCount => inf_count_scalar = Some(usize_as_f64(self.match_count)),
             ReductionKind::NullCount { .. } => {
-                null_count_scalar = Some(usize_as_f64(self.match_count))
+                null_count_scalar = Some(usize_as_f64(self.match_count));
             }
             ReductionKind::Count | ReductionKind::ArgMin | ReductionKind::ArgMax => {}
         }

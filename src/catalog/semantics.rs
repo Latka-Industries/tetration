@@ -428,7 +428,7 @@ pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
     const SHAPE: [u64; 3] = [6, 2, 2];
     const CHUNK: [u64; 3] = [2, 2, 2];
     let mut data = vec![0u8; 6 * 2 * 2 * 4];
-    for (slot, n) in data.chunks_exact_mut(4).zip(1_u32..=24) {
+    for (slot, n) in data.as_chunks_mut::<4>().0.iter_mut().zip(1_u32..=24) {
         slot.copy_from_slice(&(n as f32).to_le_bytes());
     }
     write_raw_array_file(

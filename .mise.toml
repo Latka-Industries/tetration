@@ -73,10 +73,16 @@ depends = ["fixtures:sync"]
 dir = "{{config_root}}/fixtures"
 run = "uv run generate-fixtures all"
 
+[tasks."fixtures:bench-small"]
+description = "Generate gitignored ~512 MiB bench_small suite (h5 + nc + zarr)"
+depends = ["fixtures:sync"]
+dir = "{{config_root}}/fixtures"
+run = "uv run generate-fixtures bench-small"
+
 [tasks."fixtures:clean-all"]
 description = "Remove all generated files under fixtures/"
 confirm = "Delete all files in fixtures/?"
-run = "rm -rf fixtures/large fixtures/extra_large fixtures/small"
+run = "rm -rf fixtures/large fixtures/extra_large fixtures/bench_small fixtures/small"
 
 [tasks."fixtures:clean-large"]
 description = "Remove generated files under fixtures/large/"
@@ -88,18 +94,23 @@ description = "Remove generated files under fixtures/extra_large/"
 confirm = "Delete all files in fixtures/extra_large/?"
 run = "rm -rf fixtures/extra_large"
 
+[tasks."fixtures:clean-bench-small"]
+description = "Remove generated files under fixtures/bench_small/"
+confirm = "Delete all files in fixtures/bench_small/?"
+run = "rm -rf fixtures/bench_small"
+
 [tasks."bench:auto"]
 description = "Large/extra_large bench — .tet queries with execution.device auto (all formats)"
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --tet-device auto"
 
 [tasks."bench:cpu"]
-description = "Default ops (scalar+QC: mean/sum/min/max/…) — large+extra, all formats, CPU"
+description = "Default ops (scalar+QC) — small+large+extra, all formats, CPU"
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --tet-device cpu"
 
 [tasks."bench:scalar"]
-description = "Scalar folds only (mean/sum/min/max/count/std/var) — large+extra, all formats, CPU"
+description = "Scalar folds only — small+large+extra, all formats, CPU"
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --ops scalar --tet-device cpu"
 
@@ -109,7 +120,7 @@ depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --tier large --ops transforms --tet-device cpu"
 
 [tasks."bench:full"]
-description = "ALL ops (scalar+QC+windows+transforms) × large+extra × all formats — CPU; expect ≥1 hour"
+description = "ALL ops × small+large+extra × all formats — CPU; expect ≥1 hour"
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large --ops all --tet-device cpu"
 
@@ -136,6 +147,16 @@ run = "cargo build --release && uv run --directory fixtures bench-large h5 --tet
 description = "Window bins/rolling vs NumPy peer on large h5 only (THI-608); CPU"
 depends = ["fixtures:sync"]
 run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier large --ops windows --tet-device cpu"
+
+[tasks."bench:windows:small"]
+description = "Window bins/rolling vs NumPy on ~512 MiB h5 (fast smoke); CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier small --ops windows --tet-device cpu"
+
+[tasks."bench:windows:extra"]
+description = "Window bins/rolling vs NumPy on 20 GiB h5 (OOC path); CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier extra --ops windows --tet-device cpu"
 
 [tasks."bench:query06"]
 description = "Alias for bench:windows (THI-608)"

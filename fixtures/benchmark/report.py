@@ -95,7 +95,7 @@ def _build_markdown_lines(
     slab_mib = CHUNK_ELEMS // (1024 * 1024)
     spec = spec_summary()
     lines = [
-        "# Large / extra_large benchmark",
+        "# Small / large / extra_large benchmark",
         "",
         f"- **Run ID:** `{run_id}`",
         f"- **Date (UTC):** {datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}",

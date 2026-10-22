@@ -39,6 +39,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "large: ~20 GiB total across h5/nc/zarr (untracked); "
             "large-*: one ~6.67 GiB file for that format (untracked); "
             "extra-large-*: one 20 GiB file for that format (untracked); "
+            "bench-small*: ~512 MiB bench tier (untracked; not fixtures/small); "
             "all: small + large suite only"
         ),
     )
@@ -60,6 +61,7 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
+            "  bench-large h5 --tier small --ops windows --tet-device cpu\n"
             "  bench-large h5 --tier large --ops windows --tet-device cpu\n"
             "  bench-large --tier large --ops mean,sum\n"
             "  bench-large --tier all --ops all\n"
@@ -76,9 +78,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     bench.add_argument(
         "--tier",
-        choices=("large", "extra", "all"),
+        choices=("small", "large", "extra", "all"),
         default="all",
-        help="workload size: large (~6.7 GiB), extra (~20 GiB), or all (default: all)",
+        help=(
+            "workload size: small (~512 MiB), large (~6.7 GiB), extra (~20 GiB), "
+            "or all (default: all)"
+        ),
     )
     bench.add_argument(
         "--ops",

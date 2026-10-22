@@ -9,7 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Gitignored stress tensors (regenerate with mise run fixtures:large / fixtures:extra-large-*)
+# Gitignored stress tensors (regenerate with mise run fixtures:large / fixtures:extra-large-* / fixtures:bench-small)
 large/
 extra_large/
+bench_small/
 bench_results/

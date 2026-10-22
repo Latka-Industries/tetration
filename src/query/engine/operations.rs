@@ -471,7 +471,8 @@ fn build_transform_operation_preview(
         ..
     } = *input;
     let policy = require_spill_allowlist(spill_allowlist, "transform operation")?;
-    let fold_policy = fold::fold_policy::FoldIoPolicy::resolve(plan, &budget, execution, dtype)?;
+    let fold_policy =
+        fold::fold_policy::FoldIoPolicy::resolve(plan, &budget, execution, dtype, true)?;
     let transform_input = crate::query::transform::TransformRunInput {
         mmap,
         plan,
@@ -517,7 +518,15 @@ fn build_fold_operation_preview(
         tet_path,
         ..
     } = *input;
-    let fold_policy = fold::fold_policy::FoldIoPolicy::resolve(plan, &budget, execution, dtype)?;
+    // Window folds have no linear_scan path; keep parallel chunk fold when OOC.
+    let allows_linear_scan = window.is_none();
+    let fold_policy = fold::fold_policy::FoldIoPolicy::resolve(
+        plan,
+        &budget,
+        execution,
+        dtype,
+        allows_linear_scan,
+    )?;
     if let Some(window) = window {
         let kind = fold::reduction::ReductionKind::from(op);
         let folded =

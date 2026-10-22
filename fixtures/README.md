@@ -46,6 +46,21 @@ Float arrays use a mild `linspace` + noise pattern; integer arrays use a determi
 
 **Suite total ≈ 20 GiB** across HDF5 + NetCDF + Zarr. Slab writes use **~64 MiB** chunks so peak RAM stays modest during generation.
 
+### Bench-small (gitignored)
+
+Fast multi-chunk stress for `bench-large --tier small` (**not** the tracked `fixtures/small/` smoke shapes). **512 MiB** logical f32 per format (8 × 64 MiB slabs):
+
+| Path                              | Size        |
+| --------------------------------- | ----------- |
+| `bench_small/h5/tensor_small.h5`  | **512 MiB** |
+| `bench_small/netcdf/tensor_small.nc` | **512 MiB** |
+| `bench_small/zarr/tensor_small/`  | **512 MiB** |
+
+```bash
+mise run fixtures:bench-small
+mise run fixtures:clean-bench-small
+```
+
 ### Extra-large (gitignored)
 
 One **20 GiB logical f32** file per format (original single-file stress layout):
@@ -86,39 +101,43 @@ Sequential per **tier**, then wipe the whole **format** tree before the next for
 4. **Delete source** (only `.tet` needed from here)
 5. `.tet` mean
 6. **Delete `.tet`**
-7. After both tiers (large + extra): **delete `large/{format}/` and `extra_large/{format}/`**
+7. After all selected tiers: **delete `bench_small/{format}/`, `large/{format}/`, and `extra_large/{format}/`**
 
-**Primary comparison:** full-tensor ops on the native file vs **`.tet`** query — see `fixtures/benchmark/constants.py` (`OP_REGISTRY`). Slice the matrix with **`--tier large|extra|all`** and **`--ops`** groups (`default`, `scalar`, `qc`, `transforms`, `windows` / `query06`, `all`) or named ops. **Default** ops: scalar + QC. **Windows** (`window_bins_sum`, `window_rolling_sum`) compare NumPy slab folds vs `.tet` (same axis/size/mode). `align` + label `group_by` need richer fixtures before they join this matrix.  
+**Primary comparison:** full-tensor ops on the native file vs **`.tet`** query — see `fixtures/benchmark/constants.py` (`OP_REGISTRY`). Slice the matrix with **`--tier small|large|extra|all`** and **`--ops`** groups (`default`, `scalar`, `qc`, `transforms`, `windows` / `query06`, `all`) or named ops. **Default** ops: scalar + QC. **Windows** (`window_bins_sum`, `window_rolling_sum`) compare NumPy slab folds vs `.tet` (same axis/size/mode). `align` + label `group_by` need richer fixtures before they join this matrix.  
 **Secondary:** **convert** time (one-time import).
 
 `.tet` query timing uses **`execution.device: auto`** by default (`tet query --device auto`); override with `--tet-device cpu` or `TET_BENCH_DEVICE`. Reports include a **device** column (`device_used` and fallback reason when CPU wins).
 
 **Interpreting the device column (Phase 10):**
 
-| Tier      | ~size   | Typical result                                                                                                                                                        |
-| --------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **large** | 6.7 GiB | `metal` or `cuda` when built with GPU features and host-RAM gate allows — GPU does sum/mean/min/max; **var/std use host SIMD** after materialize.                     |
-| **extra** | 20 GiB  | Usually **CPU** or **streaming GPU** (dense path blocked by host-RAM gate) — ~2 s/op with CPU streaming; GPU may route via per-chunk streaming when features enabled. |
+| Tier      | ~size    | Typical result                                                                                                                                                        |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **small** | 512 MiB  | In-core CPU/GPU smoke; catches dumb regressions without a multi-hour run.                                                                                             |
+| **large** | 6.7 GiB  | `metal` or `cuda` when built with GPU features and host-RAM gate allows — GPU does sum/mean/min/max; **var/std use host SIMD** after materialize.                     |
+| **extra** | 20 GiB   | Usually **CPU** or **streaming GPU** (dense path blocked by host-RAM gate) — ~2 s/op with CPU streaming; GPU may route via per-chunk streaming when features enabled. |
 
 For CPU-only timing comparisons, use **`mise run bench:cpu`**. GPU backends are optional crate features; default `cargo build` does not link Metal/CUDA.
 
 ```bash
 mise run bench              # alias for bench:auto (all formats)
 mise run bench:auto         # execution.device auto (Metal on macOS with tetration-metal, else CUDA/CPU)
-mise run bench:cpu          # default ops (scalar+QC) on large+extra, all formats, CPU
+mise run bench:cpu          # default ops (scalar+QC) on small+large+extra, all formats, CPU
 mise run bench:scalar       # mean/sum/min/max/count/std/var only (CPU)
 mise run bench:transforms   # zscore…softmax vs fair NumPy peers — large, all formats, CPU
 mise run bench:windows      # h5 large only: window bins/rolling vs NumPy (CPU)
+mise run bench:windows:small  # h5 ~512 MiB windows smoke
+mise run bench:windows:extra  # h5 20 GiB windows (OOC path)
 mise run bench:index        # THI-613: small (≈16 MiB select) + large (≈0.4 GiB) vs HDF5+NumPy
 mise run bench:index:small  # microbench only (~16 MiB select)
 mise run bench:index:extra  # 20 GiB (select ≈1.25 GiB; long generate)
-mise run bench:full         # ALL ops × large+extra × all formats — CPU; expect ≥1 hour
+mise run bench:full         # ALL ops × small+large+extra × all formats — CPU; expect ≥1 hour
 mise run bench:metal        # macOS: --features tetration-metal, device metal (large tier only useful)
 mise run bench:gpu          # Linux+NVIDIA: --features tetration-gpu, device cuda
 mise run bench:h5           # one format only (auto device)
 uv run --directory fixtures bench-large --run-id my-run   # archived under bench_results/runs/
 uv run --directory fixtures bench-large --skip-mean   # convert timing only
 uv run --directory fixtures bench-large --ops transforms   # + transform_zscore, …, transform_softmax
+uv run --directory fixtures bench-large h5 --tier small --ops windows --tet-device cpu
 uv run --directory fixtures bench-large h5 --tier large --ops windows --tet-device cpu
 uv run --directory fixtures bench-large --tier large --ops mean,sum
 uv run --directory fixtures bench-large --tier all --ops all

@@ -288,7 +288,7 @@ impl TetShardWriter {
 
     /// Queue an in-memory dataset with an explicit claim (full-grid or chunk ranges).
     ///
-    /// The claim must name the same dataset and match dtype / shape / chunk_shape. The part
+    /// The claim must name the same dataset and match dtype / shape / `chunk_shape`. The part
     /// file still holds whatever tiles [`TetWriterSession`] writes; claims are publish-time
     /// ownership metadata (decision E).
     ///

@@ -13,7 +13,7 @@ RUNS_DIR = RESULTS_DIR / "runs"
 RESULTS_FILE = RESULTS_DIR / "latest.md"
 
 FormatName = Literal["h5", "netcdf", "zarr"]
-TierName = Literal["large", "extra"]
+TierName = Literal["small", "large", "extra"]
 OpName = str
 ValueMode = Literal["scalar", "reduced_sum_total", "window_count"]
 
@@ -217,18 +217,18 @@ OP_GROUPS: dict[str, tuple[OpName, ...]] = {
     "all": ALL_OPS,
 }
 
-TierFilter = Literal["large", "extra", "all"]
-DEFAULT_TIERS: tuple[TierName, ...] = ("large", "extra")
+TierFilter = Literal["small", "large", "extra", "all"]
+DEFAULT_TIERS: tuple[TierName, ...] = ("small", "large", "extra")
 
 
 def parse_tiers(raw: str | None) -> tuple[TierName, ...]:
-    """Parse `--tier large|extra|all` (default all)."""
+    """Parse `--tier small|large|extra|all` (default all)."""
     token = (raw or "all").strip().lower()
     if token == "all":
         return DEFAULT_TIERS
-    if token in ("large", "extra"):
+    if token in ("small", "large", "extra"):
         return (token,)  # type: ignore[return-value]
-    raise ValueError(f"unknown tier {raw!r}; choose large, extra, or all")
+    raise ValueError(f"unknown tier {raw!r}; choose small, large, extra, or all")
 
 
 @dataclass(frozen=True)

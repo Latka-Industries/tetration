@@ -42,7 +42,11 @@ def delete_path_logged(path: Path, label: str) -> None:
 
 
 def cleanup_format_tree(format: FormatName) -> None:
-    for tier_root in (FIXTURES_ROOT / "large", FIXTURES_ROOT / "extra_large"):
+    for tier_root in (
+        FIXTURES_ROOT / "bench_small",
+        FIXTURES_ROOT / "large",
+        FIXTURES_ROOT / "extra_large",
+    ):
         fmt_dir = tier_root / format
         if fmt_dir.exists():
             shutil.rmtree(fmt_dir)
