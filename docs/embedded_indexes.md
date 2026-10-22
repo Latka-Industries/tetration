@@ -2,7 +2,7 @@
 
 Contract for carrying the same logical content as generation `ZONE.json` / `INDEX.json` **inside** a sealed `.tet` image. Parent: [THI-627](https://linear.app/thicclatka/issue/THI-627) / [THI-626](https://linear.app/thicclatka/issue/THI-626) under [THI-609](https://linear.app/thicclatka/issue/THI-609).
 
-Through **0.6.x**, zone maps and secondary indexes are **package sidecars** beside `packed.tet` ([`secondary_indexes.md`](secondary_indexes.md)). A standalone `.tet` has no pushdown. **0.7.0** embeds those UTF-8 JSON blobs in the sealed image so `tet query -t foo.tet` can skip chunks without a `.tet.d` package. `.tet.d` remains the multi-writer path only.
+Through **0.6.x**, zone maps and secondary indexes are **package sidecars** beside `packed.tet` ([`secondary_indexes.md`](secondary_indexes.md)). A bare standalone `.tet` had no pushdown. **0.7.0** embeds those UTF-8 JSON blobs in the sealed image so `tet query -t foo.tet` can skip chunks without a `.tet.d` package. Convert and writer commit **auto-embed**; `tet index` re-embeds older files. `.tet.d` remains the multi-writer path only.
 
 This document locks **where the bytes live**, **versioning**, **discovery**, and **verify**. Writer emit, query load, package publish mirrors, and conformance fixtures shipped with **0.7.0** (THI-627).
 

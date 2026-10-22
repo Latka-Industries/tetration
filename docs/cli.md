@@ -10,7 +10,8 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
 | [`tet semantics`](#tet-semantics) `scaffold\|set`  | —      | Declare science/media attrs / scaffold caller policy         |
-| [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet`              |
+| [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet` (auto-embeds ZONE/INDEX) |
+| [`tet index`](#tet-index) `<path.tet>`             | —      | (Re)embed or `--clear` ZONE/INDEX footer spills (0.7.0)     |
 | [`tet export`](#tet-export) `<in.tet> <out>`       | —      | `.tet` → Zarr v3 / HDF5 / NetCDF (from output path)         |
 | [`tet ingest`](#tet-ingest--publish--compact--pack) | —    | Stage `.tet` inputs into a `.tet.d` package                 |
 | [`tet publish`](#tet-ingest--publish--compact--pack) / [`compact`](#tet-ingest--publish--compact--pack) | — | Seal staging → generation / flip `CURRENT` |
@@ -140,6 +141,18 @@ Worked recording fixture: `fixtures/small/tet/recording.tet` (`frame_rate`, `tim
 | `--jobs N`      | Parallel chunk read workers (`0` = host `available_parallelism`, capped at 64)                  |
 | `--strict`      | Fail (no output file) when any source array is skipped                                          |
 | `--chunk-mib N` | Retile every dataset to about N MiB along the leading axis. Omit to keep source chunks (or 64 MiB for NumPy, CSV, and Parquet) |
+
+Convert **auto-embeds** zone maps + optional secondary indexes into the output `.tet` (`history_version = 2`). See [`embedded_indexes.md`](embedded_indexes.md).
+
+## `tet index`
+
+(Re)build or drop embedded ZONE/INDEX spills on a sealed standalone `.tet`. Convert and writer commit already embed; use this for older bare files or a no-pushdown baseline.
+
+| Flag / arg | Effect |
+| ---------- | ------ |
+| `<path.tet>` | Target sealed file |
+| `--clear` | Drop embeds (`history_version = 1`; keep history/metadata) |
+| `-q`, `--quiet` | Suppress the one-line summary |
 
 ## `tet export`
 
