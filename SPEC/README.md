@@ -106,13 +106,22 @@ Other codec values **MUST** be refused (or treated as unsupported capability —
 
 ### 1.5 Optional history footer
 
-When `flags & 1`, the file ends with UTF-8 `history_json`, optional `metadata_spill`, then `history_json_len` (`u64`), `history_version` (`u32` = `1`), magic ASCII `THST`. Readers without footer support **MAY** ignore the flag only for payload-bound purposes when the flag is **0**; when the flag is **1**, payload validation **MUST** use `file_len − footer_suffix`.
+When `flags & 1`, the file ends with optional spills, UTF-8 `history_json`, then `history_json_len` (`u64`), `history_version` (`u32`), magic ASCII `THST`.
 
-Dimension names, coordinate labels, and attrs live in footer `metadata` (inline or spill). They enable name→axis and label→index resolution at plan time; they are **not** a query index by default.
+| `history_version` | Spills readers **MUST** account for in payload bounds |
+| ----------------- | ----------------------------------------------------- |
+| `1` | Optional `metadata_spill` via `metadata_ref` only |
+| `2` | Optional `zone_maps_spill` / `secondary_index_spill` / `metadata_spill` via `zone_maps_ref` / `secondary_index_ref` / `metadata_ref` (order toward EOF: zone → index → metadata → JSON). Detail: [`docs/embedded_indexes.md`](../docs/embedded_indexes.md) |
 
-### 1.6 Generation sidecars (not layout regions)
+Other `history_version` values **MUST** be refused. Readers without footer support **MAY** ignore the flag only for payload-bound purposes when the flag is **0**; when the flag is **1**, payload validation **MUST** use `file_len − footer_suffix`.
 
-`ZONE.json` and `INDEX.json` beside `packed.tet` are **not** part of the v1 byte image and do **not** bump `layout_version`. A reader that only opens `packed.tet` remains valid. Missing or unusable indexes **MUST NOT** change answers; they only affect chunk-skip optimization. Detail: [`docs/secondary_indexes.md`](../docs/secondary_indexes.md).
+Dimension names, coordinate labels, and attrs live in footer `metadata` (inline or spill). They enable name→axis and label→index resolution at plan time; they are **not** a query index by default. Zone maps and secondary indexes (0.7.0 embed or package sidecars) are optional pushdown only.
+
+### 1.6 Generation sidecars and embedded indexes
+
+Through **0.6.x**, `ZONE.json` and `INDEX.json` beside `packed.tet` are **not** part of the v1 byte image and do **not** bump `layout_version`. A reader that only opens `packed.tet` remains valid. Missing or unusable indexes **MUST NOT** change answers; they only affect chunk-skip optimization. Detail: [`docs/secondary_indexes.md`](../docs/secondary_indexes.md).
+
+**0.7.0:** the same UTF-8 documents **MAY** be embedded as footer spills (`history_version = 2`). `layout_version` stays **1**. Sidecars **MAY** remain as transitional mirrors. Discovery prefers embed, then sidecar. Detail: [`docs/embedded_indexes.md`](../docs/embedded_indexes.md).
 
 ---
 

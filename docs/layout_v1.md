@@ -208,17 +208,21 @@ When superblock **`flags & 1`**, the file may end with a self-describing footer 
 
 | Region (suffix at EOF) | Size     | Notes                                                                                                                                                                                        |
 | ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zone_maps_spill`      | variable | **0.7.0 / `history_version = 2`:** optional raw UTF-8 `ZONE.json` bytes; referenced by `zone_maps_ref`. Order: after payloads, before index/metadata spills. Detail: [`embedded_indexes.md`](embedded_indexes.md). |
+| `secondary_index_spill`| variable | **0.7.0 / `history_version = 2`:** optional raw UTF-8 `INDEX.json` bytes; referenced by `secondary_index_ref`.                                                                                |
+| `metadata_spill`       | variable | Optional raw UTF-8 JSON for `metadata` when inline `history_json` would exceed **64 KiB**; referenced by `metadata_ref` in `history_json`. Lies after chunk payloads (and after zone/index spills when present), before `history_json`. |
 | `history_json`         | variable | UTF-8 JSON object: `{"history":[…], "metadata":{…}}` (optional keys). See below.                                                                                                             |
-| `metadata_spill`       | variable | Optional raw UTF-8 JSON for `metadata` when inline `history_json` would exceed **64 KiB**; referenced by `metadata_ref` in `history_json`. Lies after chunk payloads, before `history_json`. |
 | `history_json_len`     | 8        | `u64` LE byte length of `history_json`.                                                                                                                                                      |
-| `history_version`      | 4        | `u32` LE; must be **1**.                                                                                                                                                                     |
+| `history_version`      | 4        | `u32` LE; **1** (pre-embed) or **2** (may carry zone/index refs). Other values refuse.                                                                                                       |
 | magic                  | 4        | ASCII **`THST`**.                                                                                                                                                                            |
 
-Chunk payload validation uses **`file_len − footer_suffix`** (footer JSON + tail + optional `metadata_spill`). Readers without history support ignore the flag and treat the full file length as payload bounds only when the flag is **0**. `tet info` / [`read_tet_summary_v1`](../src/catalog/mod.rs) surface parsed `history` and resolved `metadata`.
+Chunk payload validation uses **`file_len − footer_suffix`** (footer JSON + tail + every known spill: zone, index, metadata). Readers without history support ignore the flag and treat the full file length as payload bounds only when the flag is **0**. `tet info` / [`read_tet_summary_v1`](../src/catalog/mod.rs) surface parsed `history` and resolved `metadata`.
 
 **`history` rows** — each entry is a JSON object `{ "op", "source", "at", "parents"?, "params"? }`. Legacy files may use a three-element array `[op, source, at]`; readers accept both. New writers emit objects only.
 
 **`metadata`** — inline object when small (see [`MetadataLimitsV1`](../src/catalog/metadata.rs)). Shape: optional `file` attrs plus `datasets` map keyed by catalog name; each entry may include `dim_names`, `coords` (per-axis `labels`), and `attrs`. When too large, writers spill UTF-8 JSON to `metadata_spill` and set `"metadata_ref": { "offset", "len" }` in `history_json` (mutually exclusive with inline `metadata`).
+
+**`zone_maps_ref` / `secondary_index_ref` (0.7.0)** — same `{ offset, len }` shape as `metadata_ref`. Only legal when `history_version = 2`. Spill order toward EOF is zone → index → metadata → `history_json`. See [`embedded_indexes.md`](embedded_indexes.md).
 
 ## Reference subset (current Rust writer)
 
@@ -251,7 +255,9 @@ Normative when the bytes live in a package (local `.tet.d` or a store key), not 
 
 Writers publish a new generation under a new key. They do not rewrite a sealed `packed.tet`. Detail: [`query_engine.md` — Pin / consistency](query_engine.md#pin--consistency).
 
-Optional generation sidecars are not regions of this file. `ZONE.json` (0.4 zone maps) and `INDEX.json` (value postings) live beside `packed.tet` under `generations/<G>/`. They are not a superblock flag, dataset-directory field, or chunk-index change. `layout_version` stays **1**. A reader that only opens `packed.tet`, including 0.4.0–0.4.4, still opens the package: `GenerationManifest` ignores unknown keys, and a standalone `.tet` has no index. `INDEX.json` exists only when the manifest says `secondary_indexes: "present"`. Verify checks that blob by hash and, with `--deep`, against a recompute from the sealed payloads. A missing or bad index is not a layout break; query falls back to zone maps. Detail: [`secondary_indexes.md`](secondary_indexes.md).
+**Through 0.6.x:** optional generation sidecars are not regions of this file. `ZONE.json` (0.4 zone maps) and `INDEX.json` (value postings and later kinds) live beside `packed.tet` under `generations/<G>/`. They are not a superblock flag, dataset-directory field, or chunk-index change. `layout_version` stays **1**. A reader that only opens `packed.tet`, including 0.4.0–0.4.4, still opens the package: `GenerationManifest` ignores unknown keys, and a standalone `.tet` has no index. `INDEX.json` exists only when the manifest says `secondary_indexes: "present"`. Verify checks that blob by hash and, with `--deep`, against a recompute from the sealed payloads. A missing or bad index is not a layout break; query falls back to zone maps. Detail: [`secondary_indexes.md`](secondary_indexes.md).
+
+**0.7.0:** the same JSON may also live as footer spills inside the sealed image (`history_version = 2`). `layout_version` stays **1**. Sidecars **MAY** remain as mirrors. Detail: [`embedded_indexes.md`](embedded_indexes.md).
 
 **Inside one query**, the engine already parallelizes chunk I/O on CPU when in-core (Rayon) or uses a sequential linear scan when out-of-core ([query engine — adaptive fold I/O](query_engine.md#adaptive-fold-io)).
 

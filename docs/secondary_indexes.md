@@ -4,13 +4,13 @@ Contract for generation-scoped `INDEX.json` beside `packed.tet`. Started as [THI
 
 Zone maps answer “can this chunk possibly match?” A secondary index answers a narrower question: “which chunks contain this exact value / label / coord span?” The index is optional. A missing or unusable index falls back to zone maps and a full chunk read (or footer label scan for `label_filter`). It must not change answers.
 
-**Through 0.6.x** indexes stay package sidecars. Query against a `.tet.d` package root or a sealed `packed.tet` loads the pinned generation’s `ZONE.json` / `INDEX.json` the same way (0.6.6). Standalone `.tet` still has no sidecars until **0.7.0** embeds them ([THI-626](https://linear.app/thicclatka/issue/THI-626) / [THI-627](https://linear.app/thicclatka/issue/THI-627)).
+**Through 0.6.x** indexes stay package sidecars. Query against a `.tet.d` package root or a sealed `packed.tet` loads the pinned generation’s `ZONE.json` / `INDEX.json` the same way (0.6.6). **0.7.0** embeds the same JSON inside the sealed image ([`embedded_indexes.md`](embedded_indexes.md); [THI-627](https://linear.app/thicclatka/issue/THI-627)). This document remains the sidecar + kind contract; embed reuses it.
 
-## Decision
+## Decision (0.4.5–0.6.x sidecars)
 
 One generation-scoped sidecar, `generations/<G>/INDEX.json`, named from the sealed generation’s `MANIFEST.json`.
 
-Not inside `packed.tet`. Not a layout-v1 capability flag. Not a pointer at the package root.
+Through 0.6.x: not inside `packed.tet`. Not a layout-v1 capability flag. Not a pointer at the package root. **0.7.0** keeps this sidecar shape as an optional mirror and adds footer spills — see [`embedded_indexes.md`](embedded_indexes.md).
 
 ### Why not a capability flag
 
@@ -60,8 +60,9 @@ The manifest token is the existence check. “A file happens to be there” is n
 
 ## Forward compatibility
 
-- `layout_version` stays **1**. No new superblock bits. No new region in `packed.tet`.
-- Old readers open `packed.tet` and ignore unknown manifest keys and unknown siblings.
+- Through 0.6.x: `layout_version` stays **1**. No new superblock bits. No new region in `packed.tet`.
+- **0.7.0:** still `layout_version = 1`; embed uses `history_version = 2` footer spills ([`embedded_indexes.md`](embedded_indexes.md)).
+- Old readers open `packed.tet` and ignore unknown manifest keys and unknown siblings (sidecar era). Embed-era files with `history_version = 2` are refused by history-v1-only readers.
 - `INDEX.json` with `version` other than 1: the query ignores the document and falls back. The package still opens.
 - A later `kind` in the same file does not break a reader that only knows earlier kinds.
 
@@ -238,4 +239,4 @@ Staging is not checked. Seal is the only writer.
 
 Mandatory indexes. Updating an index without a new generation. Cell-value sorted-range indexes. Label-filter OR / multi-label `in` lists. A public index-builder API. Changing what `zone_filter_skipped_chunks` means.
 
-**Through 0.6.x:** bytes inside `packed.tet` (indexes remain generation sidecars). **0.7.0** plans to embed zone + index in the sealed image.
+**0.7.0 embed:** [`embedded_indexes.md`](embedded_indexes.md) — zone + index spills in the sealed image; sidecars optional mirrors.

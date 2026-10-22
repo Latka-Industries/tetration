@@ -17,7 +17,7 @@
 //! `pipeline`, and `label_filter`; optional generation sidecars `ZONE.json` / `INDEX.json`
 //! (`value_postings`, `sorted_axis_range`, `coord_label_postings`) accelerate chunk skip. Layout /
 //! package / C ABI / conformance pack milestone remain **0.6.3**. Per-release notes:
-//! [`CHANGELOG.md`](../CHANGELOG.md). Roadmap (0.7.0 embeds zone+index in `.tet`):
+//! [`CHANGELOG.md`](../CHANGELOG.md). Roadmap (0.7.0 embed: [`docs/embedded_indexes.md`](../docs/embedded_indexes.md)):
 //! [`docs/roadmap.md`](../docs/roadmap.md).
 //!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
