@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Standalone embed (convert / writer / `tet index`) no longer SHA-256s the full `.tet` for `packed_sha256`; writes an all-zero placeholder. Package seal still hashes the pre-spill image for MANIFEST / sidecar binding.
+- Value-postings seal streams elements and aborts at the cardinality cap instead of collecting every distinct value in a chunk first (multi-GiB float converts no longer thrash on the first tile). Zone stats during parallel streaming write run in the fill workers.
 
 ## [0.6.6] - 2026-10-21
 

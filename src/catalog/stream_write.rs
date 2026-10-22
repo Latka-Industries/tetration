@@ -278,25 +278,27 @@ fn write_filled_tiles_parallel(
     let mut i = 0usize;
     while i < jobs.len() {
         let end = (i + parallel_jobs).min(jobs.len());
-        let mut batch: Vec<(usize, Vec<u8>)> = (i..end)
+        // Zone scan runs in the fill workers while the tile buffer is hot.
+        let mut batch: Vec<(usize, Vec<u8>, ChunkZoneStat)> = (i..end)
             .into_par_iter()
             .map(|idx| {
                 let job = &jobs[idx];
                 let mut buf = Vec::new();
                 prepare_tile_buffer(&mut buf, job.raw_byte_len)?;
                 fill_tile(job, &mut buf)?;
-                Ok((idx, buf))
+                let zone = tile_zone_stat(specs, job, &buf, dataset_fills)?;
+                Ok((idx, buf, zone))
             })
             .collect::<Result<Vec<_>, CatalogError>>()?;
-        batch.sort_by_key(|(idx, _)| *idx);
-        for (idx, tile_buf) in batch {
+        batch.sort_by_key(|(idx, _, _)| *idx);
+        for (idx, tile_buf, zone) in batch {
             let entry = &entries[idx];
             if tile_buf.len() as u64 != entry.raw_byte_len {
                 return Err(CatalogError::InvalidWriteSpec(
                     "fill_tile returned wrong byte length for chunk",
                 ));
             }
-            zones.push(tile_zone_stat(specs, &jobs[idx], &tile_buf, dataset_fills)?);
+            zones.push(zone);
             write_tile_payload(f, entry, &tile_buf, sequential)?;
             if let Some(ref mut progress) = on_progress {
                 progress(

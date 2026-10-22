@@ -587,6 +587,10 @@ struct DatasetAcc {
 }
 
 /// `Ok(false)` when this chunk pushes the dataset over the cardinality cap.
+///
+/// Streams elements into `acc` and stops as soon as the cap would be exceeded. Do **not**
+/// pre-collect all distinct values in the chunk first — a single high-cardinality float tile
+/// would allocate millions of keys before the cap could fire.
 fn accumulate_chunk(
     acc: &mut DatasetAcc,
     chunk_index: &[u64],
@@ -600,52 +604,96 @@ fn accumulate_chunk(
             "secondary-index payload length is not a multiple of the element size",
         ));
     }
-    let mut distinct = BTreeSet::new();
-    collect_non_null(dtype, elem_size, raw, fill, &mut distinct)?;
-    for value in distinct {
-        if !acc.values.contains_key(&value) && acc.values.len() >= VALUE_POSTINGS_MAX_CARDINALITY {
-            return Ok(false);
-        }
-        acc.values
-            .entry(value)
-            .or_default()
-            .insert(chunk_index.to_vec());
-    }
-    Ok(true)
-}
-
-fn collect_non_null(
-    dtype: u32,
-    elem_size: usize,
-    raw: &[u8],
-    fill: Option<&[u8]>,
-    out: &mut BTreeSet<Vec<u8>>,
-) -> Result<(), CatalogError> {
     let tags = DATASET_DTYPE_TAG_V1;
     if tags.is_f32(dtype) {
-        collect_float::<4, f32>(raw, fill, f32::from_le_bytes, f32::is_nan, out);
-        return Ok(());
+        return stream_float_chunk::<4, f32>(
+            acc,
+            chunk_index,
+            raw,
+            fill,
+            f32::from_le_bytes,
+            f32::is_nan,
+        );
     }
     if tags.is_f64(dtype) {
-        collect_float::<8, f64>(raw, fill, f64::from_le_bytes, f64::is_nan, out);
-        return Ok(());
+        return stream_float_chunk::<8, f64>(
+            acc,
+            chunk_index,
+            raw,
+            fill,
+            f64::from_le_bytes,
+            f64::is_nan,
+        );
     }
     if tags.is_f16(dtype) {
-        collect_float::<2, half::f16>(raw, fill, half::f16::from_le_bytes, half::f16::is_nan, out);
-        return Ok(());
+        return stream_float_chunk::<2, half::f16>(
+            acc,
+            chunk_index,
+            raw,
+            fill,
+            half::f16::from_le_bytes,
+            half::f16::is_nan,
+        );
     }
     if matches_int(dtype, elem_size) {
-        for le in raw.chunks_exact(elem_size) {
-            if fill.is_some_and(|f| f == le) {
-                continue;
-            }
-            out.insert(le.to_vec());
-        }
-        return Ok(());
+        return stream_int_chunk(acc, chunk_index, raw, elem_size, fill);
     }
     Err(CatalogError::InvalidWriteSpec(
         "unsupported dataset dtype tag",
     ))
+}
+
+fn note_value(acc: &mut DatasetAcc, chunk_index: &[u64], value: Vec<u8>) -> bool {
+    if let Some(chunks) = acc.values.get_mut(&value) {
+        chunks.insert(chunk_index.to_vec());
+        return true;
+    }
+    if acc.values.len() >= VALUE_POSTINGS_MAX_CARDINALITY {
+        return false;
+    }
+    acc.values
+        .entry(value)
+        .or_default()
+        .insert(chunk_index.to_vec());
+    true
+}
+
+fn stream_int_chunk(
+    acc: &mut DatasetAcc,
+    chunk_index: &[u64],
+    raw: &[u8],
+    elem_size: usize,
+    fill: Option<&[u8]>,
+) -> Result<bool, CatalogError> {
+    for le in raw.chunks_exact(elem_size) {
+        if fill.is_some_and(|f| f == le) {
+            continue;
+        }
+        if !note_value(acc, chunk_index, le.to_vec()) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn stream_float_chunk<const N: usize, T: Copy>(
+    acc: &mut DatasetAcc,
+    chunk_index: &[u64],
+    raw: &[u8],
+    fill: Option<&[u8]>,
+    from_le: fn([u8; N]) -> T,
+    is_nan: fn(T) -> bool,
+) -> Result<bool, CatalogError> {
+    for le in raw.as_chunks::<N>().0 {
+        let v = from_le(*le);
+        if is_nan(v) || fill.is_some_and(|f| f == le.as_slice()) {
+            continue;
+        }
+        if !note_value(acc, chunk_index, le.to_vec()) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn matches_int(dtype: u32, elem_size: usize) -> bool {
@@ -657,20 +705,4 @@ fn matches_int(dtype: u32, elem_size: usize) -> bool {
         || (tags.is_u32(dtype) && elem_size == 4)
         || (tags.is_u16(dtype) && elem_size == 2)
         || (tags.is_u8(dtype) && elem_size == 1)
-}
-
-fn collect_float<const N: usize, T: Copy>(
-    raw: &[u8],
-    fill: Option<&[u8]>,
-    from_le: fn([u8; N]) -> T,
-    is_nan: fn(T) -> bool,
-    out: &mut BTreeSet<Vec<u8>>,
-) {
-    for le in raw.as_chunks::<N>().0 {
-        let v = from_le(*le);
-        if is_nan(v) || fill.is_some_and(|f| f == le.as_slice()) {
-            continue;
-        }
-        out.insert(le.to_vec());
-    }
 }
