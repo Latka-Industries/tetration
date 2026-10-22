@@ -62,6 +62,9 @@ impl FoldIoPolicy {
 
     /// In-core: parallel chunks. Out-of-core full dense raw scan with contiguous payloads: linear scan.
     /// Set `execution.fold_parallel: false` for offset-ordered sequential chunk visits.
+    ///
+    /// Linear scan reads every payload byte and does **not** apply cell/`label_eq` filters.
+    /// When either predicate is set, force the chunked fold path so [`fold_keeps_element`] runs.
     pub fn resolve(
         plan: &ReadPlan,
         budget: &ExecutionBudget,
@@ -74,10 +77,13 @@ impl FoldIoPolicy {
         let full_dense = Self::is_dense_unit_step_full_selection(plan);
         let contiguous_raw =
             linear_scan::detect_contiguous_raw_span(plan, dtype.elem_size()).is_some();
+        // Byte-stream fold has no per-element predicate; cell/label filters need chunked visit.
+        let element_pred = plan.cell_filter.is_some() || plan.label_eq.is_some();
 
         let linear_scan = io_regime == IoRegime::OutOfCore
             && full_dense
             && contiguous_raw
+            && !element_pred
             && hints.and_then(|h| h.fold_parallel) != Some(true);
 
         let parallel = if linear_scan {
