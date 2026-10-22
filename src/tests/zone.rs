@@ -7,8 +7,8 @@ use serde_json::json;
 use crate::catalog::store::ReadAt;
 use crate::catalog::{
     DATASET_DTYPE_TAG_V1, GenerationPin, MemoryStore, TetDatasetWrite, TetPackage, TetShardWriter,
-    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, embed_indexes_in_tet, publish_staged_parts,
-    read_zone_maps_file, stage_part, zone_maps_key,
+    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, publish_staged_parts, read_zone_maps_file, stage_part,
+    zone_maps_key,
 };
 use crate::query::types::CHUNK_TOUCH_POLICY;
 use crate::query::{
@@ -224,16 +224,16 @@ fn value_filter_skips_chunks_outside_zone_bounds() {
     let ex = executed.execution.expect("execution");
     assert!(ex.total_bytes_read_from_disk < full_plan.total_stored_bytes);
 
-    // Without ZONE.json beside the path, filter does not skip.
+    // Standalone copy of packed.tet still pushdown-skips when ZONE is embedded (0.7.0).
     let lone = dir.path().join("lone.tet");
     fs::write(&lone, &bytes).unwrap();
     let lone_path = lone.display().to_string();
-    let no_zone = plan_query_with_tet_mmap(&filtered, Some(&lone_path), &bytes, Some(0))
+    let embedded_plan = plan_query_with_tet_mmap(&filtered, Some(&lone_path), &bytes, Some(0))
         .unwrap()
         .read_plan
         .expect("plan");
-    assert_eq!(no_zone.chunk_count, 2);
-    assert_eq!(no_zone.zone_filter_skipped_chunks, 0);
+    assert_eq!(embedded_plan.chunk_count, 1);
+    assert_eq!(embedded_plan.zone_filter_skipped_chunks, 1);
 }
 
 #[test]
@@ -324,13 +324,11 @@ fn store_publish_writes_zone_object() {
 fn embedded_zone_maps_pushdown_on_standalone_tet() {
     let dir = tempfile::tempdir().unwrap();
     let pkg = TetPackage::create(dir.path().join("emb.tet.d")).unwrap();
-    // Two chunks of 2: [1, 2] and [10, 11].
+    // Two chunks of 2: [1, 2] and [10, 11]. Seal embeds ZONE into packed.tet.
     publish_f32(&pkg, 1, "s", "only", &[1.0, 2.0, 10.0, 11.0]);
     let packed = pkg.packed_tet_path(1);
     let lone = dir.path().join("standalone.tet");
     fs::copy(&packed, &lone).unwrap();
-    // Drop package sidecars — only the sealed image remains.
-    embed_indexes_in_tet(&lone, 0).unwrap();
     let bytes = fs::read(&lone).unwrap();
     let path = lone.display().to_string();
 

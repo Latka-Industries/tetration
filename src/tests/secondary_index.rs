@@ -313,13 +313,14 @@ fn eq_posting_skips_chunks_zone_maps_keep() {
     );
 
     fs::remove_file(pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
-    let fallback = execute_sum(&packed, &bytes, query);
-    let fallback_plan = fallback.read_plan.expect("plan");
-    assert_eq!(fallback_plan.zone_filter_skipped_chunks, 0);
-    assert_eq!(fallback_plan.index_filter_skipped_chunks, 0);
-    assert_eq!(fallback_plan.chunk_count, 3);
+    let via_embed = execute_sum(&packed, &bytes, query);
+    let via_embed_plan = via_embed.read_plan.expect("plan");
+    // Sidecar gone; embedded INDEX in packed.tet still pushdown-skips (0.7.0).
+    assert_eq!(via_embed_plan.zone_filter_skipped_chunks, 0);
+    assert_eq!(via_embed_plan.index_filter_skipped_chunks, 2);
+    assert_eq!(via_embed_plan.chunk_count, 1);
     assert_eq!(
-        fallback.execution.expect("execution").operation_sum,
+        via_embed.execution.expect("execution").operation_sum,
         Some(9.0)
     );
 }

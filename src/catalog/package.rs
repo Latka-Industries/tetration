@@ -338,10 +338,11 @@ impl TetPackage {
         Ok(quarantine)
     }
 
-    /// Seal generation `G`: copy `packed_tet` into the publish lock dir, recompute per-chunk
-    /// zone maps into `ZONE.json` and optional value postings into `INDEX.json`, write
-    /// `MANIFEST` (`zone_maps: "required"`, `secondary_indexes` `present` or `omitted`), rename
-    /// into `generations/<G>/`, then flip `CURRENT` (decision I). Staging parts are not updated.
+    /// Seal generation `G`: copy `packed_tet` into the publish lock dir, embed zone maps (+
+    /// optional `INDEX`) into the sealed image (`history_version = 2`), mirror the same JSON as
+    /// sidecars, write `MANIFEST` (`zone_maps: "required"`, `secondary_indexes` `present` or
+    /// `omitted`), rename into `generations/<G>/`, then flip `CURRENT` (decision I). Staging
+    /// parts are not updated.
     ///
     /// Caller must hold the lock from [`Self::begin_publish`]. On success the lock directory
     /// becomes the sealed generation tree (no longer under `publishing/`).
@@ -370,32 +371,30 @@ impl TetPackage {
         }
 
         let packed_bytes = fs::read(packed_tet)?;
-        let packed_byte_len = packed_bytes.len() as u64;
-        let packed_sha256 = super::zone::sha256_hex(&packed_bytes);
-        let (zone_bytes, zone_sha) =
-            super::zone::zone_maps_json_for_packed(&packed_bytes, generation, &packed_sha256)?;
-        let index = super::secondary_index::prepare_secondary_index(
-            &packed_bytes,
-            generation,
-            &packed_sha256,
-        )?;
+        let staged_packed = lock_dir.join(PACKED_TET);
+        fs::write(&staged_packed, &packed_bytes)?;
+        // Embed zone (+ optional INDEX) into the sealed image; keep sidecars as mirrors.
+        let embedded = super::embed_index::embed_indexes_in_tet(&staged_packed, generation)?;
+        let packed_byte_len = fs::metadata(&staged_packed)?.len();
         let manifest = GenerationManifest {
             generation,
             protocol_version: PACKAGE_PROTOCOL_VERSION,
             part_ids,
             packed_byte_len,
-            packed_sha256: Some(packed_sha256),
+            // Pre-spill hash (matches ZONE/INDEX `packed_sha256`); byte_len is final on-disk size.
+            packed_sha256: Some(embedded.packed_sha256),
             zone_maps: Some(super::zone::ZONE_MAPS_REQUIRED.to_owned()),
-            zone_maps_sha256: Some(zone_sha),
-            secondary_indexes: Some(index.status.to_owned()),
-            secondary_indexes_sha256: index.sha256.clone(),
+            zone_maps_sha256: Some(embedded.zone_maps_sha256),
+            secondary_indexes: Some(embedded.secondary_index.status.to_owned()),
+            secondary_indexes_sha256: embedded.secondary_index.sha256.clone(),
         };
 
-        let staged_packed = lock_dir.join(PACKED_TET);
-        fs::write(&staged_packed, &packed_bytes)?;
         write_json_atomic(&lock_dir.join(MANIFEST_FILE), &manifest)?;
-        fs::write(lock_dir.join(super::zone::ZONE_MAPS_FILE), &zone_bytes)?;
-        if let Some(bytes) = &index.bytes {
+        fs::write(
+            lock_dir.join(super::zone::ZONE_MAPS_FILE),
+            &embedded.zone_maps_json,
+        )?;
+        if let Some(bytes) = &embedded.secondary_index.bytes {
             fs::write(
                 lock_dir.join(super::secondary_index::SECONDARY_INDEX_FILE),
                 bytes,

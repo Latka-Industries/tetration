@@ -614,24 +614,118 @@ fn check_packed_sha(
             }
             Ok(findings)
         }
-        Some(expected) => match sha256_file_hex(packed) {
-            Ok(actual) if actual == *expected => {
-                findings.push(ok_finding("manifest_sha256", Some("match".to_owned())));
-                Ok(findings)
+        Some(expected) => {
+            // 0.7.0 embed: MANIFEST.packed_sha256 is the pre-spill image. Full-file hash
+            // no longer matches once zone/index spills are appended.
+            if packed_has_embedded_indexes(packed) {
+                return check_embedded_packed_sha(packed, manifest, expected, findings);
             }
-            Ok(actual) => {
-                findings.push(err_finding(
-                    "manifest_sha256",
-                    format!("packed.tet sha256 {actual} != MANIFEST {expected}"),
-                ));
-                Err(findings)
+            match sha256_file_hex(packed) {
+                Ok(actual) if actual == *expected => {
+                    findings.push(ok_finding("manifest_sha256", Some("match".to_owned())));
+                    Ok(findings)
+                }
+                Ok(actual) => {
+                    findings.push(err_finding(
+                        "manifest_sha256",
+                        format!("packed.tet sha256 {actual} != MANIFEST {expected}"),
+                    ));
+                    Err(findings)
+                }
+                Err(e) => {
+                    findings.push(err_finding("manifest_sha256", e.to_string()));
+                    Err(findings)
+                }
             }
-            Err(e) => {
-                findings.push(err_finding("manifest_sha256", e.to_string()));
-                Err(findings)
-            }
-        },
+        }
     }
+}
+
+fn check_embedded_packed_sha(
+    packed: &Path,
+    manifest: &GenerationManifest,
+    expected: &str,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
+    let Some(zone_sha) = manifest.zone_maps_sha256.as_deref() else {
+        findings.push(ok_finding(
+            "manifest_sha256",
+            Some("embedded; skip full-file hash".to_owned()),
+        ));
+        return Ok(findings);
+    };
+    let Some(zone_path) = packed.parent().map(|p| p.join(ZONE_MAPS_FILE)) else {
+        findings.push(ok_finding(
+            "manifest_sha256",
+            Some("embedded; skip full-file hash".to_owned()),
+        ));
+        return Ok(findings);
+    };
+    if !zone_path.is_file() {
+        // Required ZONE sidecar missing — `check_zone_maps` reports that; do not
+        // fail here on the unrecoverable full-file hash.
+        findings.push(ok_finding(
+            "manifest_sha256",
+            Some("embedded; ZONE mirror deferred".to_owned()),
+        ));
+        return Ok(findings);
+    }
+    let bytes = match fs::read(&zone_path) {
+        Ok(b) => b,
+        Err(e) => {
+            findings.push(err_finding("manifest_sha256", e.to_string()));
+            return Err(findings);
+        }
+    };
+    if sha256_hex(&bytes) != zone_sha {
+        findings.push(err_finding(
+            "manifest_sha256",
+            format!("{ZONE_MAPS_FILE} sha256 does not match MANIFEST zone_maps_sha256"),
+        ));
+        return Err(findings);
+    }
+    let doc: crate::catalog::GenerationZoneMaps = match serde_json::from_slice(&bytes) {
+        Ok(d) => d,
+        Err(e) => {
+            findings.push(err_finding("manifest_sha256", e.to_string()));
+            return Err(findings);
+        }
+    };
+    if doc.packed_sha256 != expected {
+        findings.push(err_finding(
+            "manifest_sha256",
+            format!(
+                "ZONE packed_sha256 {} != MANIFEST {expected}",
+                doc.packed_sha256
+            ),
+        ));
+        return Err(findings);
+    }
+    findings.push(ok_finding(
+        "manifest_sha256",
+        Some("pre-spill via ZONE mirror".to_owned()),
+    ));
+    Ok(findings)
+}
+
+fn packed_has_embedded_indexes(packed: &Path) -> bool {
+    let Ok(bytes) = fs::read(packed) else {
+        return false;
+    };
+    if bytes.len() < crate::layout::SUPERBLOCK_V1_LEN {
+        return false;
+    }
+    let Ok(sb) = crate::layout::SuperblockV1::from_bytes(
+        bytes[..crate::layout::SUPERBLOCK_V1_LEN]
+            .try_into()
+            .expect("slice length checked"),
+    ) else {
+        return false;
+    };
+    crate::catalog::read_embedded_zone_maps_bytes(&bytes, sb.flags)
+        .ok()
+        .flatten()
+        .is_some()
 }
 
 fn check_packed_layout(
