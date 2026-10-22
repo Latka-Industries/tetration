@@ -1,13 +1,16 @@
-//! Localhost N-process distributed fold (THI-618): spawn real `tet worker` processes.
+//! Localhost N-process distributed fold + dense materialize (THI-618 / THI-617).
 
 use std::path::PathBuf;
 
 use tetration::catalog::{TetDatasetWrite, TetWriterSession};
 use tetration::layout::mmap_file_read;
 use tetration::query::distributed::{
-    MultiprocessFoldOpts, ShardPartition, execute_sharded_scalar_fold_multiprocess,
+    MultiprocessDenseOpts, MultiprocessFoldOpts, ShardPartition,
+    execute_sharded_scalar_fold_multiprocess, execute_sharded_tier_c_multiprocess,
 };
-use tetration::query::{parse_query_json, plan_query_with_tet_mmap_ex, validate_query};
+use tetration::query::{
+    SpillPathAllowlist, parse_query_json, plan_query_with_tet_mmap_ex, validate_query,
+};
 
 fn tet_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_tet"))
@@ -58,5 +61,42 @@ fn multiprocess_sum_matches_monolithic() {
         "multiprocess sum {} != mono {}",
         mp.operation_sum.unwrap(),
         mono_sum
+    );
+}
+
+#[test]
+fn multiprocess_median_matches_monolithic() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mp_median.tet");
+    write_tiny_f32(&path);
+
+    let doc = parse_query_json(r#"{"dataset":"a","median":[]}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let policy = SpillPathAllowlist::default_for_tet(&path, std::iter::empty::<PathBuf>()).unwrap();
+    let tet = path.to_str().unwrap();
+    let mono = plan_query_with_tet_mmap_ex(&doc, Some(tet), &mmap, Some(0), Some(&policy)).unwrap();
+    let want = mono.execution.as_ref().unwrap().operation_median.unwrap();
+    let plan = mono.read_plan.as_ref().unwrap();
+    let op = doc.operation.as_ref().unwrap();
+    let worker_bin = tet_bin();
+
+    let mp = execute_sharded_tier_c_multiprocess(
+        MultiprocessDenseOpts {
+            tet_path: &path,
+            plan,
+            doc: &doc,
+            n_shards: 3,
+            partition: ShardPartition::ContiguousRanges,
+            write: None,
+            worker_bin: &worker_bin,
+        },
+        op,
+    )
+    .unwrap();
+    assert!(
+        (mp.operation_median.unwrap() - want).abs() < 1e-9,
+        "multiprocess median {} != mono {want}",
+        mp.operation_median.unwrap()
     );
 }

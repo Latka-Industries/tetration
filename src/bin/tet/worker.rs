@@ -1,9 +1,9 @@
-//! `tet worker` — localhost distributed harness entry (THI-618).
+//! `tet worker` — localhost distributed harness entry (THI-618 / THI-617).
 //!
 //! Reads one [`WorkerJobV1`](tetration::query::distributed::WorkerJobV1) JSON
-//! (`--job PATH` or stdin), folds the shard against the pin path, writes
-//! [`WorkerPartialV1`](tetration::query::distributed::WorkerPartialV1) JSON to stdout.
-//! Not a cluster scheduler — see crate `docs/distributed_boundary.md`.
+//! (`--job PATH` or stdin), runs the shard against the pin path (fold or dense
+//! materialize), writes [`WorkerPartialV1`](tetration::query::distributed::WorkerPartialV1)
+//! JSON to stdout. Not a cluster scheduler — see crate `docs/distributed_boundary.md`.
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -13,7 +13,7 @@ use tetration::query::distributed::{
     WorkerJobV1, execute_worker_job_v1, write_worker_partial_json,
 };
 
-/// Run `tet worker`: read job JSON, fold shard, write partial JSON to stdout.
+/// Run `tet worker`: read job JSON, run shard (fold or dense), write partial JSON to stdout.
 ///
 /// # Errors
 ///

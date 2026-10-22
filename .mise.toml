@@ -22,7 +22,7 @@ description = "Run SPEC conformance pack (THI-592)"
 run = "cargo test --lib conformance"
 
 [tasks."distributed:smoke"]
-description = "In-process + localhost N-process distributed fold harness (THI-618)"
+description = "In-process + localhost N-process distributed fold/dense harness (THI-618 / THI-617)"
 run = "cargo test --lib distributed && cargo test --test distributed_multiprocess"
 
 [tasks."smoke:py"]

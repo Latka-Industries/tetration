@@ -35,7 +35,7 @@ impl FoldPartialState {
     }
 
     pub(crate) fn from_accums(
-        value: ValueAccum,
+        value: &ValueAccum,
         arg: ArgIndexAccum,
         bytes_read: u64,
         kind: ReductionKind,
@@ -54,6 +54,14 @@ impl FoldPartialState {
 #[must_use]
 pub fn operation_is_shard_mergeable(op: &Operation) -> bool {
     !op.requires_materialize() && !op.requires_transform()
+}
+
+/// True when `op` uses the dense-shard path (tier-C materialize or transform) under 0.7.2.
+///
+/// Selection-only documents (no operation) are also dense-distributable at the harness layer.
+#[must_use]
+pub fn operation_is_dense_distributable(op: &Operation) -> bool {
+    op.requires_materialize() || op.requires_transform()
 }
 
 /// Merge `src` into `dst` (disjoint chunk visits). Kind selects argmin/argmax combine law.
@@ -107,7 +115,7 @@ pub fn merge_fold_partials(
 /// Returns [`TetError::Validation`] when the op is not mergeable or the merged state is empty
 /// when at least one value was required.
 pub fn finish_fold_partial(
-    state: FoldPartialState,
+    state: &FoldPartialState,
     op: &Operation,
     logical_element_count: usize,
     allow_empty: bool,

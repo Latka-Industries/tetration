@@ -11,6 +11,10 @@ mod stats;
 mod target;
 mod warnings;
 
+pub(crate) use apply::transform_read_plan_f32_le_ram;
+pub(crate) use stats::collect_transform_stats;
+pub(crate) use warnings::TransformWarnings;
+
 use std::path::Path;
 
 use crate::query::dispatch;
