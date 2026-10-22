@@ -152,7 +152,7 @@ pub fn plan_query_with_tet_mmap_ex(
     spill_allowlist: Option<&SpillPathAllowlist>,
 ) -> Result<QueryResponse, TetError> {
     let zones = zone_maps_beside(tet_path)?;
-    let index = secondary_index_beside(tet_path, mmap);
+    let index = secondary_index_beside(tet_path);
     plan_query_with_zones(
         doc,
         tet_path,
@@ -192,14 +192,27 @@ pub(crate) fn plan_query_with_zones(
     }
 }
 
+/// Directory that holds `ZONE.json` / `INDEX.json` / `MANIFEST.json` for a query path.
+///
+/// Accepts either a sealed `packed.tet` (sidecars beside it) or a `.tet.d` package root
+/// (sidecars under the pinned generation). Standalone `.tet` files have no sidecars.
+fn sidecar_dir(tet_path: &Path) -> Option<PathBuf> {
+    if crate::verify::looks_like_tet_package(tet_path) {
+        let pkg = crate::catalog::TetPackage::open(tet_path).ok()?;
+        let pin = pkg.pin_current().ok()?;
+        return pin.packed_tet_path().parent().map(Path::to_path_buf);
+    }
+    tet_path.parent().map(Path::to_path_buf)
+}
+
 fn zone_maps_beside(tet_path: Option<&str>) -> Result<Option<GenerationZoneMaps>, TetError> {
     let Some(tet_path) = tet_path else {
         return Ok(None);
     };
-    let zone = Path::new(tet_path).parent().map(|p| p.join(ZONE_MAPS_FILE));
-    let Some(zone) = zone else {
+    let Some(dir) = sidecar_dir(Path::new(tet_path)) else {
         return Ok(None);
     };
+    let zone = dir.join(ZONE_MAPS_FILE);
     if !zone.is_file() {
         return Ok(None);
     }
@@ -210,13 +223,11 @@ fn zone_maps_beside(tet_path: Option<&str>) -> Result<Option<GenerationZoneMaps>
 
 /// Usable `INDEX.json` beside `packed.tet`, or `None` when the claim is missing or bad.
 ///
-/// A bad blob is ignored. The query keeps the zone-map plan.
-fn secondary_index_beside(
-    tet_path: Option<&str>,
-    packed: &[u8],
-) -> Option<GenerationSecondaryIndex> {
-    let parent = Path::new(tet_path?).parent()?;
-    let manifest_path = parent.join("MANIFEST.json");
+/// A bad blob is ignored. The query keeps the zone-map plan. Also resolves `.tet.d`
+/// package roots to the pinned generation (same sidecars as `packed.tet`).
+fn secondary_index_beside(tet_path: Option<&str>) -> Option<GenerationSecondaryIndex> {
+    let dir = sidecar_dir(Path::new(tet_path?))?;
+    let manifest_path = dir.join("MANIFEST.json");
     if !manifest_path.is_file() {
         return None;
     }
@@ -226,12 +237,11 @@ fn secondary_index_beside(
         return None;
     }
     let sha = manifest.secondary_indexes_sha256.as_deref()?;
-    let bytes = fs::read(parent.join(SECONDARY_INDEX_FILE)).ok()?;
+    let bytes = fs::read(dir.join(SECONDARY_INDEX_FILE)).ok()?;
     crate::query::plan::index_pushdown::usable_secondary_index(
         &bytes,
         sha,
         manifest.packed_sha256.as_deref(),
-        Some(packed),
     )
 }
 

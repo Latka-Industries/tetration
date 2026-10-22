@@ -5,7 +5,10 @@ use crate::query::fold::fold_policy::{
     FoldIoPolicy, IoRegime, PARALLEL_MIN_LOGICAL_BYTES, chunk_indices_for_fold, resolve_io_regime,
 };
 use crate::query::fold::linear_scan;
-use crate::query::types::{ExecutionHints, PlannedChunkIo, ReadPlan};
+use crate::query::types::{
+    CellPredicate, ExecutionHints, LabelEqPred, PlannedChunkIo, ReadPlan, ValueCompareOp,
+    ValueFilter, ValuePredicate,
+};
 use crate::utils::dtype::ElementDtype;
 
 fn sample_plan(chunks: Vec<PlannedChunkIo>, shape: u64) -> ReadPlan {
@@ -153,6 +156,49 @@ fn policy_parallel_default_all_regimes() {
     assert!(!policy.parallel);
     assert!(!policy.sequential_io);
     assert_eq!(policy.fold_workers, None);
+}
+
+#[test]
+fn policy_out_of_core_skips_linear_scan_when_label_eq() {
+    let tight_budget = ExecutionBudget {
+        memory_budget_bytes: 1,
+        host_available_ram_bytes: Some(100),
+        memory_budget_percent_bps: 2500,
+    };
+    let mut plan = sample_plan(two_chunks(), 32);
+    plan.label_eq = Some(LabelEqPred {
+        axis: 0,
+        matching: vec![true, false],
+    });
+    let policy =
+        FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32).expect("resolve");
+    assert_eq!(policy.io_regime, IoRegime::OutOfCore);
+    assert!(
+        !policy.linear_scan,
+        "label_eq must not use byte-stream fold (would ignore position filter)"
+    );
+}
+
+#[test]
+fn policy_out_of_core_skips_linear_scan_when_cell_filter() {
+    let tight_budget = ExecutionBudget {
+        memory_budget_bytes: 1,
+        host_available_ram_bytes: Some(100),
+        memory_budget_percent_bps: 2500,
+    };
+    let mut plan = sample_plan(two_chunks(), 32);
+    plan.cell_filter = Some(CellPredicate::from_filter(
+        &ValueFilter {
+            predicates: vec![ValuePredicate::Compare {
+                op: ValueCompareOp::Gt,
+                value: 0.0,
+            }],
+        },
+        None,
+    ));
+    let policy =
+        FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32).expect("resolve");
+    assert!(!policy.linear_scan);
 }
 
 #[test]

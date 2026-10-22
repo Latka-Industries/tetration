@@ -16,15 +16,18 @@ use crate::catalog::{
 };
 use crate::query::types::{ValueCompareOp, ValueFilter, ValuePredicate};
 
-/// Parse `INDEX.json` bytes when the manifest claim and, when supplied, the packed image match.
+/// Parse `INDEX.json` bytes when the manifest claim matches.
 ///
-/// Any failure returns `None` so the query falls back instead of skipping the wrong chunks.
+/// Checks: INDEX bytes hash = `manifest_sha256`, document `version` is 1, and (when
+/// supplied) `manifest_packed_sha256` equals the document's `packed_sha256`. Does **not**
+/// re-hash the sealed `packed.tet` — that is a multi-GiB cost on every query; deep verify
+/// already recomputes the index from the image. Any failure returns `None` so the query
+/// falls back instead of skipping the wrong chunks.
 #[must_use]
 pub(crate) fn usable_secondary_index(
     bytes: &[u8],
     manifest_sha256: &str,
     manifest_packed_sha256: Option<&str>,
-    packed: Option<&[u8]>,
 ) -> Option<GenerationSecondaryIndex> {
     if sha256_hex(bytes) != manifest_sha256 {
         return None;
@@ -35,11 +38,6 @@ pub(crate) fn usable_secondary_index(
     }
     if let Some(expected) = manifest_packed_sha256
         && expected != doc.packed_sha256
-    {
-        return None;
-    }
-    if let Some(packed) = packed
-        && sha256_hex(packed) != doc.packed_sha256
     {
         return None;
     }

@@ -104,9 +104,11 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.6.6:** optional `coord_label_postings` + closed `label_filter: { axis, eq }` (pandas-style footer label equality; AND with cell `filter`; THI-614). Layout / package / C ABI / pack milestone unchanged (**0.6.3**). PyPI **tet-py** pin after crates.io.
 
-**Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Sorted-axis segments answer “which chunks cover this numeric coord span?” Coord-label postings answer “which chunks contain this category name?” Indexes stay optional, verifiable, and outside the v1 byte layout.
+**Planned for 0.7.0 (layout):** embed zone maps + secondary indexes **inside** the sealed `.tet` so a standalone file is complete for pushdown (no publish-to-`.tet.d` required). `.tet.d` stays the multi-writer path only. Ladder: [THI-626](https://linear.app/thicclatka/issue/THI-626) / [THI-627](https://linear.app/thicclatka/issue/THI-627); parent [THI-609](https://linear.app/thicclatka/issue/THI-609).
 
-**Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**. The posting list does not change `packed.tet`.
+**Why it matters:** at petabyte scale, **I/O avoidance** often beats raw decode speed. Zone maps answer “can this chunk’s range contain the predicate?” They keep every chunk when ranges overlap. Postings answer “which chunks contain this exact value?” and skip the rest. Sorted-axis segments answer “which chunks cover this numeric coord span?” Coord-label postings answer “which chunks contain this category name?” Through 0.6.x indexes stay optional sidecars beside `packed.tet`; **0.7.0** moves them into the image.
+
+**Relation to v1:** filter-by-value chunk skip is in **0.4.1**. Group-by over dimension names is in **0.4.2**. Cell filter on kept chunks ships in **0.4.4**. Through 0.6.x the posting list does not change `packed.tet`; **0.7.0** does (layout bump).
 
 ---
 

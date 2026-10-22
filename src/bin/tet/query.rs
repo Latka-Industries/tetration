@@ -126,16 +126,20 @@ fn query_local_tet(
         );
     }
     if let (Some(orig), Some(resolved)) = (tet, resolved_tet.as_ref()) {
-        let path_display = orig.display().to_string();
+        // Pass the sealed packed.tet path for sidecar + linear-scan I/O. Echo the
+        // user-facing `-t` path (often a `.tet.d` root) as `tet_file` afterward.
+        let path_for_io = resolved.display().to_string();
         let mmap = mmap_file_read(resolved).map_err(cli_error)?;
-        return plan_query_with_tet_mmap_ex(
+        let mut response = plan_query_with_tet_mmap_ex(
             doc,
-            Some(path_display.as_str()),
+            Some(path_for_io.as_str()),
             &mmap,
             preview,
             spill_owned.as_ref(),
         )
-        .map_err(cli_error);
+        .map_err(cli_error)?;
+        response.tet_file = Some(orig.display().to_string());
+        return Ok(response);
     }
     if execute {
         return Err(cli_error("execute requires -t / --tet"));

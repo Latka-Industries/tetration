@@ -102,7 +102,6 @@ fn load_store_secondary_index(
         &bytes,
         sha,
         manifest.packed_sha256.as_deref(),
-        None,
     )
 }
 

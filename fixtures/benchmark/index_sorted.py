@@ -71,7 +71,10 @@ def _must_ok(proc: subprocess.CompletedProcess[str], what: str) -> None:
         raise RuntimeError(f"{what} failed:\n{proc.stderr or proc.stdout}")
 
 
-def query_doc() -> dict[str, Any]:
+def query_doc(*, fold_parallel: bool | None = None) -> dict[str, Any]:
+    execution: dict[str, Any] = {"device": "cpu"}
+    if fold_parallel is not None:
+        execution["fold_parallel"] = fold_parallel
     return {
         "dataset": "data",
         "layout_version": 1,
@@ -80,7 +83,7 @@ def query_doc() -> dict[str, Any]:
             {},
         ],
         "sum": [],
-        "execution": {"device": "cpu"},
+        "execution": execution,
     }
 
 
@@ -88,22 +91,31 @@ def query_doc() -> dict[str, Any]:
 LABEL_EQ_VALUE = INDEX_SELECT_START
 
 
-def label_eq_query_doc() -> dict[str, Any]:
+def label_eq_query_doc(*, fold_parallel: bool | None = None) -> dict[str, Any]:
+    execution: dict[str, Any] = {"device": "cpu"}
+    if fold_parallel is not None:
+        execution["fold_parallel"] = fold_parallel
     return {
         "dataset": "data",
         "layout_version": 1,
         # Decimal axis: CF imports may omit dim_names; coords still resolve by extent.
         "label_filter": {"axis": "0", "eq": LABEL_EQ_VALUE},
         "sum": [],
-        "execution": {"device": "cpu"},
+        "execution": execution,
     }
 
 
-def query_body() -> str:
-    return json.dumps(query_doc())
+def query_body(*, fold_parallel: bool | None = None) -> str:
+    return json.dumps(query_doc(fold_parallel=fold_parallel))
 
 
-def run_tet_query(tet: Path, pkg: Path, body: str | None = None) -> tuple[float, dict]:
+def run_tet_query(
+    tet: Path,
+    pkg: Path,
+    body: str | None = None,
+    *,
+    warm: bool = True,
+) -> tuple[float, dict]:
     cmd = [
         str(tet),
         "query",
@@ -124,10 +136,19 @@ def run_tet_query(tet: Path, pkg: Path, body: str | None = None) -> tuple[float,
         _must_ok(proc, "tet query")
         return json.loads(proc.stdout)
 
-    once()
+    if warm:
+        once()
     t0 = time.perf_counter()
     payload = once()
     return time.perf_counter() - t0, payload
+
+
+def warm_package(tet: Path, pkg: Path) -> None:
+    """Pull sealed bytes into page cache before timed runs (CLI spawn still paid)."""
+    log("warm: two throwaway range sums (page-cache packed.tet)")
+    body = query_body(fold_parallel=False)
+    run_tet_query(tet, pkg, body, warm=False)
+    run_tet_query(tet, pkg, body, warm=False)
 
 
 def source_h5_numpy_sum(fx: IndexFixture) -> tuple[float, float]:
@@ -198,6 +219,9 @@ def write_report(
         if fx.tier == "small"
         else f"select ≈ {fx.select_gib:.2f} GiB"
     )
+    tet_st = next((r for r in primary if r.backend == "tet ST"), None)
+    tet_par = next((r for r in primary if r.backend == "tet parallel"), None)
+    h5 = next((r for r in primary if r.backend == "hdf5+numpy"), None)
     lines = [
         f"# Sorted-axis range query bench (THI-613) — {fx.tier}",
         "",
@@ -210,12 +234,36 @@ def write_report(
         f"- shape: time={INDEX_TIME} × width={fx.width}, chunk (1, {fx.width})",
         f"- op: `sum` over time labels `[{INDEX_SELECT_START}, {INDEX_SELECT_STOP})` × full x",
         f"- accuracy (tet vs h5+numpy): **{'pass' if accurate else 'FAIL'}**",
+        "- method: warm page-cache, then time; tet ST = `fold_parallel:false`, "
+        "tet parallel = `fold_parallel:true`; hdf5+numpy is in-process",
         "",
-        "## Primary: tet vs HDF5 + NumPy",
+        "## Plain English",
         "",
-        "| backend | seconds | sum | chunks | note |",
-        "| --- | ---: | ---: | ---: | --- |",
     ]
+    if tet_st and tet_par and h5:
+        st_vs_h5 = h5.seconds / tet_st.seconds if tet_st.seconds > 0 else float("inf")
+        par_vs_h5 = h5.seconds / tet_par.seconds if tet_par.seconds > 0 else float("inf")
+        par_vs_st = tet_st.seconds / tet_par.seconds if tet_par.seconds > 0 else float("inf")
+        lines.extend(
+            [
+                f"- Select size ≈ **{select_note}** of a **{fx.logical_gib:.2f} GiB** file.",
+                f"- Single-thread tet: **{tet_st.seconds:.4f}s**. "
+                f"Parallel tet: **{tet_par.seconds:.4f}s** "
+                f"(parallel is {par_vs_st:.2f}× vs ST).",
+                f"- HDF5+NumPy (in-process): **{h5.seconds:.4f}s**.",
+                f"- vs NumPy: ST is {st_vs_h5:.2f}×, parallel is {par_vs_h5:.2f}× "
+                f"(>1 means tet faster).",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Primary: tet ST / parallel vs HDF5 + NumPy",
+            "",
+            "| backend | seconds | sum | chunks | note |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    )
     for row in primary:
         lines.append(
             f"| {row.backend} | {row.seconds:.4f} | "
@@ -293,53 +341,67 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     if "coord_label_postings" not in kinds:
         raise RuntimeError(f"INDEX.json missing coord_label_postings; kinds={kinds}")
 
-    log("tet: sealed package, selection + sum")
-    tet_s, payload = run_tet_query(tet, fx.pkg)
-    plan = payload.get("read_plan") or {}
-    exe = payload.get("execution") or {}
-    tet_sum = exe.get("operation_sum")
-    tet_chunks = plan.get("chunk_count")
-    fold_par = exe.get("fold_parallel")
-    primary = [
-        Row(
-            backend="tet",
-            seconds=tet_s,
-            value=tet_sum,
-            chunk_count=tet_chunks,
-            note=f"tet query CLI; fold_parallel={fold_par}",
-        )
-    ]
+    warm_package(tet, fx.pkg)
+
+    log("tet ST: fold_parallel=false, range sum")
+    st_body = query_body(fold_parallel=False)
+    tet_st_s, st_payload = run_tet_query(tet, fx.pkg, st_body, warm=False)
+    st_plan = st_payload.get("read_plan") or {}
+    st_exe = st_payload.get("execution") or {}
+    tet_sum = st_exe.get("operation_sum")
+    tet_chunks = st_plan.get("chunk_count")
+
+    log("tet parallel: fold_parallel=true, range sum")
+    par_body = query_body(fold_parallel=True)
+    tet_par_s, par_payload = run_tet_query(tet, fx.pkg, par_body, warm=False)
+    par_exe = par_payload.get("execution") or {}
+    par_sum = par_exe.get("operation_sum")
+    par_chunks = (par_payload.get("read_plan") or {}).get("chunk_count")
 
     log("source: HDF5 + NumPy same slab sum")
     h5_s, h5_sum = source_h5_numpy_sum(fx)
-    primary.append(
+    primary = [
+        Row(
+            backend="tet ST",
+            seconds=tet_st_s,
+            value=tet_sum,
+            chunk_count=tet_chunks,
+            note=f"CLI; fold_parallel={st_exe.get('fold_parallel')}",
+        ),
+        Row(
+            backend="tet parallel",
+            seconds=tet_par_s,
+            value=par_sum,
+            chunk_count=par_chunks,
+            note=f"CLI; fold_parallel={par_exe.get('fold_parallel')}",
+        ),
         Row(
             backend="hdf5+numpy",
             seconds=h5_s,
             value=h5_sum,
             chunk_count=INDEX_SELECT_LEN,
             note="h5py read + np.sum (in-process)",
-        )
-    )
+        ),
+    ]
 
     backup = idx.with_suffix(".json.bak")
     shutil.move(idx, backup)
-    log("tet: same query with INDEX.json removed (fallback)")
-    miss_s, miss_payload = run_tet_query(tet, fx.pkg)
+    log("tet: same query with INDEX.json removed (fallback, ST)")
+    miss_s, miss_payload = run_tet_query(tet, fx.pkg, st_body, warm=False)
     shutil.move(backup, idx)
     miss_exe = miss_payload.get("execution") or {}
     miss_plan = miss_payload.get("read_plan") or {}
     miss_sum = miss_exe.get("operation_sum")
     secondary = [
         Row(
-            backend="tet (index present)",
-            seconds=tet_s,
+            backend="tet ST (index present)",
+            seconds=tet_st_s,
             value=tet_sum,
             chunk_count=tet_chunks,
-            note="from primary row",
+            note="from primary ST row",
         ),
         Row(
-            backend="tet (index missing)",
+            backend="tet ST (index missing)",
             seconds=miss_s,
             value=miss_sum,
             chunk_count=miss_plan.get("chunk_count"),
@@ -347,7 +409,7 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
         ),
     ]
 
-    if tet_sum is None or miss_sum is None:
+    if tet_sum is None or miss_sum is None or par_sum is None:
         log("error: missing sum values")
         return 1
 
@@ -357,10 +419,13 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     if not values_match(float(tet_sum), float(miss_sum)):
         log(f"error: index present vs missing sum mismatch ({tet_sum} vs {miss_sum})")
         accurate = False
+    if not values_match(float(tet_sum), float(par_sum)):
+        log(f"error: tet ST vs parallel sum mismatch ({tet_sum} vs {par_sum})")
+        accurate = False
 
-    label_body = json.dumps(label_eq_query_doc())
+    label_body = json.dumps(label_eq_query_doc(fold_parallel=False))
     log(f"tet: label_filter eq={LABEL_EQ_VALUE!r} (THI-614)")
-    le_s, le_payload = run_tet_query(tet, fx.pkg, label_body)
+    le_s, le_payload = run_tet_query(tet, fx.pkg, label_body, warm=False)
     le_exe = le_payload.get("execution") or {}
     le_plan = le_payload.get("read_plan") or {}
     le_sum = le_exe.get("operation_sum")
@@ -368,7 +433,7 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     backup = idx.with_suffix(".json.bak")
     shutil.move(idx, backup)
     log("tet: label_filter with INDEX.json removed")
-    le_miss_s, le_miss_payload = run_tet_query(tet, fx.pkg, label_body)
+    le_miss_s, le_miss_payload = run_tet_query(tet, fx.pkg, label_body, warm=False)
     shutil.move(backup, idx)
     le_miss_exe = le_miss_payload.get("execution") or {}
     le_miss_plan = le_miss_payload.get("read_plan") or {}
@@ -395,6 +460,21 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     if not values_match(float(le_sum), float(le_miss_sum)):
         log(f"error: label_eq present vs missing sum mismatch ({le_sum} vs {le_miss_sum})")
         accurate = False
+    # Pushdown gate: unique time label → one chunk when INDEX loads via package path.
+    le_chunks = le_plan.get("chunk_count")
+    le_miss_chunks = le_miss_plan.get("chunk_count")
+    if le_skip is None or int(le_skip) < 1:
+        log(f"error: label_eq index present did not skip chunks (skipped={le_skip})")
+        accurate = False
+    if le_chunks is None or int(le_chunks) != 1:
+        log(f"error: label_eq index present expected chunk_count=1, got {le_chunks}")
+        accurate = False
+    if le_miss_chunks is None or int(le_miss_chunks) < 2:
+        log(
+            f"error: label_eq index missing expected full scan chunk_count>=2, "
+            f"got {le_miss_chunks}"
+        )
+        accurate = False
 
     try:
         git_rev = subprocess.check_output(
@@ -417,11 +497,13 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
             f"{row.backend}: {format_elapsed(row.seconds)}  sum={row.value}  "
             f"chunks={row.chunk_count}"
         )
-    if accurate and primary[0].seconds > 0:
-        ratio = primary[1].seconds / primary[0].seconds
+    if accurate and len(primary) >= 3 and primary[0].seconds > 0 and primary[1].seconds > 0:
+        st, par, h5 = primary[0], primary[1], primary[2]
         log(
-            f"primary [{tier}]: tet {primary[0].seconds:.4f}s vs hdf5+numpy "
-            f"{primary[1].seconds:.4f}s (numpy/tet = {ratio:.2f}x)"
+            f"primary [{tier}]: ST {st.seconds:.4f}s | parallel {par.seconds:.4f}s | "
+            f"hdf5+numpy {h5.seconds:.4f}s "
+            f"(numpy/ST={h5.seconds / st.seconds:.2f}x, "
+            f"numpy/par={h5.seconds / par.seconds:.2f}x)"
         )
     return 0 if accurate else 1
 
@@ -435,9 +517,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--tier",
-        choices=("small", "large", "extra", "both"),
+        choices=("small", "large", "extra", "both", "all"),
         default="both",
-        help="fixture size; 'both' runs small then large (default)",
+        help="fixture size; 'both'=small+large, 'all'=small+large+extra",
     )
     parser.add_argument(
         "--reuse-h5",
@@ -448,6 +530,8 @@ def main(argv: list[str] | None = None) -> int:
     tiers: tuple[IndexTier, ...]
     if args.tier == "both":
         tiers = ("small", "large")
+    elif args.tier == "all":
+        tiers = ("small", "large", "extra")
     else:
         tiers = (args.tier,)  # type: ignore[assignment]
     try:
