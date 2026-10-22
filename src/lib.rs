@@ -13,11 +13,13 @@
 //! reads a Zarr prefix one chunk at a time. `open_s3_package` pins an `s3://bucket/prefix` package
 //! and queries it with range reads.
 //!
-//! **Current line (0.6.6):** query wire includes closed `filter`, `group_by`, `window`, `align`,
-//! `pipeline`, and `label_filter`; optional generation sidecars `ZONE.json` / `INDEX.json`
-//! (`value_postings`, `sorted_axis_range`, `coord_label_postings`) accelerate chunk skip. Layout /
-//! package / C ABI / conformance pack milestone remain **0.6.3**. Per-release notes:
-//! [`CHANGELOG.md`](../CHANGELOG.md). Roadmap (0.7.0 embed: [`docs/embedded_indexes.md`](../docs/embedded_indexes.md)):
+//! **Current line (0.7.0):** query wire includes closed `filter`, `group_by`, `window`, `align`,
+//! `pipeline`, and `label_filter`. Zone maps + secondary indexes (`value_postings`,
+//! `sorted_axis_range`, `coord_label_postings`) live as **embedded footer spills**
+//! (`history_version = 2`) and/or generation sidecars. `layout_version` stays **1**; package /
+//! C ABI unchanged; conformance pack milestone **0.7.0**. Per-release notes:
+//! [`CHANGELOG.md`](../CHANGELOG.md). Embed contract:
+//! [`docs/embedded_indexes.md`](../docs/embedded_indexes.md). Roadmap:
 //! [`docs/roadmap.md`](../docs/roadmap.md).
 //!
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,

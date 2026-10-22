@@ -4,7 +4,7 @@ Contract for carrying the same logical content as generation `ZONE.json` / `INDE
 
 Through **0.6.x**, zone maps and secondary indexes are **package sidecars** beside `packed.tet` ([`secondary_indexes.md`](secondary_indexes.md)). A standalone `.tet` has no pushdown. **0.7.0** embeds those UTF-8 JSON blobs in the sealed image so `tet query -t foo.tet` can skip chunks without a `.tet.d` package. `.tet.d` remains the multi-writer path only.
 
-This document locks **where the bytes live**, **versioning**, **discovery**, and **verify**. Writer emit, query load, package publish mirrors, and conformance fixtures are follow-on cuts of the same issue.
+This document locks **where the bytes live**, **versioning**, **discovery**, and **verify**. Writer emit, query load, package publish mirrors, and conformance fixtures shipped with **0.7.0** (THI-627).
 
 ## Decision
 
