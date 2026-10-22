@@ -21,10 +21,18 @@ use super::zone::{
 /// Standalone / non-package generation id written into embedded ZONE/INDEX JSON.
 pub const EMBEDDED_STANDALONE_GENERATION: u64 = 0;
 
+/// Placeholder `packed_sha256` for standalone embeds (convert / writer / `tet index`).
+///
+/// Standalone query ignores this field (same-file footer refs are enough). Package seal and
+/// store publish hash the pre-spill image for real so MANIFEST / sidecar verify can bind.
+pub const STANDALONE_PACKED_SHA256_PLACEHOLDER: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
+
 /// Result of embedding indexes into a sealed image.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbeddedIndexes {
-    /// SHA-256 of the file bytes **before** zone/index spills were appended.
+    /// Pre-spill image digest (real hex for package generation embeds; placeholder when
+    /// `generation == `[`EMBEDDED_STANDALONE_GENERATION`]).
     pub packed_sha256: String,
     /// Pretty `ZONE.json` bytes that were embedded (and may be mirrored as a sidecar).
     pub zone_maps_json: Vec<u8>,
@@ -36,21 +44,22 @@ pub struct EmbeddedIndexes {
 
 /// Embed zone maps (and optional `INDEX.json`) into `path` as `history_version = 2` footer spills.
 ///
-/// Hashes the current file as `packed_sha256` (after stripping any prior zone/index spills), builds
-/// the same documents as package seal, then rewrites the footer. Re-embed is allowed (append /
-/// `tet index`): prior zone/index spills are replaced; history/metadata are kept.
+/// Standalone (`generation == 0`): skips full-file SHA-256 and writes
+/// [`STANDALONE_PACKED_SHA256_PLACEHOLDER`]. Package generations hash the pre-spill image.
+/// Re-embed is allowed (append / `tet index`): prior zone/index spills are replaced;
+/// history/metadata are kept.
 ///
 /// # Errors
 ///
 /// I/O or catalog parse failures.
 pub fn embed_indexes_in_tet(path: &Path, generation: u64) -> Result<EmbeddedIndexes, CatalogError> {
-    embed_indexes_in_tet_with_zones(path, generation, None)
+    embed_indexes_in_tet_with_zones(path, generation, None, None)
 }
 
-/// Like [`embed_indexes_in_tet`], but reuses zone stats collected during the write (no second
-/// full-file zone scan). Secondary INDEX kinds still run against the sealed bytes.
+/// Like [`embed_indexes_in_tet`], but reuses write-time zone stats.
 ///
-/// Large files: streams SHA-256 and memory-maps payloads (does **not** `read` the whole file into RAM).
+/// When `packed_sha256` is `None`: standalone generation → placeholder (no hash); any other
+/// generation → stream-hash the file after clear. Pass `Some` only to inject a known digest.
 ///
 /// # Errors
 ///
@@ -59,11 +68,18 @@ pub fn embed_indexes_in_tet_with_zones(
     path: &Path,
     generation: u64,
     precomputed_zones: Option<Vec<ChunkZoneStat>>,
+    packed_sha256: Option<String>,
 ) -> Result<EmbeddedIndexes, CatalogError> {
-    // Drop prior zone/index so `packed_sha256` matches a fresh v1-footer seal (spec).
+    // Drop prior zone/index so a package hash (when taken) matches a fresh v1-footer seal.
     clear_embedded_indexes(path)?;
 
-    let packed_sha256 = sha256_file_hex(path)?;
+    let packed_sha256 = match packed_sha256 {
+        Some(hex) => hex,
+        None if generation == EMBEDDED_STANDALONE_GENERATION => {
+            STANDALONE_PACKED_SHA256_PLACEHOLDER.to_owned()
+        }
+        None => sha256_file_hex(path)?,
+    };
     let data = mmap_tet(path)?;
     let sb = SuperblockV1::from_bytes(
         data.get(..SUPERBLOCK_V1_LEN)
@@ -188,10 +204,9 @@ mod tests {
         .unwrap();
 
         let before = std::fs::read(&path).unwrap();
-        let before_sha = sha256_hex(&before);
 
         let embedded = embed_indexes_in_tet(&path, EMBEDDED_STANDALONE_GENERATION).unwrap();
-        assert_eq!(embedded.packed_sha256, before_sha);
+        assert_eq!(embedded.packed_sha256, STANDALONE_PACKED_SHA256_PLACEHOLDER);
         assert!(!embedded.zone_maps_json.is_empty());
 
         let after = std::fs::read(&path).unwrap();

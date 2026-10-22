@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::catalog::HistoryEvent;
 use crate::utils::dtype::ElementDtype;
 
-use super::import_metadata::finish_convert_footer_with_zones;
+use super::import_metadata::finish_convert_footer_with_write_acc;
 use super::numpy::numpy_chunk_shape;
 use super::shared::{ImportPlan, record_skip, write_plans_streaming};
 use super::{ConvertError, ConvertProgress, ConvertSkip};
@@ -82,7 +82,7 @@ pub(crate) fn stream_buffered_columns(
     };
     let parallel_jobs = super::parallel::resolve_parallel_jobs(parallel_jobs);
     let payloads: Arc<[BufferedColumn]> = payloads.into();
-    let write_zones = write_plans_streaming(
+    let write_acc = write_plans_streaming(
         output,
         plans,
         parallel_jobs,
@@ -103,6 +103,6 @@ pub(crate) fn stream_buffered_columns(
         },
         Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
     )?;
-    finish_convert_footer_with_zones(output, history_source, plans, Some(write_zones))
+    finish_convert_footer_with_write_acc(output, history_source, plans, Some(write_acc))
         .map_err(ConvertError::from)
 }

@@ -53,13 +53,18 @@ Rules:
 
 ### `packed_sha256` (chicken-egg)
 
-Zone and index documents carry `packed_sha256`: SHA-256 of the sealed image **before** zone/index spills are appended.
+Zone and index documents carry `packed_sha256`. That field binds **separate** `ZONE.json` / `INDEX.json` sidecars (and MANIFEST) to a sealed `packed.tet`. Same-file footer spills do not need a content hash for query pushdown.
 
-Concrete seal sequence:
+| Path | `packed_sha256` |
+|------|-----------------|
+| **Standalone** embed (convert / writer / `tet index`, generation **`0`**) | Fixed all-zero placeholder. **Do not** full-file SHA-256. Query ignores the field for embedded spills. |
+| **Package** seal / store publish (generation `G ≥ 1`) | SHA-256 of the sealed image **before** zone/index spills (same as today’s sidecar seal). |
+
+Package seal sequence:
 
 1. Write payloads (+ optional history footer **without** zone/index refs; `history_version` may be 1 at this step, or 2 with both refs absent).
-2. Hash **the entire file bytes at that moment** → `packed_sha256` (same as today’s sidecar seal over `packed.tet`).
-3. Build `ZONE.json` / optional `INDEX.json` with existing APIs (`zone_maps_json_for_packed` / `prepare_secondary_index`), using that hash and a generation id (packages: real `G`; standalone: **`0`**).
+2. Hash **the entire file bytes at that moment** → `packed_sha256`.
+3. Build `ZONE.json` / optional `INDEX.json` with existing APIs (`zone_maps_json_for_packed` / `prepare_secondary_index`), using that hash and generation `G`.
 4. Rewrite the footer: insert spills, set refs, set `history_version = 2`, rewrite `history_json` + tail. File grows; `packed_sha256` still names the pre-spill image.
 
 Do **not** re-hash after append. Do **not** include spill bytes in `packed_sha256`.
@@ -68,13 +73,13 @@ Do **not** re-hash after append. Do **not** include spill bytes in `packed_sha25
 
 For a planned dataset, resolve zone maps and secondary indexes in this order:
 
-1. **Embedded** — if `flags & 1`, `history_version == 2`, and the matching `*_ref` is present: read the spill bytes, parse JSON, apply the same usability checks as today’s sidecars (`version`, `packed_sha256` string match against the pre-spill image hash, known kinds). Failures → treat as missing (fall back); do not refuse the open for pushdown alone.
-2. **Generation sidecar** — else if the path resolves to a package generation (or store pin) with `ZONE.json` / `INDEX.json` (+ MANIFEST rules for INDEX): unchanged 0.6.x behavior.
+1. **Embedded** — if `flags & 1`, `history_version == 2`, and the matching `*_ref` is present: read the spill bytes, parse JSON, check `version` / known kinds (no full-file `packed_sha256` re-hash; standalone placeholder is fine). Failures → treat as missing (fall back); do not refuse the open for pushdown alone.
+2. **Generation sidecar** — else if the path resolves to a package generation (or store pin) with `ZONE.json` / `INDEX.json` (+ MANIFEST rules for INDEX, including `packed_sha256` string match): unchanged 0.6.x behavior.
 3. **Missing** — no pushdown; answers unchanged.
 
 Embedded wins over a sibling sidecar when both exist (publish **MAY** keep sidecars as transitional mirrors; see below). A stray `ZONE.json` beside a standalone `.tet` that also embeds **MUST** be ignored for planning once the embed refs parse.
 
-Standalone files have no `MANIFEST.json`. Embedded INDEX usability therefore uses the in-document `version` / `packed_sha256` / kind checks only (no manifest `secondary_indexes` token). Packages that embed **SHOULD** still set MANIFEST fields for sidecar mirrors during the transition.
+Standalone files have no `MANIFEST.json`. Embedded INDEX usability therefore uses the in-document `version` / kind checks only (no manifest `secondary_indexes` token). Packages that embed **SHOULD** still set MANIFEST fields for sidecar mirrors during the transition.
 
 ## Package publish (transitional)
 

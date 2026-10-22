@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Standalone embed (convert / writer / `tet index`) no longer SHA-256s the full `.tet` for `packed_sha256`; writes an all-zero placeholder. Package seal still hashes the pre-spill image for MANIFEST / sidecar binding.
+
 ## [0.6.6] - 2026-10-21
 
 ### Added

@@ -624,7 +624,7 @@ impl TetWriterSession {
             fill_commit_prepared_tile(&prepared, job, buf, &fill)
         };
 
-        let write_zones = match self.mode {
+        let write_acc = match self.mode {
             SessionMode::Create => Some(write_multi_raw_array_streaming(
                 &self.path,
                 &commit_array_metas(&prepared, file_execution, false),
@@ -639,10 +639,12 @@ impl TetWriterSession {
             }
         };
         self.flush_footer(footer_metadata)?;
+        let zones = write_acc.map(super::StreamingWriteAcc::into_zones);
         super::embed_indexes_in_tet_with_zones(
             &self.path,
             super::EMBEDDED_STANDALONE_GENERATION,
-            write_zones,
+            zones,
+            None,
         )?;
         Ok(self.path)
     }

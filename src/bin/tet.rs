@@ -294,10 +294,15 @@ fn run_index(path: &std::path::Path, clear: bool, quiet: bool) -> Result<(), Str
         } else {
             "INDEX omitted"
         };
+        let sha =
+            if embedded.packed_sha256 == tetration::catalog::STANDALONE_PACKED_SHA256_PLACEHOLDER {
+                "standalone".to_owned()
+            } else {
+                embedded.packed_sha256[..12.min(embedded.packed_sha256.len())].to_owned()
+            };
         println!(
-            "embedded ZONE + {index} → {} (packed_sha256={})",
-            path.display(),
-            &embedded.packed_sha256[..12.min(embedded.packed_sha256.len())]
+            "embedded ZONE + {index} → {} (packed_sha256={sha})",
+            path.display()
         );
     }
     Ok(())

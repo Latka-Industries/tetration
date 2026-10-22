@@ -15,7 +15,7 @@ use super::zarr_io::{LocalZarrDir, ZarrObjects, join_rel, zarr_chunk_key, zarr_o
 use crate::utils::dtype::ElementDtype;
 use crate::utils::zarr_dtype::{ZarrV2DtypeParse, element_dtype_from_zarr_v3, parse_zarr_v2_dtype};
 
-use super::import_metadata::{finish_convert_footer_with_zones, zarr_array_attrs};
+use super::import_metadata::{finish_convert_footer_with_write_acc, zarr_array_attrs};
 use super::numpy::numpy_chunk_shape;
 use super::parallel::ZarrParallelSource;
 use super::shared::{
@@ -124,18 +124,18 @@ pub(crate) fn convert_zarr_from_objects(
 
     let parallel_jobs = super::parallel::resolve_parallel_jobs(parallel_jobs);
     let source = ZarrParallelSource::new(objects, plans.clone());
-    let write_zones = write_plans_streaming(
+    let write_acc = write_plans_streaming(
         output,
         &plans,
         parallel_jobs,
         |job, buf| source.fill_tile(job, buf),
         Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
     )?;
-    let history = finish_convert_footer_with_zones(
+    let history = finish_convert_footer_with_write_acc(
         output,
         if v2 { "zarr2" } else { "zarr" },
         &plans,
-        Some(write_zones),
+        Some(write_acc),
     )?;
 
     Ok(report(

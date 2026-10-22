@@ -8,7 +8,7 @@ use hdf5_metno::File;
 use super::cf::cf_from_hdf5;
 use super::hdf5_shared::map_hdf5_element_dtype;
 use super::import_metadata::{
-    enrich_hdf5_cf_coordinates, finish_convert_footer_with_zones, hdf5_dataset_attrs,
+    enrich_hdf5_cf_coordinates, finish_convert_footer_with_write_acc, hdf5_dataset_attrs,
 };
 use super::parallel::H5ParallelSource;
 use super::shared::{
@@ -79,14 +79,14 @@ pub(crate) fn convert_h5_inner(
 
     let parallel_jobs = super::parallel::resolve_parallel_jobs(parallel_jobs);
     let source = H5ParallelSource::new(input.to_path_buf(), plans.clone());
-    let write_zones = write_plans_streaming(
+    let write_acc = write_plans_streaming(
         output,
         &plans,
         parallel_jobs,
         |job, buf| source.fill_tile(job, buf),
         Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
     )?;
-    let history = finish_convert_footer_with_zones(output, "h5", &plans, Some(write_zones))?;
+    let history = finish_convert_footer_with_write_acc(output, "h5", &plans, Some(write_acc))?;
 
     Ok(report(
         input,

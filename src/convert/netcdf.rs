@@ -10,7 +10,7 @@ use crate::utils::dtype::ElementDtype;
 
 use super::cf::cf_from_netcdf;
 use super::import_metadata::{
-    finish_convert_footer_with_zones, netcdf_dim_names, netcdf_self_import_coords,
+    finish_convert_footer_with_write_acc, netcdf_dim_names, netcdf_self_import_coords,
     netcdf_variable_attrs,
 };
 use super::parallel::NetcdfParallelSource;
@@ -93,14 +93,14 @@ pub(crate) fn convert_netcdf_inner(
 
     let parallel_jobs = super::parallel::resolve_parallel_jobs(parallel_jobs);
     let source = NetcdfParallelSource::new(input.to_path_buf(), plans.clone());
-    let write_zones = write_plans_streaming(
+    let write_acc = write_plans_streaming(
         output,
         &plans,
         parallel_jobs,
         |job, buf| source.fill_tile(job, buf),
         Some(&mut progress_bridge as &mut dyn FnMut(u64, u64, &str)),
     )?;
-    let history = finish_convert_footer_with_zones(output, "nc", &plans, Some(write_zones))?;
+    let history = finish_convert_footer_with_write_acc(output, "nc", &plans, Some(write_acc))?;
 
     Ok(report(
         input,

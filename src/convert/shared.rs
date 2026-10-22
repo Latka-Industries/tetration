@@ -180,7 +180,7 @@ pub(crate) fn write_plans_streaming(
     parallel_jobs: usize,
     fill_tile: impl Fn(&StreamTileJob<'_>, &mut [u8]) -> Result<(), ConvertError> + Sync + Send,
     progress_hook: Option<&mut StreamWriteProgress<'_>>,
-) -> Result<Vec<crate::catalog::ChunkZoneStat>, ConvertError> {
+) -> Result<crate::catalog::StreamingWriteAcc, ConvertError> {
     let mut metas: Vec<ArrayWriteMeta<'_>> = Vec::with_capacity(plans.len());
     let mut fills: Vec<Option<Vec<u8>>> = Vec::with_capacity(plans.len());
     for plan in plans {

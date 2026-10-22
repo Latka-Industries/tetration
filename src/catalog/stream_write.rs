@@ -1,6 +1,6 @@
 //! Memory-efficient `.tet` writer: one chunk payload at a time (raw codec).
 
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
@@ -14,6 +14,20 @@ use super::zone::{ChunkZoneStat, chunk_zone_stat_from_raw};
 use super::{
     CHUNK_PAYLOAD_CODEC_V1, CatalogError, MAX_NDIM, elem_size_for_wire_tag, usize_from_u64,
 };
+
+/// Zone stats accumulated while streaming payloads (for embed without a second payload scan).
+#[derive(Debug)]
+pub struct StreamingWriteAcc {
+    pub zones: Vec<ChunkZoneStat>,
+}
+
+impl StreamingWriteAcc {
+    /// Consume the accumulator and return write-time zone stats.
+    #[must_use]
+    pub fn into_zones(self) -> Vec<ChunkZoneStat> {
+        self.zones
+    }
+}
 
 /// Dataset metadata for streaming writes (no in-memory tensor buffer).
 #[derive(Debug, Clone)]
@@ -94,8 +108,8 @@ pub fn total_chunk_count_for_meta(specs: &[ArrayWriteMeta<'_>]) -> Result<u64, C
 /// `on_progress`, when set, is invoked after each payload is flushed (`chunks_done`, `chunks_total`,
 /// current dataset name).
 ///
-/// Returns per-chunk zone stats scanned from each filled tile (avoids a second full-file pass at
-/// embed time). `dataset_fills[dataset_id]` is the optional fill-value LE bytes for null counting.
+/// Returns write-time zone stats for standalone embed (no full-file SHA-256).
+/// `dataset_fills[dataset_id]` is optional fill-value LE bytes.
 ///
 /// # Errors
 ///
@@ -107,7 +121,7 @@ pub fn write_multi_raw_array_streaming(
     fill_tile: impl Fn(&StreamTileJob<'_>, &mut [u8]) -> Result<(), CatalogError> + Sync + Send,
     on_progress: Option<&mut StreamWriteProgress<'_>>,
     dataset_fills: Option<&[Option<Vec<u8>>]>,
-) -> Result<Vec<ChunkZoneStat>, CatalogError> {
+) -> Result<StreamingWriteAcc, CatalogError> {
     if specs.is_empty() {
         return Err(CatalogError::InvalidWriteSpec(
             "at least one dataset is required",
@@ -166,7 +180,7 @@ pub fn write_multi_raw_array_streaming(
         )?
     };
     f.sync_all()?;
-    Ok(zones)
+    Ok(StreamingWriteAcc { zones })
 }
 
 fn tile_zone_stat(
@@ -199,7 +213,7 @@ fn tile_zone_stat(
 
 #[allow(clippy::too_many_arguments)]
 fn write_filled_tiles_sequential(
-    f: &mut std::fs::File,
+    f: &mut File,
     specs: &[ArrayWriteMeta<'_>],
     entries: &[ChunkIndexEntryV1],
     jobs: &[StreamTileJob<'_>],
@@ -242,7 +256,7 @@ fn write_filled_tiles_sequential(
 
 #[allow(clippy::too_many_arguments)]
 fn write_filled_tiles_parallel(
-    f: &mut std::fs::File,
+    f: &mut File,
     specs: &[ArrayWriteMeta<'_>],
     entries: &[ChunkIndexEntryV1],
     jobs: &[StreamTileJob<'_>],
@@ -298,7 +312,7 @@ fn write_filled_tiles_parallel(
 }
 
 fn write_tile_payload(
-    f: &mut std::fs::File,
+    f: &mut File,
     entry: &ChunkIndexEntryV1,
     tile_buf: &[u8],
     sequential: bool,

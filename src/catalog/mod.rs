@@ -41,8 +41,8 @@ pub use append::{
 };
 pub use dataset::{DatasetRecordV1, RawArrayWrite};
 pub use embed_index::{
-    EMBEDDED_STANDALONE_GENERATION, EmbeddedIndexes, clear_embedded_indexes, embed_indexes_in_tet,
-    embed_indexes_in_tet_with_zones,
+    EMBEDDED_STANDALONE_GENERATION, EmbeddedIndexes, STANDALONE_PACKED_SHA256_PLACEHOLDER,
+    clear_embedded_indexes, embed_indexes_in_tet, embed_indexes_in_tet_with_zones,
 };
 pub use execution::{DEFAULT_MEMORY_BUDGET_PERCENT_BPS, FileExecutionSettingsV1};
 #[cfg(test)]
@@ -100,8 +100,8 @@ pub use store::{
 #[cfg(feature = "tetration-s3")]
 pub use store::{OpenedS3Package, S3Config, S3OpenError, S3Store, open_s3_package};
 pub use stream_write::{
-    ArrayWriteMeta, StreamTileJob, StreamWriteProgress, total_chunk_count_for_meta,
-    validate_array_write_meta, write_multi_raw_array_streaming,
+    ArrayWriteMeta, StreamTileJob, StreamWriteProgress, StreamingWriteAcc,
+    total_chunk_count_for_meta, validate_array_write_meta, write_multi_raw_array_streaming,
 };
 pub use tile::{chunk_coords_intersecting_global_box, chunk_coords_intersecting_strided};
 #[cfg(test)]
