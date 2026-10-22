@@ -7,8 +7,8 @@ use crate::catalog::MAX_NDIM;
 
 use super::document_wire::parse_query_value;
 use super::types::{
-    AlignSpec, AxisSlice, Operation, QueryDocument, TetError, ValueCompareOp, ValueFilter,
-    ValuePredicate, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AxisSlice, LabelFilterSpec, Operation, QueryDocument, TetError, ValueCompareOp,
+    ValueFilter, ValuePredicate, WindowSpec, WriteHints, WriteTarget,
 };
 
 /// How [`parse_query_text`] chooses a parser.
@@ -209,6 +209,9 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
     if let Some(filter) = &doc.filter {
         validate_value_filter(filter, &limits)?;
     }
+    if let Some(label_filter) = &doc.label_filter {
+        validate_label_filter(label_filter, &limits)?;
+    }
     if let Some(group_by) = &doc.group_by {
         validate_group_by(group_by.axes(), doc.operation.as_ref(), &limits)?;
     }
@@ -249,6 +252,37 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
         return Err(TetError::Validation(
             "query document must not set both `spill` and `write`".into(),
         ));
+    }
+    Ok(())
+}
+
+fn validate_label_filter(
+    label_filter: &LabelFilterSpec,
+    limits: &QueryLimits,
+) -> Result<(), TetError> {
+    if label_filter.axis.is_empty() {
+        return Err(TetError::Validation(
+            "`label_filter.axis` must not be empty".into(),
+        ));
+    }
+    if label_filter.axis.len() > limits.max_operation_axis_label_len {
+        return Err(TetError::Validation(format!(
+            "`label_filter.axis` exceeds maximum length ({} > {})",
+            label_filter.axis.len(),
+            limits.max_operation_axis_label_len
+        )));
+    }
+    if label_filter.eq.is_empty() {
+        return Err(TetError::Validation(
+            "`label_filter.eq` must be a non-empty string".into(),
+        ));
+    }
+    if label_filter.eq.len() > limits.max_dataset_name_len {
+        return Err(TetError::Validation(format!(
+            "`label_filter.eq` exceeds maximum length ({} > {})",
+            label_filter.eq.len(),
+            limits.max_dataset_name_len
+        )));
     }
     Ok(())
 }
@@ -338,9 +372,7 @@ pub(super) fn validate_value_filter(
     }
     if let (Some((lo_op, lo)), Some((hi_op, hi))) = (lower, upper) {
         let empty = match (lo_op, hi_op) {
-            (ValueCompareOp::Gt, ValueCompareOp::Lt) | (ValueCompareOp::Gt, ValueCompareOp::Le) => {
-                lo >= hi
-            }
+            (ValueCompareOp::Gt, ValueCompareOp::Lt | ValueCompareOp::Le) => lo >= hi,
             (ValueCompareOp::Ge, ValueCompareOp::Lt) => lo >= hi,
             (ValueCompareOp::Ge, ValueCompareOp::Le) => lo > hi,
             _ => false,
@@ -438,6 +470,7 @@ fn validate_align(
     }
     if doc.selection.is_some()
         || doc.filter.is_some()
+        || doc.label_filter.is_some()
         || doc.group_by.is_some()
         || doc.window.is_some()
         || doc.operation.is_some()
@@ -446,7 +479,7 @@ fn validate_align(
         || doc.pipeline.is_some()
     {
         return Err(TetError::Validation(
-            "`align` cannot be combined with selection, filter, group_by, window, reduction, pipeline, spill, or write".into(),
+            "`align` cannot be combined with selection, filter, label_filter, group_by, window, reduction, pipeline, spill, or write".into(),
         ));
     }
     Ok(())

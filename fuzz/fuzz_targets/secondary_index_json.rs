@@ -1,4 +1,4 @@
-//! Fuzz target for `INDEX.json` / [`GenerationSecondaryIndex`] wire (THI-613).
+//! Fuzz target for `INDEX.json` / [`GenerationSecondaryIndex`] wire (THI-613 / THI-614).
 //!
 //! Mutated inputs must never panic. Invalid JSON and unknown `kind` values are
 //! expected failures or [`SecondaryIndexEntry::Unknown`].
@@ -11,8 +11,8 @@
 
 use libfuzzer_sys::fuzz_target;
 use tetration::catalog::{
-    GenerationSecondaryIndex, encode_secondary_index, known_index_entries, sorted_axis_ranges,
-    value_postings,
+    GenerationSecondaryIndex, coord_label_postings, encode_secondary_index, known_index_entries,
+    sorted_axis_ranges, value_postings,
 };
 
 fuzz_target!(|data: &[u8]| {
@@ -25,5 +25,6 @@ fuzz_target!(|data: &[u8]| {
     let _ = known_index_entries(&doc);
     let _ = sorted_axis_ranges(&doc);
     let _ = value_postings(&doc);
+    let _ = coord_label_postings(&doc);
     let _ = encode_secondary_index(&doc);
 });

@@ -119,6 +119,56 @@ pub(crate) fn fold_keeps_cell(pred: Option<CellPredicate>, value: f64) -> bool {
     pred.is_none_or(|p| p.matches(value))
 }
 
+/// Keep a logical selection element when cell filter and optional label-eq both match.
+#[inline]
+#[must_use]
+pub(crate) fn fold_keeps_element(plan: &super::ReadPlan, logical_index: usize, value: f64) -> bool {
+    if !fold_keeps_cell(plan.cell_filter, value) {
+        return false;
+    }
+    fold_keeps_label(plan, logical_index)
+}
+
+/// Keep when no `label_eq` is attached, or the global axis index matches the eq label.
+#[inline]
+#[must_use]
+pub(crate) fn fold_keeps_label(plan: &super::ReadPlan, logical_index: usize) -> bool {
+    let Some(pred) = plan.label_eq.as_ref() else {
+        return true;
+    };
+    let Some(g) = global_axis_from_logical(plan, logical_index, pred.axis) else {
+        return false;
+    };
+    pred.matching.get(g).copied().unwrap_or(false)
+}
+
+fn global_axis_from_logical(plan: &super::ReadPlan, li: usize, axis: usize) -> Option<usize> {
+    let ndim = plan.logical_selection_shape.len();
+    if axis >= ndim || plan.selection_box_start.len() != ndim || plan.selection_step.len() != ndim {
+        return None;
+    }
+    let mut rem = li;
+    let mut coords = vec![0usize; ndim];
+    for d in (0..ndim).rev() {
+        let extent = *plan.logical_selection_shape.get(d)?;
+        let extent = usize::try_from(extent).ok()?;
+        if extent == 0 {
+            return None;
+        }
+        coords[d] = rem % extent;
+        rem /= extent;
+    }
+    if rem != 0 {
+        return None;
+    }
+    let start = *plan.selection_box_start.get(axis)?;
+    let step = (*plan.selection_step.get(axis)?).max(1);
+    let start = usize::try_from(start).ok()?;
+    let step = usize::try_from(step).ok()?;
+    let lc = *coords.get(axis)?;
+    start.checked_add(lc.checked_mul(step)?)
+}
+
 fn values_equal_fill(value: f64, fill: f64) -> bool {
     if fill.is_nan() {
         value.is_nan()

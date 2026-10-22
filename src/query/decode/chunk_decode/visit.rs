@@ -4,7 +4,7 @@ use crate::catalog::{MAX_NDIM, tile};
 use crate::query::decode::dense_visit::{dense_tile_logical_base, logical_index_unit_step};
 use crate::query::decode::indexing::linear_rm_index;
 use crate::query::fold::reduction::{ArgIndexAccum, ReductionKind, ValueAccum};
-use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, fold_keeps_cell};
+use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, fold_keeps_element};
 
 use super::elem::{ChunkElem, FoldChunkElem};
 use super::prepare::{PreparedChunk, prepare_chunk};
@@ -118,7 +118,7 @@ where
 {
     let prep = prepare_chunk::<E>(mmap, plan, c)?;
     let preview_len = preview.len();
-    let filter_cells = plan.cell_filter.is_some();
+    let filter_cells = plan.cell_filter.is_some() || plan.label_eq.is_some();
     // Multi-dim tiles that sit fully inside a unit-step box are contiguous too —
     // parallel scalar fold must hit slab SIMD here, not per-element striding.
     if let Some(li_base) =
@@ -174,7 +174,7 @@ pub(super) fn record_fold_cell<E: FoldChunkElem>(
     if li < preview.len() {
         preview[li] = v;
     }
-    if !fold_keeps_cell(plan.cell_filter, E::as_f64(v)) {
+    if !fold_keeps_element(plan, li, E::as_f64(v)) {
         return;
     }
     match kind {

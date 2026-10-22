@@ -1,4 +1,5 @@
-//! Chunk allow-lists from a sealed secondary index (`value_postings`, `sorted_axis_range`).
+//! Chunk allow-lists from a sealed secondary index (`value_postings`, `sorted_axis_range`,
+//! `coord_label_postings`).
 //!
 //! Missing, unusable, or inapplicable indexes return `None`. The planner then keeps
 //! the zone-map / geometric result. A `Some` allow-list may be empty: that predicate
@@ -134,17 +135,49 @@ pub(crate) fn sorted_axis_chunk_allowlist(
     if saw_entry { combined } else { None }
 }
 
+/// Chunk coordinates that contain the footer label, when a `coord_label_postings` entry applies.
+///
+/// `None` means do not consult the index (no entry for this dataset/axis). `Some` is the
+/// complete allow-list, including an empty set when the label is absent from the postings.
+#[must_use]
+pub(crate) fn label_eq_chunk_allowlist(
+    index: &GenerationSecondaryIndex,
+    dataset_id: u64,
+    axis: u32,
+    label: &str,
+) -> Option<BTreeSet<Vec<u64>>> {
+    let postings = index.indexes.iter().find_map(|entry| match entry {
+        SecondaryIndexEntry::CoordLabelPostings {
+            dataset_id: id,
+            axis: entry_axis,
+            postings,
+        } if *id == dataset_id && *entry_axis == axis => Some(postings),
+        _ => None,
+    })?;
+    let chunks = postings
+        .iter()
+        .find(|posting| posting.label == label)
+        .map(|posting| posting.chunks.iter().cloned().collect())
+        .unwrap_or_default();
+    Some(chunks)
+}
+
 /// Intersect optional allow-lists. `None` means “no constraint from that kind”.
 #[must_use]
 pub(crate) fn intersect_allowlists(
-    eq: Option<BTreeSet<Vec<u64>>>,
-    sorted_axis: Option<BTreeSet<Vec<u64>>>,
+    parts: [Option<BTreeSet<Vec<u64>>>; 3],
 ) -> Option<BTreeSet<Vec<u64>>> {
-    match (eq, sorted_axis) {
-        (None, None) => None,
-        (Some(a), None) | (None, Some(a)) => Some(a),
-        (Some(a), Some(b)) => Some(a.intersection(&b).cloned().collect()),
+    let mut combined: Option<BTreeSet<Vec<u64>>> = None;
+    for part in parts {
+        let Some(set) = part else {
+            continue;
+        };
+        combined = Some(match combined.take() {
+            None => set,
+            Some(prev) => prev.intersection(&set).cloned().collect(),
+        });
     }
+    combined
 }
 
 fn selection_coord_span(

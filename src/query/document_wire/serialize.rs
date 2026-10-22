@@ -4,8 +4,8 @@ use serde::ser::{Serialize, SerializeMap, Serializer};
 use serde_json::Value;
 
 use super::super::types::{
-    AlignSpec, ExecutionHints, GroupBySpec, Operation, OutputHint, OutputHints, PipelineStep,
-    QueryDocument, ValueFilter, ValuePredicate, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, ExecutionHints, GroupBySpec, LabelFilterSpec, Operation, OutputHint, OutputHints,
+    PipelineStep, QueryDocument, ValueFilter, ValuePredicate, WindowSpec, WriteHints, WriteTarget,
 };
 
 pub(super) struct QueryDocumentWire<'a> {
@@ -33,6 +33,7 @@ impl Serialize for QueryDocumentWire<'_> {
             serialize_pipeline(&mut map, steps)?;
         } else if doc.selection.is_some()
             || doc.filter.is_some()
+            || doc.label_filter.is_some()
             || doc.group_by.is_some()
             || doc.window.is_some()
             || doc.align.is_some()
@@ -58,6 +59,9 @@ where
     }
     if let Some(filter) = &doc.filter {
         serialize_filter(map, filter)?;
+    }
+    if let Some(label_filter) = &doc.label_filter {
+        serialize_label_filter(map, label_filter)?;
     }
     if let Some(group_by) = &doc.group_by {
         serialize_group_by(map, group_by)?;
@@ -98,6 +102,7 @@ fn pipeline_step_value(step: &PipelineStep) -> Result<Value, serde_json::Error> 
         dataset: String::new(),
         selection: None,
         filter: None,
+        label_filter: None,
         group_by: None,
         window: None,
         align: None,
@@ -254,6 +259,23 @@ where
         }
     }
     map.serialize_entry("filter", &serde_json::Value::Object(obj))?;
+    Ok(())
+}
+
+fn serialize_label_filter<S>(map: &mut S, label_filter: &LabelFilterSpec) -> Result<(), S::Error>
+where
+    S: SerializeMap,
+{
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "axis".to_owned(),
+        serde_json::Value::String(label_filter.axis.clone()),
+    );
+    obj.insert(
+        "eq".to_owned(),
+        serde_json::Value::String(label_filter.eq.clone()),
+    );
+    map.serialize_entry("label_filter", &serde_json::Value::Object(obj))?;
     Ok(())
 }
 

@@ -123,12 +123,36 @@ cat > fuzz/corpus/secondary_index_json/unknown_kind.json <<'EOF'
   ]
 }
 EOF
+cat > fuzz/corpus/secondary_index_json/coord_label_postings_one.json <<'EOF'
+{
+  "version": 1,
+  "generation": 1,
+  "packed_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "indexes": [
+    {
+      "kind": "coord_label_postings",
+      "dataset_id": 0,
+      "axis": 0,
+      "postings": [
+        {"label": "nyc", "chunks": [[0], [1]]}
+      ]
+    }
+  ]
+}
+EOF
 # Label-range query seeds for parse_query_json (THI-613 selection wire).
 cat > fuzz/corpus/parse_query_json/sum_label_range.json <<'EOF'
 {"dataset":"data","layout_version":1,"selection":[{"start_label":"10","stop_label":"14"},{}],"sum":[]}
 EOF
 cat > fuzz/corpus/parse_query_json/mean_label_range.json <<'EOF'
 {"dataset":"a","selection":[{"start_label":"20.0","stop_label":"40.0"}],"mean":[]}
+EOF
+# Label-eq query seeds for parse_query_json (THI-614 label_filter wire).
+cat > fuzz/corpus/parse_query_json/sum_label_filter.json <<'EOF'
+{"dataset":"a","label_filter":{"axis":"station","eq":"nyc"},"sum":[]}
+EOF
+cat > fuzz/corpus/parse_query_json/sum_label_filter_and_gt.json <<'EOF'
+{"dataset":"temperature","label_filter":{"axis":0,"eq":"bos"},"filter":{"gt":0},"sum":[]}
 EOF
 
 echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package; $(ls fuzz/corpus/parse_query_json/*.json | wc -l) query; $(ls fuzz/corpus/secondary_index_json/*.json | wc -l) index"

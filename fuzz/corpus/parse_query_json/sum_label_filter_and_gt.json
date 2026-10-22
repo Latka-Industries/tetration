@@ -1,0 +1,1 @@
+{"dataset":"temperature","label_filter":{"axis":0,"eq":"bos"},"filter":{"gt":0},"sum":[]}

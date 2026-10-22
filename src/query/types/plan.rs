@@ -69,6 +69,12 @@ pub struct ReadPlan {
     /// chunk can drop non-matching cells without a second wire key.
     #[serde(skip)]
     pub(crate) cell_filter: Option<CellPredicate>,
+    /// Execute-path footer label equality. Not part of the JSON plan wire.
+    ///
+    /// Built from `label_filter` + footer coords. Folds/materialize drop cells whose
+    /// global index on [`LabelEqPred::axis`] is not marked matching.
+    #[serde(skip)]
+    pub(crate) label_eq: Option<LabelEqPred>,
     /// Label-value `group_by` remap for kept axes. Not part of the JSON plan wire.
     ///
     /// When set, partial-fold output extents are distinct label counts (not axis extents).
@@ -77,6 +83,15 @@ pub struct ReadPlan {
     /// Dataset fill (`_FillValue` / `missing_value` / `fill_value`) for `window.pad` = `fill`.
     #[serde(skip)]
     pub(crate) dataset_fill: Option<f64>,
+}
+
+/// Per-axis footer label equality predicate attached to a [`ReadPlan`].
+#[derive(Debug, Clone)]
+pub(crate) struct LabelEqPred {
+    /// Dataset axis whose footer labels are tested.
+    pub axis: usize,
+    /// `matching[g]` is true when global index `g` on [`Self::axis`] equals the eq label.
+    pub matching: Vec<bool>,
 }
 
 /// Selection-local index → group id for each kept axis under label-value `group_by`.
@@ -134,6 +149,7 @@ impl<'de> Deserialize<'de> for ReadPlan {
             logical_selection_shape: wire.logical_selection_shape,
             logical_element_count: wire.logical_element_count,
             cell_filter: None,
+            label_eq: None,
             label_group_remap: None,
             dataset_fill: None,
         })

@@ -120,7 +120,7 @@ macro_rules! define_float_materialize {
                         let c = &plan.chunks[i];
                         let chunk_bytes = $visit(mmap, plan, c, |li, v| {
                             let $v = v;
-                            if crate::query::types::fold_keeps_cell(plan.cell_filter, $promote) {
+                            if crate::query::types::fold_keeps_element(plan, li, $promote) {
                                 acc.push_f64(li as u64, $promote, kind);
                             }
                             if li < preview_cap {
@@ -153,7 +153,7 @@ macro_rules! define_float_materialize {
                         let c = &plan.chunks[i];
                         let chunk_bytes = $visit(mmap, plan, c, |li, v| {
                             let $v = v;
-                            if crate::query::types::fold_keeps_cell(plan.cell_filter, $promote) {
+                            if crate::query::types::fold_keeps_element(plan, li, $promote) {
                                 acc.push_f64($promote);
                             }
                             if li < preview_cap {

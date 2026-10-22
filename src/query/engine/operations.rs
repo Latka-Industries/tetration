@@ -194,7 +194,7 @@ fn try_gpu_scalar_fold_or_cpu(
         op,
     } = *input;
     let route = device::resolve_device_route(execution, plan, dtype, Some(op));
-    if plan.cell_filter.is_some() && route.gpu_reduce {
+    if (plan.cell_filter.is_some() || plan.label_eq.is_some()) && route.gpu_reduce {
         let folded = dispatch::scalar_fold(mmap, plan, max_preview, kind, dtype, policy, tet_path)?;
         return Ok((
             folded,

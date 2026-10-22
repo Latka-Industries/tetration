@@ -18,7 +18,9 @@ use crate::query::materialize::shared::{
     scatter_fill_chunks, spill_byte_len_from_elem_count, spill_read_plan_pod_le_impl,
 };
 use crate::query::materialize::validate_read_plan_geometry;
-use crate::query::types::{PlannedChunkIo, ReadPlan, TetError, TransformMethod, fold_keeps_cell};
+use crate::query::types::{
+    PlannedChunkIo, ReadPlan, TetError, TransformMethod, fold_keeps_element,
+};
 use crate::utils::{f32_le, f64_le};
 
 use super::stats::TransformStats;
@@ -141,7 +143,7 @@ fn transform_scatter_fill_f32(
     let shape = plan.logical_selection_shape.clone();
     transform_scatter_fill(mmap, plan, out, warnings, |mmap, plan, c, out, warnings| {
         visit_planned_chunk(mmap, plan, c, |li, v| {
-            if !fold_keeps_cell(plan.cell_filter, f64::from(v)) {
+            if !fold_keeps_element(plan, li, f64::from(v)) {
                 out[li] = f32::NAN;
                 return Ok(());
             }
@@ -161,7 +163,7 @@ fn transform_scatter_fill_f64(
     let shape = plan.logical_selection_shape.clone();
     transform_scatter_fill(mmap, plan, out, warnings, |mmap, plan, c, out, warnings| {
         visit_planned_chunk_f64(mmap, plan, c, |li, v| {
-            if !fold_keeps_cell(plan.cell_filter, v) {
+            if !fold_keeps_element(plan, li, v) {
                 out[li] = f64::NAN;
                 return Ok(());
             }
