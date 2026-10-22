@@ -395,6 +395,21 @@ def run_index_bench(tier: IndexTier, *, regenerate: bool = True) -> int:
     if not values_match(float(le_sum), float(le_miss_sum)):
         log(f"error: label_eq present vs missing sum mismatch ({le_sum} vs {le_miss_sum})")
         accurate = False
+    # Pushdown gate: unique time label → one chunk when INDEX loads via package path.
+    le_chunks = le_plan.get("chunk_count")
+    le_miss_chunks = le_miss_plan.get("chunk_count")
+    if le_skip is None or int(le_skip) < 1:
+        log(f"error: label_eq index present did not skip chunks (skipped={le_skip})")
+        accurate = False
+    if le_chunks is None or int(le_chunks) != 1:
+        log(f"error: label_eq index present expected chunk_count=1, got {le_chunks}")
+        accurate = False
+    if le_miss_chunks is None or int(le_miss_chunks) < 2:
+        log(
+            f"error: label_eq index missing expected full scan chunk_count>=2, "
+            f"got {le_miss_chunks}"
+        )
+        accurate = False
 
     try:
         git_rev = subprocess.check_output(

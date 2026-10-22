@@ -543,6 +543,26 @@ fn label_filter_matches_with_or_without_index() {
     assert_eq!(bos_plan.index_filter_skipped_chunks, 1);
     assert_eq!(bos.execution.expect("execution").operation_sum, Some(25.0));
 
+    // Package-root path (CLI `-t pkg.tet.d`) must still load INDEX.json from the pin.
+    let via_pkg = crate::query::plan_query_with_tet_mmap_ex(
+        &crate::query::parse_query_json(
+            r#"{"dataset":"a","label_filter":{"axis":"station","eq":"bos"},"sum":[]}"#,
+        )
+        .unwrap(),
+        Some(root.to_str().unwrap()),
+        &bytes,
+        Some(0),
+        None,
+    )
+    .unwrap();
+    let via_pkg_plan = via_pkg.read_plan.expect("plan via package root");
+    assert_eq!(via_pkg_plan.chunk_count, 2);
+    assert_eq!(via_pkg_plan.index_filter_skipped_chunks, 1);
+    assert_eq!(
+        via_pkg.execution.expect("execution").operation_sum,
+        Some(25.0)
+    );
+
     fs::remove_file(pkg.generation_dir(1).join(SECONDARY_INDEX_FILE)).unwrap();
     let fallback = execute_sum(&packed, &bytes, query);
     let fallback_plan = fallback.read_plan.expect("plan");

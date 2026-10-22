@@ -9,6 +9,10 @@
 - Optional `coord_label_postings` kind in `INDEX.json` + closed `label_filter: { axis, eq }` wire: pandas-style footer label equality with chunk allow-list skip; AND with cell `filter`; missing index falls back to footer scan (THI-614). See [`docs/secondary_indexes.md`](docs/secondary_indexes.md).
 - `mise bench:index*` label-eq present/missing case on the sorted-axis fixture; fuzz seeds for `coord_label_postings` and `label_filter`.
 
+### Fixed
+
+- Query against a `.tet.d` package root now loads generation `ZONE.json` / `INDEX.json` sidecars (same as `packed.tet`). CLI `-t pkg.tet.d` was planning without index pushdown; answers were correct but read every chunk. Standalone `.tet` and store pins unchanged.
+
 ### Notes
 
 - Semver patch on the 0.6 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.6.3**). PyPI **tet-py** pin after crates.io shows 0.6.6.
