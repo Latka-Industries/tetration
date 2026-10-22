@@ -2,9 +2,20 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-22
+
+### Added
+
+- Distributed product boundary RFC ([`docs/distributed_boundary.md`](docs/distributed_boundary.md)): stay format + thin protocol; spill/sidecar/switch remain refuse-only on the distributed path (THI-615 / THI-616).
+- Localhost N-process harness: `tet worker` runs one `WorkerJobV1` → `WorkerPartialV1`; `execute_sharded_scalar_fold_multiprocess` / `MultiprocessFoldOpts` spawn N workers and merge partials (THI-618). Integration test `tests/distributed_multiprocess.rs`; `mise distributed:smoke`.
+
 ### Fixed
 
-- Out-of-core **window** folds no longer select `linear_scan` (which has no window path and forced single-threaded sequential scatter). Multi-chunk OOC windows keep Rayon parallel chunk fold, matching in-core behavior on hosts where the selection exceeds RAM headroom.
+- Out-of-core **window** folds no longer select `linear_scan` (which has no window path and forced single-threaded sequential scatter). Multi-chunk OOC windows keep Rayon parallel chunk fold, matching in-core behavior on hosts where the selection exceeds RAM headroom (THI-628).
+
+### Notes
+
+- Semver patch on the 0.7 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). No new Python API — pin **tet-py** after crates.io publish.
 
 ## [0.7.0] - 2026-10-22
 

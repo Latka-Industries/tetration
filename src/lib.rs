@@ -13,12 +13,14 @@
 //! reads a Zarr prefix one chunk at a time. `open_s3_package` pins an `s3://bucket/prefix` package
 //! and queries it with range reads.
 //!
-//! **Current line (0.7.0):** query wire includes closed `filter`, `group_by`, `window`, `align`,
+//! **Current line (0.7.1):** query wire includes closed `filter`, `group_by`, `window`, `align`,
 //! `pipeline`, and `label_filter`. Zone maps + secondary indexes (`value_postings`,
 //! `sorted_axis_range`, `coord_label_postings`) live as **embedded footer spills**
 //! (`history_version = 2`; convert / writer auto-embed) and/or generation sidecars.
-//! `layout_version` stays **1**; package / C ABI unchanged; conformance pack milestone **0.7.0**.
-//! Per-release notes: [`CHANGELOG.md`](../CHANGELOG.md). Embed contract:
+//! Distributed fold stays a thin protocol ([`docs/distributed_boundary.md`](../docs/distributed_boundary.md))
+//! with an optional localhost N-process harness (`tet worker`). `layout_version` stays **1**;
+//! package / C ABI unchanged; conformance pack milestone **0.7.0**. Per-release notes:
+//! [`CHANGELOG.md`](../CHANGELOG.md). Embed contract:
 //! [`docs/embedded_indexes.md`](../docs/embedded_indexes.md). Roadmap:
 //! [`docs/roadmap.md`](../docs/roadmap.md).
 //!

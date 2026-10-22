@@ -1,4 +1,7 @@
 //! Serializable worker job / partial message shapes (JSON protocol v1).
+//!
+//! Wire contract for the thin distributed protocol. Localhost harness (`tet worker`)
+//! uses filesystem / `file://` pins only; other schemes stay for future hosts.
 
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +17,10 @@ pub const WORKER_PROTOCOL_V1: u32 = 1;
 pub struct WorkerPinV1 {
     pub generation: u64,
     /// Object key relative to the package root (e.g. `generations/00000003/packed.tet`).
+    /// Empty for a standalone `.tet` path pin in the localhost harness.
     pub object_key: String,
     pub object_len: u64,
-    /// Coordinator-defined package URI (`file://…`, `s3://…`, path, …).
+    /// Coordinator-defined package URI. Localhost harness: bare path or `file://…`.
     pub package_uri: String,
 }
 
