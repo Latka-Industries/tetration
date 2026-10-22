@@ -12,6 +12,7 @@
 ### Fixed
 
 - Query against a `.tet.d` package root now loads generation `ZONE.json` / `INDEX.json` sidecars (same as `packed.tet`). CLI `-t pkg.tet.d` was planning without index pushdown; answers were correct but read every chunk. Standalone `.tet` and store pins unchanged.
+- Query no longer SHA-256s the entire sealed `packed.tet` just to accept `INDEX.json` (manifest hash of the sidecar + matching `packed_sha256` strings is enough). That full-file hash was dominating every indexed query on multi-GiB packages; deep verify still recomputes the index from the image.
 
 ### Notes
 

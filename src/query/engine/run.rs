@@ -152,7 +152,7 @@ pub fn plan_query_with_tet_mmap_ex(
     spill_allowlist: Option<&SpillPathAllowlist>,
 ) -> Result<QueryResponse, TetError> {
     let zones = zone_maps_beside(tet_path)?;
-    let index = secondary_index_beside(tet_path, mmap);
+    let index = secondary_index_beside(tet_path);
     plan_query_with_zones(
         doc,
         tet_path,
@@ -225,10 +225,7 @@ fn zone_maps_beside(tet_path: Option<&str>) -> Result<Option<GenerationZoneMaps>
 ///
 /// A bad blob is ignored. The query keeps the zone-map plan. Also resolves `.tet.d`
 /// package roots to the pinned generation (same sidecars as `packed.tet`).
-fn secondary_index_beside(
-    tet_path: Option<&str>,
-    packed: &[u8],
-) -> Option<GenerationSecondaryIndex> {
+fn secondary_index_beside(tet_path: Option<&str>) -> Option<GenerationSecondaryIndex> {
     let dir = sidecar_dir(Path::new(tet_path?))?;
     let manifest_path = dir.join("MANIFEST.json");
     if !manifest_path.is_file() {
@@ -245,7 +242,6 @@ fn secondary_index_beside(
         &bytes,
         sha,
         manifest.packed_sha256.as_deref(),
-        Some(packed),
     )
 }
 
