@@ -4,8 +4,8 @@ use super::fixture::write_multichunk_2x3_tiles;
 use crate::layout::mmap_file_read;
 use crate::query::distributed::{
     FoldPartialState, ShardPartition, WORKER_PROTOCOL_V1, WorkerJobV1, WorkerPartialV1,
-    WorkerPinV1, execute_sharded_scalar_fold_local, operation_is_shard_mergeable,
-    plan_chunk_shards, refuse_distributed_spill, split_read_plan,
+    WorkerPinV1, execute_sharded_scalar_fold_local, execute_worker_job_v1,
+    operation_is_shard_mergeable, plan_chunk_shards, refuse_distributed_spill, split_read_plan,
 };
 use crate::query::types::{Operation, WriteHints, WriteTarget};
 use crate::query::{parse_query_json, plan_query_with_tet_mmap_ex, validate_query};
@@ -184,4 +184,35 @@ fn worker_job_partial_json_roundtrip() {
     let pjson = serde_json::to_string(&partial).unwrap();
     let pback: WorkerPartialV1 = serde_json::from_str(&pjson).unwrap();
     assert_eq!(pback.partial.bytes_read(), 0);
+}
+
+#[test]
+fn execute_worker_job_v1_sum_partial() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("worker_job.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+    let doc = parse_query_json(r#"{"dataset":"a","sum":[]}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let planned = plan_query_with_tet_mmap_ex(&doc, None, &mmap, Some(0), None).unwrap();
+    let plan = planned.read_plan.as_ref().unwrap().clone();
+    let job = WorkerJobV1 {
+        protocol: WORKER_PROTOCOL_V1,
+        job_id: "j1".into(),
+        shard_id: 0,
+        n_shards: 1,
+        pin: WorkerPinV1 {
+            generation: 0,
+            object_key: String::new(),
+            object_len: u64::try_from(mmap.len()).unwrap(),
+            package_uri: path.display().to_string(),
+        },
+        document: doc,
+        chunk_indices: (0..plan.chunks.len()).collect(),
+        plan,
+        preview_max: 0,
+    };
+    let partial = execute_worker_job_v1(&job).unwrap();
+    assert_eq!(partial.shard_id, 0);
+    assert!(partial.partial.bytes_read() > 0);
 }

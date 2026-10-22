@@ -38,10 +38,12 @@ pub use device::{
     host_materialize_exceeds, metal_backend_available, resolve_device_route,
 };
 pub use distributed::{
-    DistributedSpillPolicy, FoldPartialState, ShardPartition, ShardSpec, WORKER_PROTOCOL_V1,
-    WorkerJobV1, WorkerPartialV1, WorkerPinV1, execute_sharded_scalar_fold_local,
-    finish_fold_partial, interleaved_chunk_indices, merge_fold_partials,
-    operation_is_shard_mergeable, plan_chunk_shards, refuse_distributed_spill, split_read_plan,
+    DistributedSpillPolicy, FoldPartialState, MultiprocessFoldOpts, ShardPartition, ShardSpec,
+    WORKER_PROTOCOL_V1, WorkerJobV1, WorkerPartialV1, WorkerPinV1,
+    execute_sharded_scalar_fold_local, execute_sharded_scalar_fold_multiprocess,
+    execute_worker_job_v1, finish_fold_partial, interleaved_chunk_indices, merge_fold_partials,
+    operation_is_shard_mergeable, plan_chunk_shards, refuse_distributed_spill,
+    resolve_worker_pin_path, split_read_plan, write_worker_partial_json,
 };
 pub use document::{
     QueryInputFormat, QueryLimits, detect_query_input_format, parse_query_json, parse_query_text,

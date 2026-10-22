@@ -116,9 +116,11 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.5.0 (library):** [`query::distributed`](../src/query/distributed/mod.rs) — split a [`ReadPlan`](../src/query/types/plan.rs) into chunk shards (contiguous or interleaved), JSON worker job / partial shapes (`WorkerJobV1`), merge associative tier-A/B [`FoldPartialState`](../src/query/distributed/merge.rs) (same laws as parallel/GPU host merge), and an in-process multi-shard harness. Workers must share one **pinned** generation (never re-resolve `CURRENT`). Spill/sidecar/switch write targets are **refused** on the distributed path (RAM partials only; THI-577).
 
-**0.7.1 boundary (locked):** [`distributed_boundary.md`](distributed_boundary.md) — stay format + thin protocol (not a worker-daemon product). Spill remains refuse-only (THI-615 / THI-616). A localhost N-process harness is the next cut after this lock; still no network RPC / K8s fleet.
+**0.7.1 boundary (locked):** [`distributed_boundary.md`](distributed_boundary.md) — stay format + thin protocol (not a worker-daemon product). Spill remains refuse-only (THI-615 / THI-616).
 
-**Not shipped:** multi-process harness, network RPC service, cluster scheduler, distributed materialize or transform, worker-local spill files.
+**Localhost N-process harness (THI-618):** `tet worker` runs one `WorkerJobV1` → `WorkerPartialV1`; `execute_sharded_scalar_fold_multiprocess` spawns N workers over one pinned `.tet` and merges partials. Still no network RPC / K8s fleet.
+
+**Not shipped:** network RPC service, cluster scheduler, distributed materialize or transform, worker-local spill files.
 
 **Hygiene (before protocol):** THI-597 / THI-598 landed on `main` (squash [#112](https://github.com/Latka-Industries/tetration/pull/112)); THI-599 optional backlog.
 
