@@ -1,4 +1,8 @@
 //! Optional file footer at EOF (`THST`): history rows and optional `metadata` JSON.
+//!
+//! `history_version` **1** — optional `metadata_spill` only.
+//! `history_version` **2** — may also carry embedded `ZONE.json` / `INDEX.json` spills
+//! ([`docs/embedded_indexes.md`](../../docs/embedded_indexes.md)).
 
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
@@ -13,24 +17,33 @@ use crate::layout::{SUPERBLOCK_FLAG_HISTORY_FOOTER, SUPERBLOCK_V1_LEN, Superbloc
 use super::CatalogError;
 use super::metadata::{self, MetadataLimitsV1, TetMetadataV1};
 
+/// Pre-embed footer framing (`metadata_ref` spill only).
+pub const HISTORY_VERSION_V1: u32 = 1;
+/// Embed-capable footer framing (`zone_maps_ref` / `secondary_index_ref` + metadata).
+pub const HISTORY_VERSION_V2: u32 = 2;
+
 /// On-disk `THST` history footer tail (layout v1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HistoryFooterWireV1 {
     /// EOF magic (`THST`).
     pub magic: [u8; 4],
-    /// Footer format version (must match on read).
+    /// Footer format version written by default helpers that do not embed indexes.
     pub version: u32,
     /// Byte length of the fixed tail (`history_json_len` + `history_version` + magic).
     pub tail_len: usize,
 }
 
 impl HistoryFooterWireV1 {
-    /// Layout v1 wire constants for the history footer.
+    /// Layout v1 wire constants for the history footer (writes `history_version = 1`).
     pub const DEFAULT: Self = Self {
         magic: *b"THST",
-        version: 1,
+        version: HISTORY_VERSION_V1,
         tail_len: 16,
     };
+}
+
+fn history_version_supported(version: u32) -> bool {
+    version == HISTORY_VERSION_V1 || version == HISTORY_VERSION_V2
 }
 
 /// One provenance row in the `THST` footer `history` array.
@@ -162,6 +175,10 @@ struct FooterBlobWire {
     metadata: Option<TetMetadataV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     metadata_ref: Option<MetadataBlobRefV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    zone_maps_ref: Option<MetadataBlobRefV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    secondary_index_ref: Option<MetadataBlobRefV1>,
 }
 
 #[derive(Deserialize)]
@@ -205,6 +222,8 @@ impl FooterBlobWire {
                 .collect(),
             metadata: blob.metadata.clone(),
             metadata_ref: blob.metadata_ref,
+            zone_maps_ref: None,
+            secondary_index_ref: None,
         }
     }
 
@@ -219,6 +238,30 @@ impl FooterBlobWire {
             metadata_ref: self.metadata_ref,
         }
     }
+
+    fn spill_byte_len(&self, history_version: u32) -> Result<usize, CatalogError> {
+        let mut total = 0usize;
+        if let Some(r) = self.metadata_ref {
+            total = add_spill_len(total, r.len, "metadata_ref.len")?;
+        }
+        if history_version >= HISTORY_VERSION_V2 {
+            if let Some(r) = self.zone_maps_ref {
+                total = add_spill_len(total, r.len, "zone_maps_ref.len")?;
+            }
+            if let Some(r) = self.secondary_index_ref {
+                total = add_spill_len(total, r.len, "secondary_index_ref.len")?;
+            }
+        }
+        Ok(total)
+    }
+}
+
+fn add_spill_len(total: usize, len: u64, field: &'static str) -> Result<usize, CatalogError> {
+    let len = usize::try_from(len)
+        .map_err(|_| CatalogError::TooLargeForPlatform { field, value: len })?;
+    total
+        .checked_add(len)
+        .ok_or(CatalogError::InvalidWriteSpec("footer spill overflow"))
 }
 
 /// Append a convert event footer and set [`SUPERBLOCK_FLAG_HISTORY_FOOTER`] on the superblock.
@@ -457,6 +500,182 @@ fn rewrite_footer_bytes_with_spill(
         (footer_json, None)
     };
 
+    write_footer_suffix(
+        path,
+        payload_end,
+        &footer_bytes,
+        spill_bytes.as_deref(),
+        None,
+        None,
+        HISTORY_VERSION_V1,
+    )
+}
+
+/// Rewrite the `THST` footer with optional zone / index / metadata spills (`history_version = 2`
+/// when zone or index spills are present).
+///
+/// Spill order toward EOF: zone → index → metadata → `history_json` → tail.
+///
+/// # Errors
+///
+/// Validation, JSON, or I/O failures.
+pub(crate) fn rewrite_footer_with_index_spills(
+    path: &Path,
+    logical: &FooterBlobV1,
+    zone_maps: Option<&[u8]>,
+    secondary_index: Option<&[u8]>,
+) -> Result<(), CatalogError> {
+    logical.validate()?;
+    if logical.metadata.is_some() && logical.metadata_ref.is_some() {
+        return Err(CatalogError::InvalidWriteSpec(
+            "footer metadata and metadata_ref are mutually exclusive",
+        ));
+    }
+    if zone_maps.is_none() && secondary_index.is_none() {
+        return write_footer_blob(path, logical);
+    }
+
+    let data = std::fs::read(path)?;
+    let payload_end = payload_end_from_bytes(&data)?;
+    let meta_spill = metadata_spill_if_needed(logical)?;
+    let (zone_ref, index_ref, metadata_ref) = spill_refs_at(
+        payload_end,
+        zone_maps,
+        secondary_index,
+        meta_spill.as_deref(),
+        logical,
+    )?;
+
+    let wire = FooterBlobWire {
+        history: logical
+            .history
+            .iter()
+            .map(|ev| HistoryEventWire::Event(ev.clone()))
+            .collect(),
+        metadata: if meta_spill.is_some() {
+            None
+        } else {
+            logical.metadata.clone()
+        },
+        metadata_ref,
+        zone_maps_ref: zone_ref,
+        secondary_index_ref: index_ref,
+    };
+    let footer_bytes =
+        serde_json::to_vec(&wire).map_err(|_| CatalogError::InvalidWriteSpec("footer JSON"))?;
+    metadata::validate_footer_json_len(&footer_bytes)?;
+
+    write_footer_suffix(
+        path,
+        payload_end,
+        &footer_bytes,
+        meta_spill.as_deref(),
+        zone_maps,
+        secondary_index,
+        HISTORY_VERSION_V2,
+    )
+}
+
+fn payload_end_from_bytes(data: &[u8]) -> Result<usize, CatalogError> {
+    let sb = SuperblockV1::from_bytes(
+        data.get(..SUPERBLOCK_V1_LEN)
+            .ok_or(CatalogError::TooShort {
+                need: SUPERBLOCK_V1_LEN,
+                got: data.len(),
+            })?
+            .try_into()
+            .map_err(|_| CatalogError::InvalidWriteSpec("superblock length"))?,
+    )
+    .map_err(CatalogError::Layout)?;
+    usize::try_from(payload_file_len(data, sb.flags)?).map_err(|_| {
+        CatalogError::TooLargeForPlatform {
+            field: "payload_end",
+            value: u64::MAX,
+        }
+    })
+}
+
+fn metadata_spill_if_needed(logical: &FooterBlobV1) -> Result<Option<Vec<u8>>, CatalogError> {
+    let Some(meta) = &logical.metadata else {
+        return Ok(None);
+    };
+    let meta_json =
+        serde_json::to_vec(meta).map_err(|_| CatalogError::InvalidWriteSpec("metadata JSON"))?;
+    let probe = FooterBlobWire::from(logical);
+    let inline =
+        serde_json::to_vec(&probe).map_err(|_| CatalogError::InvalidWriteSpec("footer JSON"))?;
+    if metadata::validate_footer_json_len(&inline).is_err() {
+        metadata::validate_metadata_blob_len(&meta_json)?;
+        Ok(Some(meta_json))
+    } else {
+        Ok(None)
+    }
+}
+
+fn spill_ref(
+    offset: &mut u64,
+    bytes: &[u8],
+    field: &'static str,
+) -> Result<MetadataBlobRefV1, CatalogError> {
+    let len = u64::try_from(bytes.len()).map_err(|_| CatalogError::TooLargeForPlatform {
+        field,
+        value: u64::MAX,
+    })?;
+    let r = MetadataBlobRefV1 {
+        offset: *offset,
+        len,
+    };
+    *offset = offset
+        .checked_add(len)
+        .ok_or(CatalogError::InvalidWriteSpec("footer spill overflow"))?;
+    Ok(r)
+}
+
+type SpillRefs = (
+    Option<MetadataBlobRefV1>,
+    Option<MetadataBlobRefV1>,
+    Option<MetadataBlobRefV1>,
+);
+
+fn spill_refs_at(
+    payload_end: usize,
+    zone_maps: Option<&[u8]>,
+    secondary_index: Option<&[u8]>,
+    meta_spill: Option<&[u8]>,
+    logical: &FooterBlobV1,
+) -> Result<SpillRefs, CatalogError> {
+    let mut offset = u64::try_from(payload_end).map_err(|_| CatalogError::TooLargeForPlatform {
+        field: "spill.offset",
+        value: u64::MAX,
+    })?;
+    let zone_ref = zone_maps
+        .map(|z| spill_ref(&mut offset, z, "zone_maps_spill.len"))
+        .transpose()?;
+    let index_ref = secondary_index
+        .map(|idx| spill_ref(&mut offset, idx, "secondary_index_spill.len"))
+        .transpose()?;
+    let metadata_ref = if let Some(m) = meta_spill {
+        Some(spill_ref(&mut offset, m, "metadata_spill.len")?)
+    } else {
+        logical.metadata_ref
+    };
+    Ok((zone_ref, index_ref, metadata_ref))
+}
+
+fn write_footer_suffix(
+    path: &Path,
+    payload_end: usize,
+    footer_bytes: &[u8],
+    metadata_spill: Option<&[u8]>,
+    zone_maps: Option<&[u8]>,
+    secondary_index: Option<&[u8]>,
+    history_version: u32,
+) -> Result<(), CatalogError> {
+    if !history_version_supported(history_version) {
+        return Err(CatalogError::InvalidWriteSpec(
+            "unsupported history footer version",
+        ));
+    }
     let json_len =
         u64::try_from(footer_bytes.len()).map_err(|_| CatalogError::TooLargeForPlatform {
             field: "footer_json_len",
@@ -466,16 +685,22 @@ fn rewrite_footer_bytes_with_spill(
     let mut f = OpenOptions::new().read(true).write(true).open(path)?;
     f.set_len(payload_end as u64)?;
     f.seek(SeekFrom::End(0))?;
-    if let Some(spill) = spill_bytes {
-        f.write_all(&spill)?;
+    if let Some(z) = zone_maps {
+        f.write_all(z)?;
     }
-    f.write_all(&footer_bytes)?;
+    if let Some(idx) = secondary_index {
+        f.write_all(idx)?;
+    }
+    if let Some(spill) = metadata_spill {
+        f.write_all(spill)?;
+    }
+    f.write_all(footer_bytes)?;
     let wire = HistoryFooterWireV1::DEFAULT;
     let mut tail = [0u8; HistoryFooterWireV1::DEFAULT.tail_len];
     {
         let mut w = LeWriter::new(&mut tail);
         w.put_u64(json_len);
-        w.put_u32(wire.version);
+        w.put_u32(history_version);
         w.put_bytes(&wire.magic);
         debug_assert_eq!(w.position(), wire.tail_len);
     }
@@ -492,7 +717,7 @@ fn rewrite_footer_bytes_with_spill(
     Ok(())
 }
 
-/// File length used for chunk payload bounds (excludes optional history footer and metadata spill).
+/// File length used for chunk payload bounds (excludes optional history footer and spills).
 ///
 /// # Errors
 ///
@@ -505,22 +730,23 @@ pub fn payload_file_len(data: &[u8], flags: u32) -> Result<u64, CatalogError> {
     if flags & SUPERBLOCK_FLAG_HISTORY_FOOTER == 0 {
         return Ok(len);
     }
-    let footer = history_footer_len(data)?.ok_or(CatalogError::InvalidWriteSpec(
+    let parsed = history_footer_head(data)?.ok_or(CatalogError::InvalidWriteSpec(
         "superblock history flag set but footer missing",
     ))?;
-    let json_start = data
-        .len()
-        .checked_sub(footer)
-        .ok_or(CatalogError::InvalidWriteSpec(
-            "history footer longer than file",
-        ))?;
+    let json_start =
+        data.len()
+            .checked_sub(parsed.json_and_tail_len)
+            .ok_or(CatalogError::InvalidWriteSpec(
+                "history footer longer than file",
+            ))?;
     let wire = HistoryFooterWireV1::DEFAULT;
     let json_end = data.len() - wire.tail_len;
+    // Corrupt JSON: subtract only the THST JSON+tail so repair can still find payload_end.
     let spill_len = serde_json::from_slice::<FooterBlobWire>(&data[json_start..json_end])
         .ok()
-        .and_then(|w| w.metadata_ref)
-        .map_or(0, |r| usize::try_from(r.len).unwrap_or(usize::MAX));
-    let suffix = footer
+        .map_or(Ok(0), |w| w.spill_byte_len(parsed.version))?;
+    let suffix = parsed
+        .json_and_tail_len
         .checked_add(spill_len)
         .ok_or(CatalogError::InvalidWriteSpec("footer spill overflow"))?;
     len.checked_sub(
@@ -534,7 +760,16 @@ pub fn payload_file_len(data: &[u8], flags: u32) -> Result<u64, CatalogError> {
     ))
 }
 
+struct HistoryFooterHead {
+    json_and_tail_len: usize,
+    version: u32,
+}
+
 fn history_footer_len(data: &[u8]) -> Result<Option<usize>, CatalogError> {
+    Ok(history_footer_head(data)?.map(|h| h.json_and_tail_len))
+}
+
+fn history_footer_head(data: &[u8]) -> Result<Option<HistoryFooterHead>, CatalogError> {
     let wire = HistoryFooterWireV1::DEFAULT;
     if data.len() < wire.tail_len {
         return Ok(None);
@@ -547,7 +782,7 @@ fn history_footer_len(data: &[u8]) -> Result<Option<usize>, CatalogError> {
     if magic != wire.magic {
         return Ok(None);
     }
-    if version != wire.version {
+    if !history_version_supported(version) {
         return Err(CatalogError::InvalidWriteSpec(
             "unsupported history footer version",
         ));
@@ -566,7 +801,84 @@ fn history_footer_len(data: &[u8]) -> Result<Option<usize>, CatalogError> {
             "history footer out of bounds",
         ));
     }
-    Ok(Some(total))
+    Ok(Some(HistoryFooterHead {
+        json_and_tail_len: total,
+        version,
+    }))
+}
+
+/// Read raw embedded `ZONE.json` spill bytes when present (`history_version = 2`).
+///
+/// # Errors
+///
+/// Malformed footer or out-of-bounds ref.
+pub fn read_embedded_zone_maps_bytes(
+    data: &[u8],
+    flags: u32,
+) -> Result<Option<Vec<u8>>, CatalogError> {
+    read_embedded_spill_bytes(data, flags, |w| w.zone_maps_ref, "zone_maps_ref")
+}
+
+/// Read raw embedded `INDEX.json` spill bytes when present (`history_version = 2`).
+///
+/// # Errors
+///
+/// Malformed footer or out-of-bounds ref.
+pub fn read_embedded_secondary_index_bytes(
+    data: &[u8],
+    flags: u32,
+) -> Result<Option<Vec<u8>>, CatalogError> {
+    read_embedded_spill_bytes(
+        data,
+        flags,
+        |w| w.secondary_index_ref,
+        "secondary_index_ref",
+    )
+}
+
+fn read_embedded_spill_bytes(
+    data: &[u8],
+    flags: u32,
+    pick: impl FnOnce(&FooterBlobWire) -> Option<MetadataBlobRefV1>,
+    field: &'static str,
+) -> Result<Option<Vec<u8>>, CatalogError> {
+    if flags & SUPERBLOCK_FLAG_HISTORY_FOOTER == 0 {
+        return Ok(None);
+    }
+    let Some(parsed) = history_footer_head(data)? else {
+        return Ok(None);
+    };
+    if parsed.version < HISTORY_VERSION_V2 {
+        return Ok(None);
+    }
+    let json_start =
+        data.len()
+            .checked_sub(parsed.json_and_tail_len)
+            .ok_or(CatalogError::InvalidWriteSpec(
+                "history footer longer than file",
+            ))?;
+    let wire = HistoryFooterWireV1::DEFAULT;
+    let json_end = data.len() - wire.tail_len;
+    let blob: FooterBlobWire = serde_json::from_slice(&data[json_start..json_end])
+        .map_err(|_| CatalogError::InvalidWriteSpec("footer JSON parse"))?;
+    let Some(spill) = pick(&blob) else {
+        return Ok(None);
+    };
+    let offset = usize::try_from(spill.offset).map_err(|_| CatalogError::TooLargeForPlatform {
+        field,
+        value: spill.offset,
+    })?;
+    let len = usize::try_from(spill.len).map_err(|_| CatalogError::TooLargeForPlatform {
+        field,
+        value: spill.len,
+    })?;
+    let end = offset
+        .checked_add(len)
+        .ok_or(CatalogError::InvalidWriteSpec("index spill overflow"))?;
+    if end > data.len() {
+        return Err(CatalogError::InvalidWriteSpec("index spill out of bounds"));
+    }
+    Ok(Some(data[offset..end].to_vec()))
 }
 
 /// Test helper: write footer JSON bytes (validates inline size cap).

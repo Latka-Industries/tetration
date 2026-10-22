@@ -8,6 +8,7 @@
 
 mod append;
 mod dataset;
+pub(crate) mod embed_index;
 pub mod execution;
 mod file_layout;
 mod history;
@@ -39,13 +40,15 @@ pub use append::{
     merge_tet_files,
 };
 pub use dataset::{DatasetRecordV1, RawArrayWrite};
+pub use embed_index::{EMBEDDED_STANDALONE_GENERATION, EmbeddedIndexes, embed_indexes_in_tet};
 pub use execution::{DEFAULT_MEMORY_BUDGET_PERCENT_BPS, FileExecutionSettingsV1};
 #[cfg(test)]
 pub(crate) use history::rewrite_footer_bytes_for_test;
 pub use history::{
-    FooterBlobV1, HistoryEvent, HistoryEventV1, HistoryFooterWireV1, MetadataBlobRefV1,
-    append_convert_history, append_history_events, payload_file_len, read_footer_blob,
-    read_metadata, unix_timestamp_now, write_footer_blob,
+    FooterBlobV1, HISTORY_VERSION_V1, HISTORY_VERSION_V2, HistoryEvent, HistoryEventV1,
+    HistoryFooterWireV1, MetadataBlobRefV1, append_convert_history, append_history_events,
+    payload_file_len, read_embedded_secondary_index_bytes, read_embedded_zone_maps_bytes,
+    read_footer_blob, read_metadata, unix_timestamp_now, write_footer_blob,
 };
 pub use index::{CHUNK_INDEX_HEADER_V1, ChunkIndexEntryV1, ChunkIndexHeaderV1};
 pub use metadata::{
