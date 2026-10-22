@@ -142,8 +142,13 @@ pub fn materialize_query_transform_ram(
         )?;
         &default_spill
     };
-    let fold_policy =
-        FoldIoPolicy::resolve(&planned.read_plan, &budget, doc.execution.as_ref(), dtype)?;
+    let fold_policy = FoldIoPolicy::resolve(
+        &planned.read_plan,
+        &budget,
+        doc.execution.as_ref(),
+        dtype,
+        true,
+    )?;
     let transform_input = TransformRunInput {
         mmap,
         plan: &planned.read_plan,

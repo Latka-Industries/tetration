@@ -365,13 +365,13 @@ flowchart TD
 | **Sequential chunk fold** | In-core single chunk, or out-of-core without linear-scan eligibility, or `execution.fold_parallel: false` | Chunks in catalog order or ascending `payload_offset` when `sequential_io`                                                  |
 | **Linear scan**           | Out-of-core + full dense unit-step selection + raw codec + adjacent payloads summing to logical size      | One contiguous byte span; 64 MiB windows; [`push_f32_le_bytes`](../src/query/fold/reduction/value_accum.rs) SIMD per window |
 
-**Linear scan eligibility:** [`detect_contiguous_raw_span`](../src/query/fold/linear_scan.rs) requires every touched chunk to use **raw codec 0**, payloads **abutting in plan order**, and total raw bytes = logical selection size. Converted multi-chunk **`f32`** grids from `write_raw_array_file` typically satisfy this; zstd chunks or strided partial selections do not.
+**Linear scan eligibility:** [`detect_contiguous_raw_span`](../src/query/fold/linear_scan.rs) requires every touched chunk to use **raw codec 0**, payloads **abutting in plan order**, and total raw bytes = logical selection size. Converted multi-chunk **`f32`** grids from `write_raw_array_file` typically satisfy this; zstd chunks or strided partial selections do not. **Window folds** never select linear scan (`allows_linear_scan = false`): there is no byte-stream scatter path, so out-of-core windows keep **parallel chunk fold** instead of falling back to single-threaded sequential scatter.
 
 **Query hint:** `"execution": { "fold_parallel": false }` forces **sequential chunk visits** (offset order when full dense); it does **not** enable linear scan. `"fold_parallel": true` on an out-of-core linear-scan query keeps parallel chunk fold instead of linear scan.
 
 **Execution stats** (also in **`--format stats`**): `io_regime` (`in_core` / `out_of_core` / `unknown`), `fold_parallel`, `fold_linear_scan`.
 
-**Window / transform paths (0.6.x):** the same policy prefers **ordered chunk I/O** when a window or transform pass would otherwise thrash random mmap order across a large sealed file. Window folds visit a **covering** span of chunks for each window rather than re-decoding overlapping chunks per window index; transform pass-2 and softmax stats reuse the parallel chunk helpers. Answers are unchanged — this is visit-order and decode reuse, not a new wire.
+**Window / transform paths:** the same policy prefers **ordered chunk I/O** when a window or transform pass would otherwise thrash random mmap order across a large sealed file. Window folds visit a **covering** span of chunks for each window rather than re-decoding overlapping chunks per window index; transform pass-2 and softmax stats reuse the parallel chunk helpers. Answers are unchanged — this is visit-order and decode reuse, not a new wire. Out-of-core windows additionally skip linear scan (see above) so Rayon stays available on multi-chunk plans.
 
 ### Streaming fold performance
 

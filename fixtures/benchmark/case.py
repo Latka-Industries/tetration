@@ -7,6 +7,7 @@ from pathlib import Path
 
 from benchmark.constants import FormatName, TierName
 from generate.constants import (
+    BENCH_SMALL_LOGICAL_BYTES,
     EXTRA_LARGE_LOGICAL_BYTES,
     FIXTURES_ROOT,
     LARGE_PER_FORMAT_BYTES,
@@ -39,12 +40,26 @@ def _extra_basename(format: FormatName) -> str:
     return f"tensor_20gb.{format if format != 'netcdf' else 'nc'}"
 
 
+def _small_basename(format: FormatName) -> str:
+    if format == "zarr":
+        return "tensor_small"
+    return f"tensor_small.{format if format != 'netcdf' else 'nc'}"
+
+
 def cases_for(
     format: FormatName,
     *,
-    tiers: tuple[TierName, ...] = ("large", "extra"),
+    tiers: tuple[TierName, ...] = ("small", "large", "extra"),
 ) -> tuple[BenchCase, ...]:
     by_tier: dict[TierName, BenchCase] = {
+        "small": BenchCase(
+            format=format,
+            tier="small",
+            src=FIXTURES_ROOT / "bench_small" / format / _small_basename(format),
+            tet_out=FIXTURES_ROOT / "bench_small" / format / "tensor_small.tet",
+            gen_target=f"bench-small-{format}",
+            logical_bytes=BENCH_SMALL_LOGICAL_BYTES,
+        ),
         "large": BenchCase(
             format=format,
             tier="large",

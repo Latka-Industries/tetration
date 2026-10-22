@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Out-of-core **window** folds no longer select `linear_scan` (which has no window path and forced single-threaded sequential scatter). Multi-chunk OOC windows keep Rayon parallel chunk fold, matching in-core behavior on hosts where the selection exceeds RAM headroom.
+
 ## [0.7.0] - 2026-10-22
 
 ### Added

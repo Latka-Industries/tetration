@@ -11,6 +11,10 @@ import numpy as np
 import zarr
 
 from generate.constants import (
+    BENCH_SMALL_H5,
+    BENCH_SMALL_LOGICAL_BYTES,
+    BENCH_SMALL_NC,
+    BENCH_SMALL_ZARR,
     CHUNK_ELEMS,
     EXTRA_LARGE_H5,
     EXTRA_LARGE_LOGICAL_BYTES,
@@ -23,6 +27,7 @@ from generate.constants import (
     LARGE_PER_FORMAT_BYTES,
     LARGE_SUITE_LOGICAL_BYTES,
     LARGE_ZARR,
+    SEED_BENCH_SMALL,
     SEED_LARGE,
 )
 from generate.util import ZARR_RAW_ARRAY_KWARGS, iter_slabs, progress, slab_count
@@ -279,3 +284,57 @@ def generate_large_zarr(*, quiet: bool) -> None:
     _write_zarr_large(LARGE_ZARR / "tensor_large", quiet=quiet)
     if not quiet:
         print(f"Done: {LARGE_ZARR}")
+
+
+def generate_bench_small_h5(*, quiet: bool) -> None:
+    if not quiet:
+        mib = BENCH_SMALL_LOGICAL_BYTES / (1024**2)
+        print(f"Generating bench-small HDF5 under {BENCH_SMALL_H5} ({mib:.0f} MiB logical f32)")
+    write_h5_f32_slabs(
+        BENCH_SMALL_H5 / "tensor_small.h5",
+        logical_bytes=BENCH_SMALL_LOGICAL_BYTES,
+        fixture="bench_small_h5",
+        suite_total_bytes=None,
+        quiet=quiet,
+        seed=SEED_BENCH_SMALL,
+    )
+    if not quiet:
+        print(f"Done: {BENCH_SMALL_H5}")
+
+
+def generate_bench_small_netcdf(*, quiet: bool) -> None:
+    if not quiet:
+        mib = BENCH_SMALL_LOGICAL_BYTES / (1024**2)
+        print(f"Generating bench-small NetCDF under {BENCH_SMALL_NC} ({mib:.0f} MiB logical f32)")
+    write_nc_f32_slabs(
+        BENCH_SMALL_NC / "tensor_small.nc",
+        logical_bytes=BENCH_SMALL_LOGICAL_BYTES,
+        fixture="bench_small_nc",
+        suite_total_bytes=None,
+        quiet=quiet,
+        seed=SEED_BENCH_SMALL + 1,
+    )
+    if not quiet:
+        print(f"Done: {BENCH_SMALL_NC}")
+
+
+def generate_bench_small_zarr(*, quiet: bool) -> None:
+    if not quiet:
+        mib = BENCH_SMALL_LOGICAL_BYTES / (1024**2)
+        print(f"Generating bench-small Zarr under {BENCH_SMALL_ZARR} ({mib:.0f} MiB logical f32)")
+    write_zarr_f32_slabs(
+        BENCH_SMALL_ZARR / "tensor_small",
+        logical_bytes=BENCH_SMALL_LOGICAL_BYTES,
+        fixture="bench_small_zarr",
+        suite_total_bytes=None,
+        quiet=quiet,
+        seed=SEED_BENCH_SMALL + 2,
+    )
+    if not quiet:
+        print(f"Done: {BENCH_SMALL_ZARR}")
+
+
+def generate_bench_small(*, quiet: bool) -> None:
+    generate_bench_small_h5(quiet=quiet)
+    generate_bench_small_netcdf(quiet=quiet)
+    generate_bench_small_zarr(quiet=quiet)

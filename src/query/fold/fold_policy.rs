@@ -65,11 +65,16 @@ impl FoldIoPolicy {
     ///
     /// Linear scan reads every payload byte and does **not** apply cell/`label_eq` filters.
     /// When either predicate is set, force the chunked fold path so [`fold_keeps_element`] runs.
+    ///
+    /// Pass `allows_linear_scan = false` for ops with no byte-stream path (window folds): those
+    /// keep parallel chunk fold when out-of-core instead of falling back to single-threaded
+    /// sequential scatter after `linear_scan` disables Rayon.
     pub fn resolve(
         plan: &ReadPlan,
         budget: &ExecutionBudget,
         hints: Option<&ExecutionHints>,
         dtype: ElementDtype,
+        allows_linear_scan: bool,
     ) -> Result<Self, TetError> {
         let logical_bytes = budget.logical_element_bytes(dtype, plan.logical_element_count)?;
         let io_regime = resolve_io_regime(budget, logical_bytes);
@@ -80,7 +85,8 @@ impl FoldIoPolicy {
         // Byte-stream fold has no per-element predicate; cell/label filters need chunked visit.
         let element_pred = plan.cell_filter.is_some() || plan.label_eq.is_some();
 
-        let linear_scan = io_regime == IoRegime::OutOfCore
+        let linear_scan = allows_linear_scan
+            && io_regime == IoRegime::OutOfCore
             && full_dense
             && contiguous_raw
             && !element_pred

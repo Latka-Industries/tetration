@@ -135,7 +135,8 @@ fn policy_parallel_default_all_regimes() {
         memory_budget_percent_bps: 2500,
     };
     let plan = sample_plan(two_chunks(), parallel_min_f32_elems());
-    let policy = FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32).expect("resolve");
+    let policy =
+        FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32, true).expect("resolve");
     assert_eq!(policy.io_regime, IoRegime::InCore);
     assert!(policy.parallel);
     assert!(!policy.sequential_io);
@@ -149,8 +150,8 @@ fn policy_parallel_default_all_regimes() {
         memory_budget_percent_bps: 2500,
     };
     let tiny = sample_plan(two_chunks(), 32); // 128 B f32, matches two×64 payloads
-    let policy =
-        FoldIoPolicy::resolve(&tiny, &tight_budget, None, ElementDtype::F32).expect("resolve");
+    let policy = FoldIoPolicy::resolve(&tiny, &tight_budget, None, ElementDtype::F32, true)
+        .expect("resolve");
     assert_eq!(policy.io_regime, IoRegime::OutOfCore);
     assert!(policy.linear_scan);
     assert!(!policy.parallel);
@@ -170,8 +171,8 @@ fn policy_out_of_core_skips_linear_scan_when_label_eq() {
         axis: 0,
         matching: vec![true, false],
     });
-    let policy =
-        FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32).expect("resolve");
+    let policy = FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32, true)
+        .expect("resolve");
     assert_eq!(policy.io_regime, IoRegime::OutOfCore);
     assert!(
         !policy.linear_scan,
@@ -196,9 +197,57 @@ fn policy_out_of_core_skips_linear_scan_when_cell_filter() {
         },
         None,
     ));
-    let policy =
-        FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32).expect("resolve");
+    let policy = FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32, true)
+        .expect("resolve");
     assert!(!policy.linear_scan);
+}
+
+#[test]
+fn policy_out_of_core_skips_linear_scan_when_disallowed() {
+    // Window folds pass allows_linear_scan=false so OOC keeps parallel chunks
+    // instead of single-threaded sequential scatter (no window linear path).
+    let tight_budget = ExecutionBudget {
+        memory_budget_bytes: 1,
+        host_available_ram_bytes: Some(100),
+        memory_budget_percent_bps: 2500,
+    };
+    let elems = parallel_min_f32_elems();
+    let raw_per = (elems * 4) / 2;
+    let chunks = vec![
+        PlannedChunkIo {
+            chunk_index: vec![0],
+            payload_offset: 0,
+            stored_byte_len: raw_per,
+            raw_byte_len: raw_per,
+            codec: 0,
+            zone: None,
+        },
+        PlannedChunkIo {
+            chunk_index: vec![1],
+            payload_offset: raw_per,
+            stored_byte_len: raw_per,
+            raw_byte_len: raw_per,
+            codec: 0,
+            zone: None,
+        },
+    ];
+    let plan = sample_plan(chunks, elems);
+    let with_linear = FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32, true)
+        .expect("resolve");
+    assert!(with_linear.linear_scan);
+    assert!(!with_linear.parallel);
+
+    let windowish = FoldIoPolicy::resolve(&plan, &tight_budget, None, ElementDtype::F32, false)
+        .expect("resolve");
+    assert_eq!(windowish.io_regime, IoRegime::OutOfCore);
+    assert!(
+        !windowish.linear_scan,
+        "ops without a linear_scan path must not select it"
+    );
+    assert!(
+        windowish.parallel,
+        "OOC window-sized selection should keep Rayon chunk fold"
+    );
 }
 
 #[test]
@@ -210,7 +259,8 @@ fn policy_tiny_multi_chunk_stays_sequential_by_default() {
     };
     // 16 MiB f32 selection — below PARALLEL_MIN_LOGICAL_BYTES.
     let plan = sample_plan(two_chunks(), (16 * 1024 * 1024) / 4);
-    let policy = FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32).expect("resolve");
+    let policy =
+        FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32, true).expect("resolve");
     assert!(!policy.parallel);
     assert!(!policy.linear_scan);
 
@@ -220,8 +270,8 @@ fn policy_tiny_multi_chunk_stays_sequential_by_default() {
         fold_parallel: Some(true),
         device: None,
     };
-    let forced =
-        FoldIoPolicy::resolve(&plan, &budget, Some(&hints), ElementDtype::F32).expect("resolve");
+    let forced = FoldIoPolicy::resolve(&plan, &budget, Some(&hints), ElementDtype::F32, true)
+        .expect("resolve");
     assert!(forced.parallel);
 }
 
@@ -283,7 +333,8 @@ fn policy_in_core_keeps_parallel_not_linear_scan() {
         memory_budget_percent_bps: 2500,
     };
     let plan = sample_plan(two_chunks(), parallel_min_f32_elems());
-    let policy = FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32).expect("resolve");
+    let policy =
+        FoldIoPolicy::resolve(&plan, &budget, None, ElementDtype::F32, true).expect("resolve");
     assert!(!policy.linear_scan);
     assert!(policy.parallel);
 }
@@ -302,8 +353,8 @@ fn policy_fold_parallel_false_enables_sequential_io() {
         fold_parallel: Some(false),
         device: None,
     };
-    let policy =
-        FoldIoPolicy::resolve(&plan, &budget, Some(&hints), ElementDtype::F32).expect("resolve");
+    let policy = FoldIoPolicy::resolve(&plan, &budget, Some(&hints), ElementDtype::F32, true)
+        .expect("resolve");
     assert!(!policy.parallel);
     assert!(policy.sequential_io);
     assert!(!policy.linear_scan);

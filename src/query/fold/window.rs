@@ -1,10 +1,14 @@
 //! Streaming windowed reductions along one axis (tier-A/B, all wire dtypes).
 //!
-//! I/O policy mirrors scalar/partial folds (memory-conscious):
-//! - **In-core multi-chunk:** Rayon parallel chunk scan + merge (capped so huge
-//!   `window_count` does not multiply accumulator replicas past ~64 MiB).
-//! - **Out-of-core / single-chunk / oversize output:** one accumulator buffer,
-//!   offset-ordered chunk visits when `FoldIoPolicy::prefer_ordered_chunk_io`.
+//! I/O policy mirrors scalar/partial folds (memory-conscious), except windows
+//! never take the out-of-core **`linear_scan`** byte-stream path (no scatter
+//! implementation there). Callers pass `allows_linear_scan = false` so OOC
+//! multi-chunk windows keep Rayon instead of falling back to single-threaded
+//! sequential scatter:
+//! - **Multi-chunk (in-core or OOC):** Rayon parallel chunk scan + merge (capped
+//!   so huge `window_count` does not multiply accumulator replicas past ~64 MiB).
+//! - **Single-chunk / oversize output / parallel refused:** one accumulator
+//!   buffer, offset-ordered chunk visits when `FoldIoPolicy::prefer_ordered_chunk_io`.
 //! - SIMD slab folds stay scalar-only for now (window scatter is multi-cell).
 
 use super::partial::{partial_arg_fields, partial_fields};
