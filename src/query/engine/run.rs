@@ -6,9 +6,11 @@ use std::path::{Path, PathBuf};
 use crate::catalog::{
     CatalogError, DATASET_DTYPE_TAG_V1, DatasetRecordV1, GenerationManifest,
     GenerationSecondaryIndex, GenerationZoneMaps, SECONDARY_INDEX_FILE, SECONDARY_INDEX_PRESENT,
-    TetFileSummaryV1, ZONE_MAPS_FILE, chunk_coords_intersecting_strided, read_tet_summary_v1,
+    TetFileSummaryV1, ZONE_MAPS_FILE, ZONE_MAPS_VERSION, chunk_coords_intersecting_strided,
+    read_embedded_secondary_index_bytes, read_embedded_zone_maps_bytes, read_tet_summary_v1,
     read_zone_maps_file, tensor_bytes_from_shape,
 };
+use crate::layout::{SUPERBLOCK_FLAG_HISTORY_FOOTER, SUPERBLOCK_V1_LEN, SuperblockV1};
 use crate::query::resolve_axes::resolve_query_document_axes;
 use crate::query::resolve_selection::resolve_query_document_selection;
 use crate::query::types::{
@@ -151,8 +153,12 @@ pub fn plan_query_with_tet_mmap_ex(
     raw_f32_preview_max: Option<usize>,
     spill_allowlist: Option<&SpillPathAllowlist>,
 ) -> Result<QueryResponse, TetError> {
-    let zones = zone_maps_beside(tet_path)?;
-    let index = secondary_index_beside(tet_path);
+    // Discovery: embedded footer spills first, then generation sidecars (0.7.0).
+    let zones = match zone_maps_embedded(mmap)? {
+        Some(z) => Some(z),
+        None => zone_maps_beside(tet_path)?,
+    };
+    let index = secondary_index_embedded(mmap).or_else(|| secondary_index_beside(tet_path));
     plan_query_with_zones(
         doc,
         tet_path,
@@ -195,7 +201,7 @@ pub(crate) fn plan_query_with_zones(
 /// Directory that holds `ZONE.json` / `INDEX.json` / `MANIFEST.json` for a query path.
 ///
 /// Accepts either a sealed `packed.tet` (sidecars beside it) or a `.tet.d` package root
-/// (sidecars under the pinned generation). Standalone `.tet` files have no sidecars.
+/// (sidecars under the pinned generation). Standalone `.tet` files fall back to embeds.
 fn sidecar_dir(tet_path: &Path) -> Option<PathBuf> {
     if crate::verify::looks_like_tet_package(tet_path) {
         let pkg = crate::catalog::TetPackage::open(tet_path).ok()?;
@@ -203,6 +209,45 @@ fn sidecar_dir(tet_path: &Path) -> Option<PathBuf> {
         return pin.packed_tet_path().parent().map(Path::to_path_buf);
     }
     tet_path.parent().map(Path::to_path_buf)
+}
+
+fn zone_maps_embedded(mmap: &[u8]) -> Result<Option<GenerationZoneMaps>, TetError> {
+    let Some(sb) = superblock_if_present(mmap)? else {
+        return Ok(None);
+    };
+    let Some(bytes) = read_embedded_zone_maps_bytes(mmap, sb.flags).map_err(TetError::Catalog)?
+    else {
+        return Ok(None);
+    };
+    let Ok(doc) = serde_json::from_slice::<GenerationZoneMaps>(&bytes) else {
+        return Ok(None);
+    };
+    if doc.version != ZONE_MAPS_VERSION {
+        return Ok(None);
+    }
+    Ok(Some(doc))
+}
+
+fn secondary_index_embedded(mmap: &[u8]) -> Option<GenerationSecondaryIndex> {
+    let sb = superblock_if_present(mmap).ok()??;
+    let bytes = read_embedded_secondary_index_bytes(mmap, sb.flags).ok()??;
+    crate::query::plan::index_pushdown::usable_embedded_secondary_index(&bytes)
+}
+
+fn superblock_if_present(mmap: &[u8]) -> Result<Option<SuperblockV1>, TetError> {
+    if mmap.len() < SUPERBLOCK_V1_LEN {
+        return Ok(None);
+    }
+    let sb = SuperblockV1::from_bytes(
+        mmap[..SUPERBLOCK_V1_LEN]
+            .try_into()
+            .map_err(|_| TetError::Catalog(CatalogError::InvalidWriteSpec("superblock length")))?,
+    )
+    .map_err(|e| TetError::Catalog(e.into()))?;
+    if sb.flags & SUPERBLOCK_FLAG_HISTORY_FOOTER == 0 {
+        return Ok(None);
+    }
+    Ok(Some(sb))
 }
 
 fn zone_maps_beside(tet_path: Option<&str>) -> Result<Option<GenerationZoneMaps>, TetError> {

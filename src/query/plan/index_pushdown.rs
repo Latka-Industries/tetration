@@ -32,11 +32,27 @@ pub(crate) fn usable_secondary_index(
     if sha256_hex(bytes) != manifest_sha256 {
         return None;
     }
+    usable_secondary_index_doc(bytes, manifest_packed_sha256)
+}
+
+/// Parse embedded `INDEX.json` spill bytes (no MANIFEST hash gate).
+///
+/// Same version / optional `packed_sha256` string checks as the sidecar path. Does not
+/// re-hash the sealed image.
+#[must_use]
+pub(crate) fn usable_embedded_secondary_index(bytes: &[u8]) -> Option<GenerationSecondaryIndex> {
+    usable_secondary_index_doc(bytes, None)
+}
+
+fn usable_secondary_index_doc(
+    bytes: &[u8],
+    packed_sha256: Option<&str>,
+) -> Option<GenerationSecondaryIndex> {
     let doc: GenerationSecondaryIndex = serde_json::from_slice(bytes).ok()?;
     if doc.version != SECONDARY_INDEX_VERSION {
         return None;
     }
-    if let Some(expected) = manifest_packed_sha256
+    if let Some(expected) = packed_sha256
         && expected != doc.packed_sha256
     {
         return None;

@@ -7,8 +7,8 @@ use serde_json::json;
 use crate::catalog::store::ReadAt;
 use crate::catalog::{
     DATASET_DTYPE_TAG_V1, GenerationPin, MemoryStore, TetDatasetWrite, TetPackage, TetShardWriter,
-    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, publish_staged_parts, read_zone_maps_file, stage_part,
-    zone_maps_key,
+    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, embed_indexes_in_tet, publish_staged_parts,
+    read_zone_maps_file, stage_part, zone_maps_key,
 };
 use crate::query::types::CHUNK_TOUCH_POLICY;
 use crate::query::{
@@ -318,4 +318,29 @@ fn store_publish_writes_zone_object() {
             .and_then(|c| c.zone.as_ref())
             .is_some()
     );
+}
+
+#[test]
+fn embedded_zone_maps_pushdown_on_standalone_tet() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("emb.tet.d")).unwrap();
+    // Two chunks of 2: [1, 2] and [10, 11].
+    publish_f32(&pkg, 1, "s", "only", &[1.0, 2.0, 10.0, 11.0]);
+    let packed = pkg.packed_tet_path(1);
+    let lone = dir.path().join("standalone.tet");
+    fs::copy(&packed, &lone).unwrap();
+    // Drop package sidecars — only the sealed image remains.
+    embed_indexes_in_tet(&lone, 0).unwrap();
+    let bytes = fs::read(&lone).unwrap();
+    let path = lone.display().to_string();
+
+    let filtered = parse_query_json(r#"{"dataset":"a","filter":{"gt":5},"sum":[]}"#).unwrap();
+    validate_query(&filtered).unwrap();
+    let filtered_plan = plan_query_with_tet_mmap(&filtered, Some(&path), &bytes, Some(0))
+        .unwrap()
+        .read_plan
+        .expect("plan");
+    assert_eq!(filtered_plan.chunk_count, 1);
+    assert_eq!(filtered_plan.zone_filter_skipped_chunks, 1);
+    assert_eq!(filtered_plan.chunks[0].chunk_index, vec![1]);
 }
