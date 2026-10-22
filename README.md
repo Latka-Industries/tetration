@@ -9,7 +9,7 @@
 
 [_For those who are more cur..._](https://bookshop.org/p/books/book-of-numbers-a-novel-joshua-cohen/af5aa739b0fac506?ean=9780812986655&next=t)
 
-**Pre-1.0** — layout v1 and query JSON/TOML may change before 1.0. Current crates.io / PyPI line: **0.6.6** (pack milestone **0.6.3**). See [`CHANGELOG.md`](CHANGELOG.md).
+**Pre-1.0** — layout v1 and query JSON/TOML may change before 1.0.
 
 HDF5-shaped persistence (many arrays in one file) with Zarr-shaped chunking (regular grid, per-chunk codecs, parallel I/O) in a **single mmap-friendly `.tet` file** — plus multi-writer **`.tet.d` packages** (shards → publish → sealed generation).
 
