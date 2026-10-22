@@ -5,11 +5,12 @@
 //! ([`docs/embedded_indexes.md`](../../docs/embedded_indexes.md)).
 
 use std::collections::BTreeMap;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use argus::{LeReader, LeWriter};
+use memmap2::Mmap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::layout::{SUPERBLOCK_FLAG_HISTORY_FOOTER, SUPERBLOCK_V1_LEN, SuperblockV1};
@@ -352,13 +353,20 @@ fn encode_footer_json(blob: &FooterBlobV1) -> Result<Vec<u8>, CatalogError> {
     serde_json::to_vec(blob).map_err(|_| CatalogError::InvalidWriteSpec("footer JSON"))
 }
 
+/// Memory-map a `.tet` (page faults; does not copy the whole file into RAM).
+pub(crate) fn mmap_tet(path: &Path) -> Result<Mmap, CatalogError> {
+    let file = File::open(path)?;
+    // SAFETY: read-only map of a local file we do not truncate while mapped for this call.
+    Ok(unsafe { Mmap::map(&file)? })
+}
+
 /// Read the `THST` footer from a file path (empty blob when absent).
 ///
 /// # Errors
 ///
 /// Returns [`CatalogError`] when the file cannot be read or the footer is malformed.
 pub(crate) fn read_footer_blob_from_path(path: &Path) -> Result<FooterBlobV1, CatalogError> {
-    let data = std::fs::read(path)?;
+    let data = mmap_tet(path)?;
     let sb = SuperblockV1::from_bytes(
         data.get(..SUPERBLOCK_V1_LEN)
             .ok_or(CatalogError::TooShort {
@@ -370,6 +378,11 @@ pub(crate) fn read_footer_blob_from_path(path: &Path) -> Result<FooterBlobV1, Ca
     )
     .map_err(CatalogError::Layout)?;
     read_footer_blob(&data, sb.flags)
+}
+
+fn payload_end_from_path(path: &Path) -> Result<usize, CatalogError> {
+    let data = mmap_tet(path)?;
+    payload_end_from_bytes(&data)
 }
 
 /// Parse the `THST` footer when present.
@@ -454,24 +467,7 @@ fn rewrite_footer_bytes_with_spill(
     footer_json: Vec<u8>,
     metadata_spill: Option<&[u8]>,
 ) -> Result<(), CatalogError> {
-    let data = std::fs::read(path)?;
-    let sb = SuperblockV1::from_bytes(
-        data.get(..SUPERBLOCK_V1_LEN)
-            .ok_or(CatalogError::TooShort {
-                need: SUPERBLOCK_V1_LEN,
-                got: data.len(),
-            })?
-            .try_into()
-            .map_err(|_| CatalogError::InvalidWriteSpec("superblock length"))?,
-    )
-    .map_err(CatalogError::Layout)?;
-
-    let payload_end = usize::try_from(payload_file_len(&data, sb.flags)?).map_err(|_| {
-        CatalogError::TooLargeForPlatform {
-            field: "payload_end",
-            value: u64::MAX,
-        }
-    })?;
+    let payload_end = payload_end_from_path(path)?;
 
     let (footer_bytes, spill_bytes) = if let Some(spill) = metadata_spill {
         metadata::validate_metadata_blob_len(spill)?;
@@ -535,8 +531,7 @@ pub(crate) fn rewrite_footer_with_index_spills(
         return write_footer_blob(path, logical);
     }
 
-    let data = std::fs::read(path)?;
-    let payload_end = payload_end_from_bytes(&data)?;
+    let payload_end = payload_end_from_path(path)?;
     let meta_spill = metadata_spill_if_needed(logical)?;
     let (zone_ref, index_ref, metadata_ref) = spill_refs_at(
         payload_end,

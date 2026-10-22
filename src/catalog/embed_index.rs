@@ -8,9 +8,10 @@ use crate::layout::{SUPERBLOCK_V1_LEN, SuperblockV1};
 
 use super::CatalogError;
 use super::history::{
-    self, FooterBlobV1, read_embedded_secondary_index_bytes, read_embedded_zone_maps_bytes,
-    rewrite_footer_with_index_spills,
+    self, FooterBlobV1, mmap_tet, read_embedded_secondary_index_bytes,
+    read_embedded_zone_maps_bytes, rewrite_footer_with_index_spills,
 };
+use super::package::sha256_file_hex;
 use super::secondary_index::{PreparedSecondaryIndex, prepare_secondary_index};
 use super::zone::{
     ChunkZoneStat, GenerationZoneMaps, ZONE_MAPS_VERSION, encode_zone_maps, sha256_hex,
@@ -49,6 +50,8 @@ pub fn embed_indexes_in_tet(path: &Path, generation: u64) -> Result<EmbeddedInde
 /// Like [`embed_indexes_in_tet`], but reuses zone stats collected during the write (no second
 /// full-file zone scan). Secondary INDEX kinds still run against the sealed bytes.
 ///
+/// Large files: streams SHA-256 and memory-maps payloads (does **not** `read` the whole file into RAM).
+///
 /// # Errors
 ///
 /// I/O or catalog parse failures.
@@ -60,7 +63,8 @@ pub fn embed_indexes_in_tet_with_zones(
     // Drop prior zone/index so `packed_sha256` matches a fresh v1-footer seal (spec).
     clear_embedded_indexes(path)?;
 
-    let data = std::fs::read(path)?;
+    let packed_sha256 = sha256_file_hex(path)?;
+    let data = mmap_tet(path)?;
     let sb = SuperblockV1::from_bytes(
         data.get(..SUPERBLOCK_V1_LEN)
             .ok_or(CatalogError::TooShort {
@@ -72,7 +76,6 @@ pub fn embed_indexes_in_tet_with_zones(
     )
     .map_err(CatalogError::Layout)?;
 
-    let packed_sha256 = sha256_hex(&data);
     let (zone_maps_json, zone_maps_sha256) = if let Some(chunks) = precomputed_zones {
         let doc = GenerationZoneMaps {
             version: ZONE_MAPS_VERSION,
@@ -93,6 +96,9 @@ pub fn embed_indexes_in_tet_with_zones(
         metadata: None,
         metadata_ref: None,
     });
+
+    // Drop the map before truncating/rewriting the footer.
+    drop(data);
 
     rewrite_footer_with_index_spills(
         path,
@@ -117,7 +123,7 @@ pub fn embed_indexes_in_tet_with_zones(
 ///
 /// I/O or catalog parse failures.
 pub fn clear_embedded_indexes(path: &Path) -> Result<(), CatalogError> {
-    let data = std::fs::read(path)?;
+    let data = mmap_tet(path)?;
     let sb = SuperblockV1::from_bytes(
         data.get(..SUPERBLOCK_V1_LEN)
             .ok_or(CatalogError::TooShort {
@@ -146,6 +152,7 @@ pub fn clear_embedded_indexes(path: &Path) -> Result<(), CatalogError> {
             .history
             .push(history::HistoryEvent::new("index", "clear"));
     }
+    drop(data);
     history::write_footer_blob(path, &logical)
 }
 
