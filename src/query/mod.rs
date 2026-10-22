@@ -1,7 +1,12 @@
-//! JSON query documents: validated plans and execution.
+//! JSON/TOML query documents: validated plans and execution.
 //!
 //! Embedders should use [`crate::prelude`] and [`execute_query_document`] / [`execute_query_json`].
 //! History, `tet info` text, and response formatting live in [`cli`] for the `tet` binary.
+//!
+//! Closed wire highlights: cell [`filter`](types::ValueFilter), footer
+//! [`label_filter`](types::LabelFilterSpec), `group_by` / `window` / `align` / `pipeline`.
+//! Optional package sidecars (`ZONE.json` / `INDEX.json`) feed planner chunk skip; see
+//! [`docs/secondary_indexes.md`](../../docs/secondary_indexes.md).
 
 mod align;
 pub mod cli;

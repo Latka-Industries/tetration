@@ -1,8 +1,10 @@
-# Optional secondary indexes (0.4.5)
+# Optional secondary indexes (0.4.5–0.6.6)
 
-Decision for [THI-568](https://linear.app/thicclatka/issue/THI-568). [THI-571](https://linear.app/thicclatka/issue/THI-571) builds and verifies this blob. [THI-570](https://linear.app/thicclatka/issue/THI-570) teaches the planner one predicate. [THI-572](https://linear.app/thicclatka/issue/THI-572) is the user-facing writeup in `layout_v1` / `query_engine` / `roadmap` / `CHANGELOG`. Those children follow this note.
+Contract for generation-scoped `INDEX.json` beside `packed.tet`. Started as [THI-568](https://linear.app/thicclatka/issue/THI-568) / value postings (0.4.5); extended by [THI-613](https://linear.app/thicclatka/issue/THI-613) (`sorted_axis_range`, 0.6.5) and [THI-614](https://linear.app/thicclatka/issue/THI-614) (`coord_label_postings` + `label_filter`, 0.6.6).
 
-Zone maps answer “can this chunk possibly match?” A secondary index answers a narrower question: “which chunks contain this exact value?” The index is optional. A missing or unusable index falls back to zone maps and a full chunk read. It must not change answers.
+Zone maps answer “can this chunk possibly match?” A secondary index answers a narrower question: “which chunks contain this exact value / label / coord span?” The index is optional. A missing or unusable index falls back to zone maps and a full chunk read (or footer label scan for `label_filter`). It must not change answers.
+
+**Through 0.6.x** indexes stay package sidecars. Query against a `.tet.d` package root or a sealed `packed.tet` loads the pinned generation’s `ZONE.json` / `INDEX.json` the same way (0.6.6). Standalone `.tet` still has no sidecars until **0.7.0** embeds them ([THI-626](https://linear.app/thicclatka/issue/THI-626) / [THI-627](https://linear.app/thicclatka/issue/THI-627)).
 
 ## Decision
 
@@ -30,7 +32,7 @@ generations/<G>/
 
 Store key: `generations/{G:08}/INDEX.json`, same id padding as `zone_maps_key`.
 
-`tet pack` still copies only `packed.tet`. A standalone `.tet` has no manifest and no index. This cut does not honor a stray `INDEX.json` beside a standalone file: there is no manifest hash to check it against, and pack does not copy the sidecar. Sibling `ZONE.json` behavior is unchanged.
+`tet pack` still copies only `packed.tet`. A standalone `.tet` has no manifest and no index. This cut does not honor a stray `INDEX.json` beside a standalone file: there is no manifest hash to check it against, and pack does not copy the sidecar. Sibling `ZONE.json` behavior is unchanged. Query `-t pkg.tet.d` (package root) resolves the pinned generation and loads sidecars from that generation directory — same as `-t …/packed.tet`.
 
 Staging writers do not create or update `INDEX.json`. Compact/publish recomputes it from the sealed `packed.tet` (payloads and the footer already in that image) and writes it once. The next generation gets a new file. Sealed bytes are not edited in place. Same rule as zone maps.
 
@@ -234,4 +236,6 @@ Staging is not checked. Seal is the only writer.
 
 ## Out of scope (still)
 
-Mandatory indexes. Updating an index without a new generation. Cell-value sorted-range indexes. Label-filter OR / multi-label `in` lists. A public index-builder API. Bytes inside `packed.tet`. Changing what `zone_filter_skipped_chunks` means.
+Mandatory indexes. Updating an index without a new generation. Cell-value sorted-range indexes. Label-filter OR / multi-label `in` lists. A public index-builder API. Changing what `zone_filter_skipped_chunks` means.
+
+**Through 0.6.x:** bytes inside `packed.tet` (indexes remain generation sidecars). **0.7.0** plans to embed zone + index in the sealed image.

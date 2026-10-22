@@ -102,7 +102,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Shipped in 0.6.5:** optional `sorted_axis_range` in `INDEX.json` + planner pushdown (THI-613); fold sum/mean dense-slab speedups; `bench:index` small/large vs HDF5+NumPy; `secondary_index_json` fuzz. Layout / package / C ABI / pack milestone unchanged (**0.6.3**). PyPI **tet-py 0.6.5** pins this crate.
 
-**Shipped in 0.6.6:** optional `coord_label_postings` + closed `label_filter: { axis, eq }` (pandas-style footer label equality; AND with cell `filter`; THI-614). Layout / package / C ABI / pack milestone unchanged (**0.6.3**). PyPI **tet-py 0.6.6** pins this crate.
+**Shipped in 0.6.6:** optional `coord_label_postings` + closed `label_filter: { axis, eq }` (pandas-style footer label equality; AND with cell `filter`; THI-614). Package-root `.tet.d` queries load generation `ZONE`/`INDEX` sidecars; indexed query no longer SHA-256s the whole `packed.tet`; OOC folds refuse `linear_scan` when cell/`label_eq` filters are set. Layout / package / C ABI / pack milestone unchanged (**0.6.3**). PyPI **tet-py 0.6.6** pins this crate.
 
 **Planned for 0.7.0 (layout):** embed zone maps + secondary indexes **inside** the sealed `.tet` so a standalone file is complete for pushdown (no publish-to-`.tet.d` required). `.tet.d` stays the multi-writer path only. Ladder: [THI-626](https://linear.app/thicclatka/issue/THI-626) / [THI-627](https://linear.app/thicclatka/issue/THI-627); parent [THI-609](https://linear.app/thicclatka/issue/THI-609).
 

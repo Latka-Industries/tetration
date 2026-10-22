@@ -85,7 +85,7 @@ Exit code **1** when verification fails (CI-friendly). Manual smoke fixtures: [`
 
 | Flag                | Effect                                                                                                                                                           |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet`, `.tet.d`, or `s3://bucket/prefix` (`?generation=N`). A package pins the generation it opened and does not follow a newer publish ([pin](query_engine.md#pin--consistency)). `s3://` needs `--features tetration-s3` and `TETRATION_S3_ENDPOINT` |
+| `-t`, `--tet PATH`  | Attach catalog / read plan (required for `-x`); `.tet`, `.tet.d`, or `s3://bucket/prefix` (`?generation=N`). Package root and `packed.tet` both load generation `ZONE.json` / `INDEX.json` for pushdown; standalone `.tet` has no sidecars (through 0.6.x). A package pins the generation it opened and does not follow a newer publish ([pin](query_engine.md#pin--consistency)). `s3://` needs `--features tetration-s3` and `TETRATION_S3_ENDPOINT` |
 | `-x`, `--execute`   | Decode tiles, run `operation`, attach `execution`                                                                                                                |
 | `--format`          | `full` (default), `json`, `stats`, `plan`, `quiet`, `table`                                                                                                      |
 | `-q`, `--quiet`     | Shorthand for `--format quiet` (one-line stdout)                                                                                                                 |
@@ -186,7 +186,7 @@ Copies each input `.tet` into staging as a **full-grid** part (whole datasets). 
 
 ### `tet publish` / `tet compact`
 
-Freeze sealed staging parts → merge into `packed.tet` → write per-chunk zone maps (`ZONE.json`) and, when a dataset has at most 64 distinct non-null values, value postings (`INDEX.json`) → flip `CURRENT`. **`tet compact` is an alias**: compact/merge happens during publish (not a separate visibility step). Staging parts are not updated with those sidecars. A missing index does not change query answers. Local packages use the same exclusive `publishing/<G>/` + heartbeat rule as [writer protocol v2](writer_protocol_v2.md). Object-store / multi-host publish is the library `PackageStore` path (`publish_staged_parts` / `PublishOptions`); the CLI still targets a local `.tet.d`.
+Freeze sealed staging parts → merge into `packed.tet` → write per-chunk zone maps (`ZONE.json`) and optional `INDEX.json` (`value_postings`, `sorted_axis_range`, `coord_label_postings` when each kind qualifies) → flip `CURRENT`. **`tet compact` is an alias**: compact/merge happens during publish (not a separate visibility step). Staging parts are not updated with those sidecars. A missing index does not change query answers. Local packages use the same exclusive `publishing/<G>/` + heartbeat rule as [writer protocol v2](writer_protocol_v2.md). Object-store / multi-host publish is the library `PackageStore` path (`publish_staged_parts` / `PublishOptions`); the CLI still targets a local `.tet.d`.
 
 | Flag | Effect |
 | ---- | ------ |
