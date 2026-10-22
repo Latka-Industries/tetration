@@ -14,7 +14,7 @@ Language: **MUST** / **MUST NOT** / **SHOULD** / **MAY** (RFC 2119).
 | ---- | -------------- | ---------- |
 | `layout_version` | Superblock `u32` | On-disk container framing cannot be expressed with reserved bits / additive sidecar JSON |
 | `index_version` | TIDX header | Chunk-index entry wire length or field meaning changes incompatibly |
-| `history_version` | `THST` tail | Footer framing / mutual exclusion rules break |
+| `history_version` | `THST` tail | Footer framing / spill set / mutual exclusion rules break (`1` = metadata spill only; `2` = + zone/index spills) |
 | `protocol_version` | Package `PROTOCOL` | Package roles / `CURRENT` semantics change incompatibly |
 | Query wire | Document keys / response JSON | Closed-key set or answer semantics change incompatibly |
 | `TET_ABI_VERSION` | C header + `tet_abi_version()` | C symbols, calling convention, or handle ownership break |
@@ -54,9 +54,9 @@ Writers **MUST** write reserved integer fields as **0**. Readers of v1 **MUST NO
 | --------- | ----------- |
 | Superblock `flags` bits | Bit `0` (`flags & 1`) = history footer (defined). Bits `1…31` are **reserved**. Writers **MUST** write `0`. A future minor **MAY** define a new bit; old readers that only test bit `0` keep working if payload bounds stay correct. |
 | Reserved `u32` / `u16` / `u64` slots | Stay zero until a documented layout amendment reassigns them (usually implies `layout_version` or `index_version` bump). |
-| Footer JSON object keys | Unknown keys under `history` / `metadata` **MAY** be ignored by readers that only need catalog + chunks. |
+| Footer JSON object keys | Unknown keys under `history` / `metadata` **MAY** be ignored by readers that only need catalog + chunks **when** they understand the file’s `history_version`. Version **2** spill refs are not “unknown keys” for payload bounds — see §3.1. |
 | Dataset `attrs` / semantics profiles | Additive strings; **MUST NOT** change fold answers by themselves. |
-| Generation sidecars (`ZONE.json`, `INDEX.json`) | Optional; new kinds **MAY** appear beside `packed.tet` without touching the byte image. |
+| Generation sidecars (`ZONE.json`, `INDEX.json`) | Optional; new kinds **MAY** appear beside `packed.tet` without touching the byte image. **0.7.0** may also embed the same JSON as footer spills ([`docs/embedded_indexes.md`](../docs/embedded_indexes.md)). |
 | `MANIFEST.json` keys | Unknown keys **MAY** be ignored (`GenerationManifest` style). Known required keys keep verify semantics. |
 | Query top-level keys | **Closed** — additive only by SPEC amendment; unknown keys are hard errors (§3). |
 | C ABI symbols | Additive symbols **MAY** appear without bumping `TET_ABI_VERSION` only if old symbols keep identical behavior; any break bumps the ABI. |
@@ -67,6 +67,7 @@ Writers **MUST** write reserved integer fields as **0**. Readers of v1 **MUST NO
 | ------ | ---- |
 | Reorder / resize superblock or TIDX entry | `layout_version` and/or `index_version` |
 | New mandatory region before payloads that old readers cannot skip | `layout_version` |
+| New footer spill kinds that change payload-bound arithmetic | `history_version` (e.g. **2** for zone/index embeds) |
 | New chunk codec that old readers cannot decode | Prefer refuse-unknown-codec (§3); a layout bump only if the index framing itself changes |
 | Rename / remove a query reduction key or change its answer semantics | Query wire major (document in CHANGELOG + SPEC); keep refuse-unknown |
 | Remove or change calling convention of an existing C symbol | `TET_ABI_VERSION` |
@@ -84,7 +85,8 @@ A compatible reader **MUST refuse** (clear error, no silent wrong answers):
 | --------------------- | --- |
 | `layout_version ≠ 1` | Container framing unknown |
 | `index_version ≠ 1` | Entry wire unknown |
-| `history_version ≠ 1` when footer present | Footer framing unknown |
+| `history_version` not in `{1, 2}` when footer present | Footer framing unknown |
+| `history_version = 2` when the reader only implements version 1 | Cannot subtract zone/index spills safely |
 | `protocol_version ≠ 2` for packages | Package roles unknown |
 | Chunk `codec` not in `{0, 1}` | Cannot decode payload safely |
 | Dtype tag outside `1…10` (if claiming full dtype support) | Element size / LE layout unknown |
@@ -102,8 +104,9 @@ A compatible reader **MAY ignore** without refusing open:
 | ------- | --------- |
 | Unknown footer / metadata / attrs keys | Still bind catalog and decode chunks |
 | Unknown `MANIFEST` keys | Still pin `packed.tet` when required keys validate |
-| Missing `ZONE.json` / `INDEX.json` | Answers unchanged; no chunk-skip optimization |
+| Missing `ZONE.json` / `INDEX.json` / embedded zone/index refs | Answers unchanged; no chunk-skip optimization |
 | `MANIFEST.secondary_indexes = "omitted"` or pre-0.4.5 manifests without the field | Open OK |
+| Embedded index present but unusable (bad hash / unknown kind) | Open OK; fall back (do not drop chunks) |
 | Declared semantics / caller policy files | Open/query OK; interpretation is caller-side |
 | Superblock `flags` bits other than bit `0` | **SHOULD** refuse if a set unknown bit is documented as “must understand”; until such bits exist, writers keep them 0 and readers only honor bit `0` |
 | Non-zero reserved integer fields on v1 | **SHOULD** warn in verify tooling; readers **MUST NOT** invent meaning. A future SPEC **MAY** require refuse-nonzero when a bit is claimed |
@@ -139,9 +142,10 @@ Hosts **SHOULD** fail fast when a required capability is missing rather than par
 ### Must refuse
 
 1. `layout_version = 2` file with no migration story.
-2. `codec = 2` (undefined) payload.
-3. Query `{ "dataset": "a", "mean": [], "fancy": true }` — unknown `fancy`.
-4. Package with `protocol_version: 3` when the reader only implements 2.
+2. `history_version = 2` when the reader only implements footer version 1 (zone/index spill framing).
+3. `codec = 2` (undefined) payload.
+4. Query `{ "dataset": "a", "mean": [], "fancy": true }` — unknown `fancy`.
+5. Package with `protocol_version: 3` when the reader only implements 2.
 
 ---
 
