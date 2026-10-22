@@ -22,9 +22,7 @@ fn write_tiny_f32(path: &std::path::Path) {
     }
     let mut session = TetWriterSession::create(path);
     session
-        .push_dataset(
-            TetDatasetWrite::f32_row_major("a", &shape, &chunk, data).expect("dataset"),
-        )
+        .push_dataset(TetDatasetWrite::f32_row_major("a", &shape, &chunk, data).expect("dataset"))
         .expect("push");
     session.commit().expect("commit");
 }

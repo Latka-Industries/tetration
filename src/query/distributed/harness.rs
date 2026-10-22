@@ -121,9 +121,11 @@ pub fn execute_worker_job_v1(job: &WorkerJobV1) -> Result<WorkerPartialV1, TetEr
         )));
     }
     refuse_distributed_spill(job.document.write.as_ref())?;
-    let op = job.document.operation.as_ref().ok_or_else(|| {
-        TetError::Validation("worker job document missing operation".into())
-    })?;
+    let op = job
+        .document
+        .operation
+        .as_ref()
+        .ok_or_else(|| TetError::Validation("worker job document missing operation".into()))?;
     if !operation_is_shard_mergeable(op) {
         return Err(TetError::Validation(
             "operation is not shard-mergeable (tier-C or transform)".into(),
@@ -131,14 +133,10 @@ pub fn execute_worker_job_v1(job: &WorkerJobV1) -> Result<WorkerPartialV1, TetEr
     }
     let path = resolve_worker_pin_path(&job.pin)?;
     let mmap = mmap_file_read(&path).map_err(|e| {
-        TetError::Validation(format!(
-            "worker failed to mmap pin {}: {e}",
-            path.display()
-        ))
+        TetError::Validation(format!("worker failed to mmap pin {}: {e}", path.display()))
     })?;
-    let object_len = u64::try_from(mmap.len()).map_err(|_| {
-        TetError::Validation("mmap length does not fit u64".into())
-    })?;
+    let object_len = u64::try_from(mmap.len())
+        .map_err(|_| TetError::Validation("mmap length does not fit u64".into()))?;
     if object_len != job.pin.object_len {
         return Err(TetError::Validation(format!(
             "pin object_len mismatch: job has {} but file is {object_len}",
@@ -233,9 +231,8 @@ pub fn execute_sharded_scalar_fold_multiprocess(
     }
     refuse_distributed_spill(write)?;
     let n_shards = n_shards.max(1);
-    let meta = std::fs::metadata(tet_path).map_err(|e| {
-        TetError::Validation(format!("stat {}: {e}", tet_path.display()))
-    })?;
+    let meta = std::fs::metadata(tet_path)
+        .map_err(|e| TetError::Validation(format!("stat {}: {e}", tet_path.display())))?;
     let object_len = meta.len();
     let pin = WorkerPinV1 {
         generation: 0,
@@ -260,9 +257,8 @@ pub fn execute_sharded_scalar_fold_multiprocess(
             plan: shard_plan,
             preview_max: 0,
         };
-        let job_json = serde_json::to_vec(&job).map_err(|e| {
-            TetError::Validation(format!("serialize worker job: {e}"))
-        })?;
+        let job_json = serde_json::to_vec(&job)
+            .map_err(|e| TetError::Validation(format!("serialize worker job: {e}")))?;
 
         let mut child = Command::new(worker_bin)
             .arg("worker")
@@ -271,18 +267,16 @@ pub fn execute_sharded_scalar_fold_multiprocess(
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| {
-                TetError::Validation(format!(
-                    "spawn {} worker: {e}",
-                    worker_bin.display()
-                ))
+                TetError::Validation(format!("spawn {} worker: {e}", worker_bin.display()))
             })?;
         {
-            let mut stdin = child.stdin.take().ok_or_else(|| {
-                TetError::Validation("worker stdin unavailable".into())
-            })?;
-            stdin.write_all(&job_json).map_err(|e| {
-                TetError::Validation(format!("write worker stdin: {e}"))
-            })?;
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| TetError::Validation("worker stdin unavailable".into()))?;
+            stdin
+                .write_all(&job_json)
+                .map_err(|e| TetError::Validation(format!("write worker stdin: {e}")))?;
         }
         let output = child.wait_with_output().map_err(|e| {
             TetError::Validation(format!("wait worker shard {}: {e}", spec.shard_id))
@@ -291,7 +285,8 @@ pub fn execute_sharded_scalar_fold_multiprocess(
             let err = String::from_utf8_lossy(&output.stderr);
             return Err(TetError::Validation(format!(
                 "tet worker shard {} failed (status {:?}): {err}",
-                spec.shard_id, output.status.code()
+                spec.shard_id,
+                output.status.code()
             )));
         }
         let partial: WorkerPartialV1 = serde_json::from_slice(&output.stdout).map_err(|e| {
