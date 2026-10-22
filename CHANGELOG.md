@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **0.7.2 (THI-617):** distributed dense materialize / tier-C / transform on the thin protocol — [`DenseShardPartial`](src/query/distributed/dense.rs) sparse assemble; in-process `execute_sharded_materialize_local` / `execute_sharded_tier_c_local` / `execute_sharded_transform_ram_local`; multiprocess materialize + tier-C via `tet worker`. Spill/sidecar/switch stay refused (`write: ram` only). RFC: [`docs/distributed_boundary.md`](docs/distributed_boundary.md).
+
 ## [0.7.1] - 2026-10-22
 
 ### Added

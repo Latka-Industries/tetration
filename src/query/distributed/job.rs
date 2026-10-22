@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::dense::DenseShardPartial;
 use super::merge::FoldPartialState;
 use crate::query::types::{QueryDocument, ReadPlan};
 
@@ -46,7 +47,10 @@ pub struct WorkerJobV1 {
     pub preview_max: usize,
 }
 
-/// Worker → coordinator partial fold state (JSON).
+/// Worker → coordinator result (JSON).
+///
+/// Fold jobs set [`Self::partial`] and leave [`Self::dense`] unset. Dense
+/// materialize / transform jobs set [`Self::dense`] (and may leave `partial` empty).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkerPartialV1 {
@@ -55,4 +59,7 @@ pub struct WorkerPartialV1 {
     pub shard_id: usize,
     pub pin_generation: u64,
     pub partial: FoldPartialState,
+    /// Sparse dense contribution (0.7.2 materialize / transform). Absent on fold jobs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dense: Option<DenseShardPartial>,
 }

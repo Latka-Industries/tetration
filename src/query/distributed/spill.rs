@@ -15,8 +15,8 @@ pub enum DistributedSpillPolicy {
 
 /// Refuse distributed execute when the query asks for non-RAM write targets.
 ///
-/// Scalar distributed folds do not materialize; spill/sidecar/switch are for transform
-/// output routing and are not supported across workers (boundary RFC / THI-616).
+/// Dense materialize / transform (0.7.2) still keep outcomes in coordinator RAM.
+/// Spill/sidecar/switch remain single-process only (boundary RFC / THI-616).
 ///
 /// # Errors
 ///
