@@ -76,7 +76,7 @@ That is the predicate class that zone maps answer poorly. Overlapping chunk rang
 
 At seal, per dataset:
 
-- Walk non-null cells. Nulls are the zone-map rule: fill value and NaN.
+- Walk non-null cells. Nulls are the zone-map rule: fill value and NaN. Implementations **MUST** stream elements and stop as soon as the distinct-value count would exceed the cap (do not materialize every distinct value in a chunk first — that OOMs / thrashs on high-cardinality float tiles).
 - When the number of distinct raw values is **≤ 64**, emit one `value_postings` entry that lists every distinct value.
 - Above 64, omit that dataset’s value-postings entry. Do not write a partial list. A value left out would look like “no chunk has it” and drop a chunk that does.
 - When **no** index kind qualifies for any dataset, set `secondary_indexes` to `"omitted"` and do not write `INDEX.json`.

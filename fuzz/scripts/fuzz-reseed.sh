@@ -8,7 +8,8 @@ mkdir -p \
   fuzz/corpus/verify_tet_bytes_deep \
   fuzz/corpus/verify_tet_package \
   fuzz/corpus/parse_query_json \
-  fuzz/corpus/secondary_index_json
+  fuzz/corpus/secondary_index_json \
+  fuzz/corpus/secondary_index_seal
 
 cp fixtures/small/tet/sample.tet \
    fixtures/small/tet/plan.tet \
@@ -155,4 +156,25 @@ cat > fuzz/corpus/parse_query_json/sum_label_filter_and_gt.json <<'EOF'
 {"dataset":"temperature","label_filter":{"axis":0,"eq":"bos"},"filter":{"gt":0},"sum":[]}
 EOF
 
-echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package; $(ls fuzz/corpus/parse_query_json/*.json | wc -l) query; $(ls fuzz/corpus/secondary_index_json/*.json | wc -l) index"
+# Seal-time value-postings seeds (dtype_sel, n_elems, chunk_elems, payload).
+python3 - <<'PY'
+from pathlib import Path
+import struct
+root = Path("fuzz/corpus/secondary_index_seal")
+root.mkdir(parents=True, exist_ok=True)
+root.joinpath("u8_low_card.bin").write_bytes(
+    bytes([0, 16, 8]) + bytes([1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1])
+)
+root.joinpath("u8_high_card.bin").write_bytes(bytes([0, 65, 65]) + bytes(range(65)))
+root.joinpath("f32_high_card.bin").write_bytes(
+    bytes([1, 128, 64])
+    + b"".join(struct.pack("<f", float(i) * 0.1) for i in range(128))
+)
+root.joinpath("f32_low_card.bin").write_bytes(
+    bytes([1, 64, 16])
+    + b"".join(struct.pack("<f", v) for v in [1.0, 2.0, 1.0, 2.0] * 16)
+)
+print(f"secondary_index_seal: {len(list(root.glob('*.bin')))} seeds")
+PY
+
+echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package; $(ls fuzz/corpus/parse_query_json/*.json | wc -l) query; $(ls fuzz/corpus/secondary_index_json/*.json | wc -l) index; $(ls fuzz/corpus/secondary_index_seal/*.bin | wc -l) seal"

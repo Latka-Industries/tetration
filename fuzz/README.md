@@ -34,6 +34,7 @@ nightly compiler`.
 | `verify_tet_package` | package tree from length-prefixed blob | PROTOCOL / CURRENT / MANIFEST / packed.tet |
 | `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604; window pad/step/align/`min_count` seeds THI-607; label-range seeds THI-613) |
 | `secondary_index_json` | `INDEX.json` bytes (capped) | Deserialize + encode / kind filters; unknown `kind` → `Unknown` (THI-613) |
+| `secondary_index_seal` | tiny packed `.tet` from mutated tiles | Write + `prepare_secondary_index` / embed; value-postings cardinality early-abort |
 
 ### Package input shape (`verify_tet_package`)
 
@@ -58,17 +59,20 @@ empty `staging/` + `publishing/`) and calls `verify_tet_package`. Seeds are
 mise fuzz              # preferred (quick file target)
 mise fuzz-package      # package target (THI-481)
 mise fuzz-index        # INDEX.json / sorted_axis_range (THI-613)
+mise fuzz-index-seal   # seal-time value-postings from tiny packed.tet
 # or:
 cargo +nightly fuzz run verify_tet_bytes
 cargo +nightly fuzz run verify_tet_bytes_deep
 cargo +nightly fuzz run verify_tet_package
 cargo +nightly fuzz run secondary_index_json
+cargo +nightly fuzz run secondary_index_seal
 ```
 
 Seeds are under `corpus/verify_tet_bytes/`, `corpus/verify_tet_bytes_deep/`
 (`*.tet` from `fixtures/small/tet/` plus tiny reject stubs),
 `corpus/verify_tet_package/` (`*.pkgfuzz`), `corpus/parse_query_json/` (`*.json`),
-and `corpus/secondary_index_json/` (`INDEX.json` stubs). LibFuzzer mutates more
+`corpus/secondary_index_json/` (`INDEX.json` stubs), and
+`corpus/secondary_index_seal/` (`*.bin` tile headers + payloads). LibFuzzer mutates more
 inputs beside them; those hash-named files and `artifacts/` are gitignored.
 
 ```bash
@@ -98,7 +102,9 @@ Manual GitHub Actions job [`.github/workflows/fuzz-smoke.yml`](../.github/workfl
 # local equivalents (prefer these day-to-day)
 mise fuzz-smoke
 mise fuzz-package-smoke
+mise fuzz-index-seal-smoke
 # or:
 cargo +nightly fuzz run verify_tet_bytes -- -max_total_time=60 -timeout=10
 cargo +nightly fuzz run verify_tet_package -- -max_total_time=60 -timeout=10
+cargo +nightly fuzz run secondary_index_seal -- -max_total_time=60 -timeout=10
 ```

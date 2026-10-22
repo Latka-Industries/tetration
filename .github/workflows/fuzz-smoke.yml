@@ -139,3 +139,36 @@ jobs:
             -max_total_time=60 \
             -timeout=10 \
             -rss_limit_mb=2048
+
+  secondary-index-seal:
+    name: secondary_index_seal (60s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install nightly + rust-src
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            fuzz/target/
+          key: ${{ runner.os }}-fuzz-index-seal-${{ hashFiles('**/Cargo.lock', 'fuzz/Cargo.lock') }}
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Short seal-time INDEX fuzz smoke
+        run: |
+          cargo +nightly fuzz run secondary_index_seal -- \
+            -max_total_time=60 \
+            -timeout=10 \
+            -rss_limit_mb=2048
