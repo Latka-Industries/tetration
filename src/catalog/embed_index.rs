@@ -12,7 +12,10 @@ use super::history::{
     rewrite_footer_with_index_spills,
 };
 use super::secondary_index::{PreparedSecondaryIndex, prepare_secondary_index};
-use super::zone::{sha256_hex, zone_maps_json_for_packed};
+use super::zone::{
+    ChunkZoneStat, GenerationZoneMaps, ZONE_MAPS_VERSION, encode_zone_maps, sha256_hex,
+    zone_maps_json_for_packed,
+};
 
 /// Standalone / non-package generation id written into embedded ZONE/INDEX JSON.
 pub const EMBEDDED_STANDALONE_GENERATION: u64 = 0;
@@ -40,6 +43,20 @@ pub struct EmbeddedIndexes {
 ///
 /// I/O or catalog parse failures.
 pub fn embed_indexes_in_tet(path: &Path, generation: u64) -> Result<EmbeddedIndexes, CatalogError> {
+    embed_indexes_in_tet_with_zones(path, generation, None)
+}
+
+/// Like [`embed_indexes_in_tet`], but reuses zone stats collected during the write (no second
+/// full-file zone scan). Secondary INDEX kinds still run against the sealed bytes.
+///
+/// # Errors
+///
+/// I/O or catalog parse failures.
+pub fn embed_indexes_in_tet_with_zones(
+    path: &Path,
+    generation: u64,
+    precomputed_zones: Option<Vec<ChunkZoneStat>>,
+) -> Result<EmbeddedIndexes, CatalogError> {
     // Drop prior zone/index so `packed_sha256` matches a fresh v1-footer seal (spec).
     clear_embedded_indexes(path)?;
 
@@ -56,8 +73,19 @@ pub fn embed_indexes_in_tet(path: &Path, generation: u64) -> Result<EmbeddedInde
     .map_err(CatalogError::Layout)?;
 
     let packed_sha256 = sha256_hex(&data);
-    let (zone_maps_json, zone_maps_sha256) =
-        zone_maps_json_for_packed(&data, generation, &packed_sha256)?;
+    let (zone_maps_json, zone_maps_sha256) = if let Some(chunks) = precomputed_zones {
+        let doc = GenerationZoneMaps {
+            version: ZONE_MAPS_VERSION,
+            generation,
+            packed_sha256: packed_sha256.clone(),
+            chunks,
+        };
+        let bytes = encode_zone_maps(&doc)?;
+        let sha = sha256_hex(&bytes);
+        (bytes, sha)
+    } else {
+        zone_maps_json_for_packed(&data, generation, &packed_sha256)?
+    };
     let secondary_index = prepare_secondary_index(&data, generation, &packed_sha256)?;
 
     let logical = history::read_footer_blob(&data, sb.flags).unwrap_or_else(|_| FooterBlobV1 {

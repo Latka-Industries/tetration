@@ -4,9 +4,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::catalog::{
-    CatalogError, CoordAxisV1, DatasetMetadataV1, EMBEDDED_STANDALONE_GENERATION, FileMetadataV1,
-    FooterBlobV1, HistoryEvent, MetadataLimitsV1, TetMetadataV1, embed_indexes_in_tet,
-    unix_timestamp_now, write_footer_blob,
+    CatalogError, ChunkZoneStat, CoordAxisV1, DatasetMetadataV1, EMBEDDED_STANDALONE_GENERATION,
+    FileMetadataV1, FooterBlobV1, HistoryEvent, MetadataLimitsV1, TetMetadataV1,
+    embed_indexes_in_tet_with_zones, unix_timestamp_now, write_footer_blob,
 };
 
 use super::shared::ImportPlan;
@@ -28,10 +28,25 @@ const PREFERRED_ATTRS: &[&str] = &[
 /// # Errors
 ///
 /// Returns [`CatalogError`] when metadata validation or footer I/O fails.
+#[allow(dead_code)] // kept as the no-precomputed-zones entry point
 pub fn finish_convert_footer(
     output: &Path,
     source: &str,
     plans: &[ImportPlan],
+) -> Result<Vec<HistoryEvent>, CatalogError> {
+    finish_convert_footer_with_zones(output, source, plans, None)
+}
+
+/// Like [`finish_convert_footer`], reusing zone stats from the streaming write.
+///
+/// # Errors
+///
+/// Returns [`CatalogError`] when metadata validation, footer I/O, or embed fails.
+pub fn finish_convert_footer_with_zones(
+    output: &Path,
+    source: &str,
+    plans: &[ImportPlan],
+    write_zones: Option<Vec<ChunkZoneStat>>,
 ) -> Result<Vec<HistoryEvent>, CatalogError> {
     let metadata = build_convert_metadata(plans)?;
     let event = HistoryEvent::new("convert", source);
@@ -44,7 +59,7 @@ pub fn finish_convert_footer(
         },
     )?;
     // Standalone convert output must carry ZONE/INDEX for pushdown (0.7.0).
-    embed_indexes_in_tet(output, EMBEDDED_STANDALONE_GENERATION)?;
+    embed_indexes_in_tet_with_zones(output, EMBEDDED_STANDALONE_GENERATION, write_zones)?;
     Ok(vec![event])
 }
 

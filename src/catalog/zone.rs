@@ -8,6 +8,7 @@ use std::fs;
 use std::path::Path;
 
 use half::f16;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -81,57 +82,84 @@ pub fn zone_maps_for_packed(
     packed_sha256: &str,
 ) -> Result<GenerationZoneMaps, CatalogError> {
     let summary = read_tet_summary_v1(packed)?;
-    let mut chunks = Vec::with_capacity(summary.chunks.len());
-    for entry in &summary.chunks {
-        let dataset_idx =
-            usize::try_from(entry.dataset_id).map_err(|_| CatalogError::TooLargeForPlatform {
-                field: "dataset_id",
-                value: entry.dataset_id,
+    let chunks: Vec<ChunkZoneStat> = summary
+        .chunks
+        .par_iter()
+        .map(|entry| {
+            let dataset_idx = usize::try_from(entry.dataset_id).map_err(|_| {
+                CatalogError::TooLargeForPlatform {
+                    field: "dataset_id",
+                    value: entry.dataset_id,
+                }
             })?;
-        let dataset = summary
-            .datasets
-            .get(dataset_idx)
-            .ok_or(CatalogError::InvalidWriteSpec(
-                "chunk dataset_id out of range while building zone maps",
-            ))?;
-        let ndim = dataset.shape.len();
-        let elem_size = elem_size_for_wire_tag(dataset.dtype)?;
-        let stored = stored_payload(packed, entry.payload_offset, entry.stored_byte_len)?;
-        let raw = CHUNK_PAYLOAD_CODEC_V1.decode_tile_payload(
-            stored,
-            entry.raw_byte_len,
-            entry.stored_byte_len,
-            entry.codec,
-        )?;
-        let fill = fill_le_bytes(
-            dataset.dtype,
-            summary
-                .metadata
-                .datasets
-                .get(&dataset.name)
-                .map(|m| &m.attrs),
-        );
-        let bounds = scan_chunk(dataset.dtype, elem_size, raw.as_ref(), fill.as_deref())?;
-        let element_count = u64::try_from(raw.len() / elem_size).map_err(|_| {
-            CatalogError::TooLargeForPlatform {
-                field: "element_count",
-                value: u64::MAX,
-            }
-        })?;
-        chunks.push(ChunkZoneStat {
-            dataset_id: entry.dataset_id,
-            chunk_index: entry.chunk_index[..ndim].to_vec(),
-            element_count,
-            null_count: bounds.null_count,
-            min_le: bounds.min.map(|b| hex_le(&b)),
-            max_le: bounds.max.map(|b| hex_le(&b)),
-        });
-    }
+            let dataset =
+                summary
+                    .datasets
+                    .get(dataset_idx)
+                    .ok_or(CatalogError::InvalidWriteSpec(
+                        "chunk dataset_id out of range while building zone maps",
+                    ))?;
+            let ndim = dataset.shape.len();
+            let elem_size = elem_size_for_wire_tag(dataset.dtype)?;
+            let stored = stored_payload(packed, entry.payload_offset, entry.stored_byte_len)?;
+            let raw = CHUNK_PAYLOAD_CODEC_V1.decode_tile_payload(
+                stored,
+                entry.raw_byte_len,
+                entry.stored_byte_len,
+                entry.codec,
+            )?;
+            let fill = fill_le_bytes(
+                dataset.dtype,
+                summary
+                    .metadata
+                    .datasets
+                    .get(&dataset.name)
+                    .map(|m| &m.attrs),
+            );
+            chunk_zone_stat_from_raw(
+                entry.dataset_id,
+                &entry.chunk_index[..ndim],
+                dataset.dtype,
+                elem_size,
+                raw.as_ref(),
+                fill.as_deref(),
+            )
+        })
+        .collect::<Result<Vec<_>, CatalogError>>()?;
     Ok(GenerationZoneMaps {
         version: ZONE_MAPS_VERSION,
         generation,
         packed_sha256: packed_sha256.to_owned(),
         chunks,
+    })
+}
+
+/// Zone row for one raw (decoded) tile buffer — used during streaming write to avoid a second pass.
+///
+/// # Errors
+///
+/// Payload length / dtype problems.
+pub(crate) fn chunk_zone_stat_from_raw(
+    dataset_id: u64,
+    chunk_index: &[u64],
+    dtype: u32,
+    elem_size: usize,
+    raw: &[u8],
+    fill: Option<&[u8]>,
+) -> Result<ChunkZoneStat, CatalogError> {
+    let bounds = scan_chunk(dtype, elem_size, raw, fill)?;
+    let element_count =
+        u64::try_from(raw.len() / elem_size).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "element_count",
+            value: u64::MAX,
+        })?;
+    Ok(ChunkZoneStat {
+        dataset_id,
+        chunk_index: chunk_index.to_vec(),
+        element_count,
+        null_count: bounds.null_count,
+        min_le: bounds.min.map(|b| hex_le(&b)),
+        max_le: bounds.max.map(|b| hex_le(&b)),
     })
 }
 

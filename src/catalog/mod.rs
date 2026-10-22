@@ -42,6 +42,7 @@ pub use append::{
 pub use dataset::{DatasetRecordV1, RawArrayWrite};
 pub use embed_index::{
     EMBEDDED_STANDALONE_GENERATION, EmbeddedIndexes, clear_embedded_indexes, embed_indexes_in_tet,
+    embed_indexes_in_tet_with_zones,
 };
 pub use execution::{DEFAULT_MEMORY_BUDGET_PERCENT_BPS, FileExecutionSettingsV1};
 #[cfg(test)]

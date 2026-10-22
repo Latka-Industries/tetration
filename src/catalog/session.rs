@@ -624,20 +624,26 @@ impl TetWriterSession {
             fill_commit_prepared_tile(&prepared, job, buf, &fill)
         };
 
-        match self.mode {
-            SessionMode::Create => write_multi_raw_array_streaming(
+        let write_zones = match self.mode {
+            SessionMode::Create => Some(write_multi_raw_array_streaming(
                 &self.path,
                 &commit_array_metas(&prepared, file_execution, false),
                 parallel_jobs,
                 fill_tile,
                 None,
-            )?,
+                None,
+            )?),
             SessionMode::Append { .. } => {
                 append_multi_mixed(&self.path, &memory_specs, &stream_metas, fill_tile)?;
+                None
             }
-        }
+        };
         self.flush_footer(footer_metadata)?;
-        super::embed_indexes_in_tet(&self.path, super::EMBEDDED_STANDALONE_GENERATION)?;
+        super::embed_indexes_in_tet_with_zones(
+            &self.path,
+            super::EMBEDDED_STANDALONE_GENERATION,
+            write_zones,
+        )?;
         Ok(self.path)
     }
 }

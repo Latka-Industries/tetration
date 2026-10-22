@@ -10,7 +10,10 @@ use super::dataset::encode_dataset_blob;
 use super::execution::FileExecutionSettingsV1;
 use super::index::ChunkIndexEntryV1;
 use super::tile;
-use super::{CHUNK_PAYLOAD_CODEC_V1, CatalogError, MAX_NDIM, usize_from_u64};
+use super::zone::{ChunkZoneStat, chunk_zone_stat_from_raw};
+use super::{
+    CHUNK_PAYLOAD_CODEC_V1, CatalogError, MAX_NDIM, elem_size_for_wire_tag, usize_from_u64,
+};
 
 /// Dataset metadata for streaming writes (no in-memory tensor buffer).
 #[derive(Debug, Clone)]
@@ -91,6 +94,9 @@ pub fn total_chunk_count_for_meta(specs: &[ArrayWriteMeta<'_>]) -> Result<u64, C
 /// `on_progress`, when set, is invoked after each payload is flushed (`chunks_done`, `chunks_total`,
 /// current dataset name).
 ///
+/// Returns per-chunk zone stats scanned from each filled tile (avoids a second full-file pass at
+/// embed time). `dataset_fills[dataset_id]` is the optional fill-value LE bytes for null counting.
+///
 /// # Errors
 ///
 /// Returns [`CatalogError`] when layout rules are violated, `fill_tile` fails, or I/O fails.
@@ -100,7 +106,8 @@ pub fn write_multi_raw_array_streaming(
     parallel_jobs: usize,
     fill_tile: impl Fn(&StreamTileJob<'_>, &mut [u8]) -> Result<(), CatalogError> + Sync + Send,
     on_progress: Option<&mut StreamWriteProgress<'_>>,
-) -> Result<(), CatalogError> {
+    dataset_fills: Option<&[Option<Vec<u8>>]>,
+) -> Result<Vec<ChunkZoneStat>, CatalogError> {
     if specs.is_empty() {
         return Err(CatalogError::InvalidWriteSpec(
             "at least one dataset is required",
@@ -134,38 +141,73 @@ pub fn write_multi_raw_array_streaming(
         .open(path)?;
     super::file_layout::write_file_preamble(&mut f, &sb, &blob, index_base, &index_bytes)?;
     let parallel_jobs = parallel_jobs.max(1);
-    if parallel_jobs == 1 {
+    let zones = if parallel_jobs == 1 {
         write_filled_tiles_sequential(
             &mut f,
+            specs,
             &entries,
             &jobs,
             n_chunks_total,
             &fill_tile,
             on_progress,
-        )?;
+            dataset_fills,
+        )?
     } else {
         write_filled_tiles_parallel(
             &mut f,
+            specs,
             &entries,
             &jobs,
             n_chunks_total,
             parallel_jobs,
             &fill_tile,
             on_progress,
-        )?;
-    }
+            dataset_fills,
+        )?
+    };
     f.sync_all()?;
-    Ok(())
+    Ok(zones)
 }
 
+fn tile_zone_stat(
+    specs: &[ArrayWriteMeta<'_>],
+    job: &StreamTileJob<'_>,
+    tile_buf: &[u8],
+    dataset_fills: Option<&[Option<Vec<u8>>]>,
+) -> Result<ChunkZoneStat, CatalogError> {
+    let spec = specs
+        .get(job.dataset_id)
+        .ok_or(CatalogError::InvalidWriteSpec(
+            "stream job dataset_id out of range",
+        ))?;
+    let elem_size = elem_size_for_wire_tag(spec.dtype)?;
+    let fill = dataset_fills
+        .and_then(|fills| fills.get(job.dataset_id))
+        .and_then(|f| f.as_deref());
+    chunk_zone_stat_from_raw(
+        u64::try_from(job.dataset_id).map_err(|_| CatalogError::TooLargeForPlatform {
+            field: "dataset_id",
+            value: u64::MAX,
+        })?,
+        &job.chunk_coord[..job.ndim],
+        spec.dtype,
+        elem_size,
+        tile_buf,
+        fill,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn write_filled_tiles_sequential(
     f: &mut std::fs::File,
+    specs: &[ArrayWriteMeta<'_>],
     entries: &[ChunkIndexEntryV1],
     jobs: &[StreamTileJob<'_>],
     n_chunks_total: u64,
     fill_tile: &(impl Fn(&StreamTileJob<'_>, &mut [u8]) -> Result<(), CatalogError> + Sync + Send),
     mut on_progress: Option<&mut StreamWriteProgress<'_>>,
-) -> Result<(), CatalogError> {
+    dataset_fills: Option<&[Option<Vec<u8>>]>,
+) -> Result<Vec<ChunkZoneStat>, CatalogError> {
     let sequential = entries_are_sequential(entries);
     if sequential && !entries.is_empty() {
         let pos = f.stream_position()?;
@@ -174,6 +216,7 @@ fn write_filled_tiles_sequential(
         }
     }
 
+    let mut zones = Vec::with_capacity(jobs.len());
     let mut tile_buf = Vec::new();
     for (i, job) in jobs.iter().enumerate() {
         let entry = &entries[i];
@@ -184,6 +227,7 @@ fn write_filled_tiles_sequential(
                 "fill_tile returned wrong byte length for chunk",
             ));
         }
+        zones.push(tile_zone_stat(specs, job, &tile_buf, dataset_fills)?);
         write_tile_payload(f, entry, &tile_buf, sequential)?;
         if let Some(ref mut progress) = on_progress {
             progress(
@@ -193,18 +237,21 @@ fn write_filled_tiles_sequential(
             );
         }
     }
-    Ok(())
+    Ok(zones)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_filled_tiles_parallel(
     f: &mut std::fs::File,
+    specs: &[ArrayWriteMeta<'_>],
     entries: &[ChunkIndexEntryV1],
     jobs: &[StreamTileJob<'_>],
     n_chunks_total: u64,
     parallel_jobs: usize,
     fill_tile: &(impl Fn(&StreamTileJob<'_>, &mut [u8]) -> Result<(), CatalogError> + Sync + Send),
     mut on_progress: Option<&mut StreamWriteProgress<'_>>,
-) -> Result<(), CatalogError> {
+    dataset_fills: Option<&[Option<Vec<u8>>]>,
+) -> Result<Vec<ChunkZoneStat>, CatalogError> {
     let sequential = entries_are_sequential(entries);
     if sequential && !entries.is_empty() {
         let pos = f.stream_position()?;
@@ -213,6 +260,7 @@ fn write_filled_tiles_parallel(
         }
     }
 
+    let mut zones = Vec::with_capacity(jobs.len());
     let mut i = 0usize;
     while i < jobs.len() {
         let end = (i + parallel_jobs).min(jobs.len());
@@ -234,6 +282,7 @@ fn write_filled_tiles_parallel(
                     "fill_tile returned wrong byte length for chunk",
                 ));
             }
+            zones.push(tile_zone_stat(specs, &jobs[idx], &tile_buf, dataset_fills)?);
             write_tile_payload(f, entry, &tile_buf, sequential)?;
             if let Some(ref mut progress) = on_progress {
                 progress(
@@ -245,7 +294,7 @@ fn write_filled_tiles_parallel(
         }
         i = end;
     }
-    Ok(())
+    Ok(zones)
 }
 
 fn write_tile_payload(
