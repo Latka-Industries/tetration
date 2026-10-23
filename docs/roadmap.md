@@ -120,7 +120,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Localhost N-process harness (THI-618):** `tet worker` runs one `WorkerJobV1` → `WorkerPartialV1`; `execute_sharded_scalar_fold_multiprocess` spawns N workers over one pinned `.tet` and merges partials. Still no network RPC / K8s fleet.
 
-**Shipped in 0.7.2 (THI-617):** distributed materialize / transform / tier-C on the thin protocol (`DenseShardPartial`, `write: ram` only; multiprocess materialize + median). Spill/sidecar/switch stay refuse-only. **Planned 0.7.3 (THI-612):** semantics profiles (four PRs, one cut). **Later (THI-630):** network RPC. Still not shipped: cluster scheduler / worker-local spill / multiprocess transform stats broadcast.
+**Shipped in 0.7.2 (THI-617):** distributed materialize / transform / tier-C on the thin protocol (`DenseShardPartial`, `write: ram` only; multiprocess materialize + median). Spill/sidecar/switch stay refuse-only. **Shipped in 0.7.3 (THI-612):** semantics profiles (four PRs + module split). **Planned 0.8.0:** one-file TOML apply (dims + attrs). **Later (THI-630):** network RPC. Still not shipped: cluster scheduler / worker-local spill / multiprocess transform stats broadcast.
 
 **Hygiene (before protocol):** THI-597 / THI-598 landed on `main` (squash [#112](https://github.com/Latka-Industries/tetration/pull/112)); THI-599 optional backlog.
 
@@ -153,9 +153,11 @@ GROUP BY region
 
 **Shipped in 0.5.1 (declared + policy split):** optional **declared** science/media facts in footer `metadata.datasets[<name>].attrs` and append-only history, plus caller **policy** outside the file (`tet-semantics.toml` / `.json`). Helpers and CLI: `tet semantics set` / `scaffold`. Spec: [`semantics.md`](semantics.md). Worked recording fixture: `fixtures/small/tet/recording.tet`. Climate appears only as attrs / a doc profile id — **not** a climate runtime in the crate. Declared attrs do **not** change fold/query answers by themselves.
 
-**In flight (0.7.3 / THI-612):** profile registry contracts ([`semantics_profiles.md`](semantics_profiles.md)); optional declare-only package `SEMANTICS.json` (THI-620); policy linter + reference snippets; richer PROV-shaped history helpers. Still fold-inert.
+**Shipped in 0.7.3 (THI-612):** profile registry contracts ([`semantics_profiles.md`](semantics_profiles.md)); optional declare-only package `SEMANTICS.json` (THI-620); policy linter + reference snippets; richer PROV-shaped history helpers; `catalog::semantics` module split. Still fold-inert.
 
-**Still prospective (after 0.7.3):** full CF / PROV compliance suites, UCUM conversion graphs inside `packed.tet`, plugin / dynamic code load, required in-tree policy interpreter that mutates folds.
+**Planned 0.8.0:** one-file `tet-semantics.toml` + `tet semantics apply` (stamp `dim_names` + attrs; policy stays in TOML).
+
+**Still prospective:** full CF / PROV compliance suites, UCUM conversion graphs inside `packed.tet`, plugin / dynamic code load, required in-tree policy interpreter that mutates folds.
 
 **Direction:** richer meaning alongside bytes — convertible units on read, geospatial CRS bindings, richer uncertainty, domain vocabularies — without becoming a plugin host.
 

@@ -2,13 +2,22 @@
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-23
+
 ### Added
 
 - Semantics **profile registry** docs ([`docs/semantics_profiles.md`](docs/semantics_profiles.md)): contracts for `media_v1`, `timeseries_v1`, `cf_lite_v1`, `prov_log_v1` (legacy `climate_v1` → `cf_lite_v1`); open id minting; fold-inert reminder (THI-623 / THI-612)
 - Optional declare-only package **`SEMANTICS.json`** beside sealed generations (`PackageSemanticsV1`, MANIFEST `semantics` / `semantics_sha256`, verify, `tet semantics package-write` / `package-show`); ignore-unknown; not read by query (THI-620 / THI-612)
 - Semantics **policy linter** (`lint_declared_semantics` / `tet semantics lint`) + reference snippets under [`docs/semantics_snippets/`](docs/semantics_snippets/) (THI-621 / THI-612)
 - Richer PROV-shaped history: optional `HistoryEvent` fields `agent` / `activity` / `entity`, `with_prov` helper, ignore-unknown history keys (THI-624 / THI-612)
-- Refactor: `catalog::semantics` module (`declare` / `profiles` / `lint`) — profile recommended-key tables live in `profiles.rs` for later registry PRs
+
+### Changed
+
+- Refactor: `catalog::semantics` module (`declare` / `profiles` / `lint`) — profile recommended-key tables live in `profiles.rs` for later registry PRs (#175)
+
+### Notes
+
+- Semver patch on the 0.7 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). No new Python API — pin **tet-py** after crates.io publish. One-file TOML `apply` (dims + attrs) deferred to **0.8.0**.
 
 ## [0.7.2] - 2026-10-23
 
