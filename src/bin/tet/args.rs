@@ -289,7 +289,7 @@ pub enum Commands {
 #[derive(Args)]
 #[command(
     name = "semantics",
-    about = "Declare science/media attrs or scaffold caller policy (docs/semantics.md)"
+    about = "Declare science/media attrs, apply tet-semantics.toml, or scaffold caller policy"
 )]
 pub struct SemanticsArgs {
     #[command(subcommand)]
@@ -298,6 +298,17 @@ pub struct SemanticsArgs {
 
 #[derive(Subcommand)]
 pub enum SemanticsCmd {
+    /// Stamp `dim_names` and attrs from a one-file `tet-semantics.toml`.
+    ///
+    /// Policy formulas and `[units.*]` stay in the TOML. Does not rewrite `--from`.
+    /// Sealed `.tet.d` generations are immutable.
+    Apply {
+        /// Path to a mutable `.tet` file.
+        path: PathBuf,
+        /// One-file semantics TOML (`schema_version`, datasets, profiles, units).
+        #[arg(long, value_name = "FILE")]
+        from: PathBuf,
+    },
     /// Emit caller-policy stubs from declared attrs (or catalog + doc links when none).
     Scaffold {
         /// Path to `.tet` file.

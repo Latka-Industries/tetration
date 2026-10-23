@@ -24,6 +24,7 @@ Open, verify, and query stay valid when none of these keys are present. Declared
 
 ## CLI
 
+- **`tet semantics apply <path.tet> --from tet-semantics.toml`**: stamp `dim_names` and attrs (including `semantics_profile`) into a mutable `.tet`. Present fields overwrite; omitted fields stay. `[profiles.*]` formulas and `[units.*]` stay in the TOML. Does not rewrite `--from`. Sealed `.tet.d` needs a new generation. `coords` is rejected.
 - **`tet semantics scaffold`**: declared attrs → policy stubs; none → catalog + site doc URL (no invented commented config).
 - **`tet semantics set`**: declare or clear attrs on a dataset (rewrites footer metadata; does not reinterpret values).
 - **`tet semantics lint`**: advisory profile-contract checks (e.g. claims `cf_lite.v1` but missing `units`). Reference policy snippets: [`semantics_snippets/`](semantics_snippets/).

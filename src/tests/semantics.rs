@@ -2,10 +2,10 @@
 
 use crate::catalog::{
     DatasetSemanticsDecl, FooterBlobV1, HistoryEvent, PackageSemanticsV1, SEMANTICS_FILE,
-    SEMANTICS_PRESENT, ScaffoldFormat, TetDatasetWrite, TetPackage, TetShardWriter, declared_attrs,
-    get_dataset_attr, is_declared_key, metadata_has_declared_attrs, read_package_semantics,
-    read_tet_summary_v1, scaffold_policy, set_dataset_attrs, write_footer_blob,
-    write_package_semantics, write_recording_fixture,
+    SEMANTICS_PRESENT, ScaffoldFormat, TetDatasetWrite, TetPackage, TetShardWriter,
+    apply_semantics_toml, declared_attrs, format_apply_report, get_dataset_attr, is_declared_key,
+    metadata_has_declared_attrs, read_package_semantics, read_tet_summary_v1, scaffold_policy,
+    set_dataset_attrs, write_footer_blob, write_package_semantics, write_recording_fixture,
 };
 use crate::layout::mmap_file_read;
 use crate::query::{QueryDocument, plan_query_with_tet_mmap};
@@ -273,4 +273,159 @@ fn history_prov_fields_roundtrip_and_ignore_unknown() {
     });
     let parsed: FooterBlobV1 = serde_json::from_value(raw).unwrap();
     assert_eq!(parsed.history[0].agent.as_deref(), Some("a"));
+}
+
+const APPLY_TOML: &str = r#"
+schema_version = 1
+
+[datasets.frames]
+dim_names = ["y", "x"]
+
+[datasets.frames.attrs]
+semantics_profile = "media.v1"
+media_kind = "video"
+frame_rate = 30
+frame_rate_unit = "Hz"
+time_axis = 0
+pixel_unit = "px"
+
+[profiles.media.v1]
+index_to_seconds = "index / frame_rate"
+seconds_to_index = "floor(seconds * frame_rate)"
+
+[units.Hz]
+display = "Hz"
+"#;
+
+fn write_apply_toml(dir: &std::path::Path, body: &str) -> std::path::PathBuf {
+    let path = dir.join("tet-semantics.toml");
+    std::fs::write(&path, body).unwrap();
+    path
+}
+
+#[test]
+fn apply_stamps_dims_and_attrs_and_leaves_formulas_in_toml() {
+    let dir = tempfile::tempdir().unwrap();
+    let tet = dir.path().join("clip.tet");
+    write_multichunk_2x3_tiles(&tet, "frames");
+    set_dataset_attrs(&tet, "frames", &[("units", "K")], &[] as &[&str]).unwrap();
+    let toml = write_apply_toml(dir.path(), APPLY_TOML);
+    let before = std::fs::read(&toml).unwrap();
+
+    let report = apply_semantics_toml(&tet, &toml).unwrap();
+    assert_eq!(std::fs::read(&toml).unwrap(), before);
+    let text = format_apply_report(&tet, &report);
+    assert!(text.contains("dim_names=[y, x]"), "{text}");
+    assert!(text.contains("frame_rate"), "{text}");
+    assert!(text.contains("profiles media.v1"), "{text}");
+    assert!(text.contains("units Hz"), "{text}");
+    assert!(!text.contains("index_to_seconds"), "{text}");
+
+    let bytes = std::fs::read(&tet).unwrap();
+    let summary = read_tet_summary_v1(&bytes).unwrap();
+    let ds = summary.metadata.datasets.get("frames").unwrap();
+    assert_eq!(
+        ds.dim_names.as_deref(),
+        Some(["y".to_owned(), "x".to_owned()].as_slice())
+    );
+    assert_eq!(ds.attrs.get("frame_rate").map(String::as_str), Some("30"));
+    assert_eq!(ds.attrs.get("units").map(String::as_str), Some("K"));
+    assert_eq!(
+        ds.attrs.get("semantics_profile").map(String::as_str),
+        Some("media.v1")
+    );
+    let lossy = String::from_utf8_lossy(&bytes);
+    assert!(
+        !lossy.contains("index_to_seconds"),
+        "formula leaked into footer"
+    );
+    assert!(
+        summary
+            .history
+            .iter()
+            .any(|e| { e.op == "semantics" && e.params.get("via").is_some_and(|v| v == "apply") })
+    );
+}
+
+#[test]
+fn apply_normalizes_profile_alias_and_preserves_omitted_dim_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let tet = dir.path().join("clip.tet");
+    write_multichunk_2x3_tiles(&tet, "frames");
+    let first = write_apply_toml(dir.path(), APPLY_TOML);
+    apply_semantics_toml(&tet, &first).unwrap();
+    let second = r#"
+schema_version = 1
+[datasets.frames.attrs]
+semantics_profile = "v1.media"
+frame_rate = 24
+"#;
+    let toml = write_apply_toml(dir.path(), second);
+    let report = apply_semantics_toml(&tet, &toml).unwrap();
+    assert!(
+        report.stamped[0]
+            .profile_normalized
+            .as_ref()
+            .is_some_and(|(from, to)| from == "v1.media" && to == "media.v1")
+    );
+    let bytes = std::fs::read(&tet).unwrap();
+    let summary = read_tet_summary_v1(&bytes).unwrap();
+    let ds = summary.metadata.datasets.get("frames").unwrap();
+    assert_eq!(
+        ds.dim_names.as_deref(),
+        Some(["y".to_owned(), "x".to_owned()].as_slice())
+    );
+    assert_eq!(ds.attrs.get("frame_rate").map(String::as_str), Some("24"));
+    assert_eq!(ds.attrs.get("pixel_unit").map(String::as_str), Some("px"));
+    assert_eq!(
+        ds.attrs.get("semantics_profile").map(String::as_str),
+        Some("media.v1")
+    );
+}
+
+#[test]
+fn apply_rejects_missing_dataset_rank_mismatch_coords_and_sealed_package() {
+    let dir = tempfile::tempdir().unwrap();
+    let tet = dir.path().join("clip.tet");
+    write_multichunk_2x3_tiles(&tet, "frames");
+    let before = std::fs::read(&tet).unwrap();
+
+    let missing = write_apply_toml(
+        dir.path(),
+        "schema_version = 1\n[datasets.nope.attrs]\nunits = \"K\"\n",
+    );
+    let err = apply_semantics_toml(&tet, &missing)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("not found"), "{err}");
+
+    let rank = write_apply_toml(
+        dir.path(),
+        "schema_version = 1\n[datasets.frames]\ndim_names = [\"t\", \"y\", \"x\"]\n",
+    );
+    let err = apply_semantics_toml(&tet, &rank).unwrap_err().to_string();
+    assert!(err.contains("rank"), "{err}");
+
+    let axis = write_apply_toml(
+        dir.path(),
+        "schema_version = 1\n[datasets.frames.attrs]\ntime_axis = 9\n",
+    );
+    let err = apply_semantics_toml(&tet, &axis).unwrap_err().to_string();
+    assert!(err.contains("time_axis"), "{err}");
+
+    let coords = write_apply_toml(
+        dir.path(),
+        "schema_version = 1\n[datasets.frames]\ncoords = [\"t\"]\n",
+    );
+    let err = apply_semantics_toml(&tet, &coords).unwrap_err().to_string();
+    assert!(err.contains("coords"), "{err}");
+    assert_eq!(std::fs::read(&tet).unwrap(), before);
+
+    let pkg = dir.path().join("clip.tet.d");
+    std::fs::create_dir(&pkg).unwrap();
+    std::fs::write(pkg.join("PROTOCOL"), b"{}\n").unwrap();
+    let err = apply_semantics_toml(&pkg, &missing)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("sealed"), "{err}");
 }
