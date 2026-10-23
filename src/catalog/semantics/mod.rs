@@ -27,6 +27,7 @@ pub use lint::{
     lint_declared_semantics, lint_package_semantics, lint_summary, lint_tet_path,
 };
 pub use profiles::{
-    DOCUMENTED_PROFILE_IDS, PROV_LOG_RECOMMENDED_PARAMS, is_documented_profile,
-    normalize_profile_id, recommended_keys_for_profile,
+    CF_LITE_V1, DOCUMENTED_PROFILE_IDS, DOCUMENTED_PROFILES, MEDIA_V1, PROV_LOG_RECOMMENDED_PARAMS,
+    PROV_LOG_V1, ProfileContract, TIMESERIES_V1, infer_profile_id, is_documented_profile,
+    normalize_profile_id, profile_contract, rate_attr_for_profile, recommended_keys_for_profile,
 };

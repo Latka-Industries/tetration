@@ -9,7 +9,10 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::profiles::{normalize_profile_id, recommended_keys_for_profile};
+use super::profiles::{
+    MEDIA_V1, infer_profile_id, normalize_profile_id, rate_attr_for_profile,
+    recommended_keys_for_profile,
+};
 
 use crate::utils::dtype::ElementDtype;
 
@@ -524,31 +527,13 @@ fn collect_profile_ids(rows: &[DeclareRow]) -> BTreeSet<String> {
         }
     }
     if profiles.is_empty() && rows.iter().any(|row| !row.attrs.is_empty()) {
-        profiles.insert("media.v1".to_owned());
+        profiles.insert(MEDIA_V1.id.to_owned());
     }
     profiles
 }
 
 fn infer_profile(attrs: &BTreeMap<String, String>) -> Option<String> {
-    if attrs.contains_key("frame_rate") || attrs.get("media_kind").is_some_and(|k| k == "video") {
-        Some("media.v1".to_owned())
-    } else if attrs.contains_key("sample_rate")
-        || attrs.get("media_kind").is_some_and(|k| k == "timeseries")
-    {
-        Some("timeseries.v1".to_owned())
-    } else if attrs.contains_key("crs") || attrs.contains_key("standard_name") {
-        Some("cf_lite.v1".to_owned())
-    } else {
-        None
-    }
-}
-
-fn rate_attr_for_profile(profile: &str) -> Option<&'static str> {
-    match normalize_profile_id(profile) {
-        "media.v1" => Some("frame_rate"),
-        "timeseries.v1" => Some("sample_rate"),
-        _ => None,
-    }
+    infer_profile_id(attrs).map(str::to_owned)
 }
 
 fn collect_unit_tokens(rows: &[DeclareRow]) -> BTreeSet<String> {
@@ -601,7 +586,7 @@ pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
     attrs.insert("frame_rate_unit".into(), "Hz".into());
     attrs.insert("time_axis".into(), "0".into());
     attrs.insert("media_kind".into(), "video".into());
-    attrs.insert("semantics_profile".into(), "media.v1".into());
+    attrs.insert("semantics_profile".into(), MEDIA_V1.id.into());
     attrs.insert("pixel_unit".into(), "px".into());
 
     let mut event = HistoryEvent::new("semantics", "fixtures/small/tet/recording.tet");
