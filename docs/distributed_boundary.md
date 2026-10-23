@@ -1,6 +1,6 @@
 # Distributed execution — product boundary (0.7.1 → 0.7.2)
 
-**Status:** 0.7.1 boundary locked (THI-615 / THI-616 / THI-618). **0.7.2** opens materialize / transform (THI-617) per the RFC below. Semantics is one **0.7.3** (THI-612, four PRs).  
+**Status:** 0.7.1 boundary locked (THI-615 / THI-616 / THI-618). **0.7.2 shipped** — materialize / transform / tier-C open (THI-617 / [#169](https://github.com/Latka-Industries/tetration/pull/169)) per the RFC below. Semantics is one **0.7.3** (THI-612, four PRs).  
 **Module:** [`query::distributed`](../src/query/distributed/README.md)
 
 ## Product shape
@@ -21,7 +21,7 @@ This is **not** a cluster scheduler, Spark/Flink replacement, or a shipped worke
 | --- | -------- | --- |
 | **0.7.1** | Boundary RFC; spill/sidecar/switch **refused** on the distributed path (RAM partials only); clearer refuse errors | Worker-local spill files; shared DFS; advancing `CURRENT` mid-query |
 | **0.7.1+ harness** | Localhost **N-process** harness (`tet worker` + coordinator spawn) proving the JSON protocol across OS processes | Network RPC service; Docker/K8s worker fleet; tet-py cluster manager |
-| **0.7.2** | Distributed materialize / transform / tier-C on the thin protocol (THI-617) — **open** with `write: ram` only | General cluster orchestration; network RPC (later THI-630); distributed spill |
+| **0.7.2** | Distributed materialize / transform / tier-C on the thin protocol (THI-617) — **shipped** with `write: ram` only | General cluster orchestration; network RPC (later THI-630); distributed spill; multiprocess transform stats broadcast |
 
 ## Spill / export policy (THI-616, carried into 0.7.2)
 

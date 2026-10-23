@@ -6,7 +6,7 @@
 //!
 //! - Tier-A/B folds: [`operation_is_shard_mergeable`] + [`FoldPartialState`] merge.
 //! - Tier-C / transform / selection: [`operation_is_dense_distributable`] +
-//!   [`DenseShardPartial`] assemble (0.7.2 / THI-617).
+//!   [`DenseShardPartial`] assemble (shipped in **0.7.2** / THI-617).
 //!
 //! Product boundary: [`docs/distributed_boundary.md`](../../../docs/distributed_boundary.md).
 

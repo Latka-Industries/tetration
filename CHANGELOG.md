@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-23
+
 ### Added
 
-- **0.7.2 (THI-617):** distributed dense materialize / tier-C / transform on the thin protocol — [`DenseShardPartial`](src/query/distributed/dense.rs) sparse assemble; in-process `execute_sharded_materialize_local` / `execute_sharded_tier_c_local` / `execute_sharded_transform_ram_local`; multiprocess materialize + tier-C via `tet worker`. Spill/sidecar/switch stay refused (`write: ram` only). RFC: [`docs/distributed_boundary.md`](docs/distributed_boundary.md).
+- Distributed dense materialize / tier-C / transform on the thin protocol (THI-617): sparse [`DenseShardPartial`](src/query/distributed/dense.rs) assemble; in-process `execute_sharded_materialize_local` / `execute_sharded_tier_c_local` / `execute_sharded_transform_ram_local`; multiprocess materialize + tier-C via `tet worker`. Spill/sidecar/switch stay refused (`write: ram` only). RFC: [`docs/distributed_boundary.md`](docs/distributed_boundary.md).
+
+### Notes
+
+- Semver patch on the 0.7 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). No new Python API — pin **tet-py** after crates.io publish. Multiprocess transform stats broadcast and distributed spill remain deferred.
 
 ## [0.7.1] - 2026-10-22
 
