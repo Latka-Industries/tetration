@@ -29,7 +29,7 @@ pub const SEMANTICS_PRESENT: &str = "present";
 /// On-disk document version.
 pub const PACKAGE_SEMANTICS_VERSION: u32 = 1;
 
-/// Per-dataset declare-only overlay (string attrs + optional profile id).
+/// Per-dataset declare-only overlay (string attrs, optional profile id, optional `dim_names`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DatasetSemanticsDecl {
@@ -39,6 +39,9 @@ pub struct DatasetSemanticsDecl {
     /// Declared string attrs (same vocabulary as footer `attrs`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub attrs: BTreeMap<String, String>,
+    /// Axis names in rank order. Omitted when the footer has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dim_names: Option<Vec<String>>,
 }
 
 /// Optional package-level semantics document for one sealed generation.
@@ -80,7 +83,7 @@ impl PackageSemanticsV1 {
         let mut datasets = BTreeMap::new();
         for (name, ds) in &summary.metadata.datasets {
             let decl = decl_from_dataset_meta(ds);
-            if decl.semantics_profile.is_some() || !decl.attrs.is_empty() {
+            if decl_is_present(&decl) {
                 datasets.insert(name.clone(), decl);
             }
         }
@@ -90,7 +93,7 @@ impl PackageSemanticsV1 {
         {
             for (name, ds) in meta.datasets {
                 let decl = decl_from_dataset_meta(&ds);
-                if decl.semantics_profile.is_some() || !decl.attrs.is_empty() {
+                if decl_is_present(&decl) {
                     datasets.insert(name, decl);
                 }
             }
@@ -114,10 +117,20 @@ fn decl_from_dataset_meta(ds: &DatasetMetadataV1) -> DatasetSemanticsDecl {
         .into_iter()
         .filter(|(k, _)| is_declared_key(k))
         .collect();
+    let dim_names = ds
+        .dim_names
+        .as_ref()
+        .filter(|names| !names.is_empty())
+        .cloned();
     DatasetSemanticsDecl {
         semantics_profile,
         attrs,
+        dim_names,
     }
+}
+
+fn decl_is_present(decl: &DatasetSemanticsDecl) -> bool {
+    decl.semantics_profile.is_some() || !decl.attrs.is_empty() || decl.dim_names.is_some()
 }
 
 /// Pretty JSON bytes (trailing newline) and SHA-256 hex.
@@ -274,6 +287,7 @@ mod tests {
     "frames": {
       "semantics_profile": "media_v1",
       "attrs": { "frame_rate": "30" },
+      "dim_names": ["t", "y", "x"],
       "future_tool_hint": true
     }
   },
@@ -292,6 +306,10 @@ mod tests {
                 .get("frame_rate")
                 .map(String::as_str),
             Some("30")
+        );
+        assert_eq!(
+            doc.datasets["frames"].dim_names.as_deref(),
+            Some(["t".to_owned(), "y".to_owned(), "x".to_owned()].as_slice())
         );
     }
 }

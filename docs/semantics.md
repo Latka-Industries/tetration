@@ -16,7 +16,7 @@ Open, verify, and query stay valid when none of these keys are present. Declared
 - Uncertainty is two flat string keys (`uncertainty_kind`, `uncertainty_sibling`) — not a JSON object in one attr.
 - Provenance uses `history` rows (`op`, `source`, `at`, optional `parents` / `params`, optional PROV-shaped `agent` / `activity` / `entity`). See [`semantics_profiles.md`](semantics_profiles.md#prov_logv1).
 - Caller policy file convention: `tet-semantics.toml` / `.json`. The crate does not load it unless a helper is given an explicit path.
-- Lab-wide conversion graphs do **not** belong inside `packed.tet`. Optional package **`SEMANTICS.json`** (declare-only, beside `packed.tet` in `generations/<G>/`) may mirror declared attrs for tools; ignore-unknown; **MUST NOT** change fold answers. CLI: `tet semantics package-write` / `package-show`.
+- Lab-wide conversion graphs do **not** belong inside `packed.tet`. Optional package **`SEMANTICS.json`** (declare-only, beside `packed.tet` in `generations/<G>/`) mirrors declared attrs and `dim_names` for tools; ignore-unknown; **MUST NOT** change fold answers. Stamp a mutable `.tet` with `tet semantics apply`, seal a new generation, then `tet semantics package-write`. A sealed `packed.tet` is not rewritten in place. CLI: `package-write` / `package-show`.
 
 ## Profiles = contracts
 

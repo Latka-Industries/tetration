@@ -211,6 +211,7 @@ fn package_semantics_json_roundtrip_and_verify() {
         DatasetSemanticsDecl {
             semantics_profile: Some("cf_lite_v1".into()),
             attrs,
+            dim_names: Some(vec!["time".into()]),
         },
     );
     let _sha = write_package_semantics(&pkg, 1, &doc, true).unwrap();
@@ -247,6 +248,34 @@ fn package_semantics_json_roundtrip_and_verify() {
             .unwrap()
     };
     assert!((mean - 1.5).abs() < 1e-5);
+}
+
+#[test]
+fn package_semantics_copies_dim_names_without_attrs() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("dims.tet");
+    write_multichunk_2x3_tiles(&path, "frames");
+    let mut blob = FooterBlobV1::default();
+    blob.metadata = Some(crate::catalog::TetMetadataV1 {
+        file: None,
+        datasets: std::collections::BTreeMap::from([(
+            "frames".to_owned(),
+            crate::catalog::DatasetMetadataV1 {
+                attrs: std::collections::BTreeMap::new(),
+                dim_names: Some(vec!["y".into(), "x".into()]),
+                coords: None,
+            },
+        )]),
+    });
+    write_footer_blob(&path, &blob).unwrap();
+
+    let doc = PackageSemanticsV1::from_packed_tet(&path, 4).unwrap();
+    assert_eq!(
+        doc.datasets["frames"].dim_names.as_deref(),
+        Some(["y".to_owned(), "x".to_owned()].as_slice())
+    );
+    assert!(doc.datasets["frames"].attrs.is_empty());
+    assert!(doc.datasets["frames"].semantics_profile.is_none());
 }
 
 #[test]
