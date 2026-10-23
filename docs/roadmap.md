@@ -120,7 +120,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Localhost N-process harness (THI-618):** `tet worker` runs one `WorkerJobV1` → `WorkerPartialV1`; `execute_sharded_scalar_fold_multiprocess` spawns N workers over one pinned `.tet` and merges partials. Still no network RPC / K8s fleet.
 
-**Planned 0.7.2 (THI-617):** distributed materialize / transform. **Planned 0.7.3 (THI-612):** semantics profiles (four PRs, one cut). **Later (THI-630):** network RPC. Still not shipped: cluster scheduler / worker-local spill until 0.7.2 revisits write targets.
+**Shipped in 0.7.2 (THI-617):** distributed materialize / transform / tier-C on the thin protocol (`DenseShardPartial`, `write: ram` only; multiprocess materialize + median). Spill/sidecar/switch stay refuse-only. **Planned 0.7.3 (THI-612):** semantics profiles (four PRs, one cut). **Later (THI-630):** network RPC. Still not shipped: cluster scheduler / worker-local spill / multiprocess transform stats broadcast.
 
 **Hygiene (before protocol):** THI-597 / THI-598 landed on `main` (squash [#112](https://github.com/Latka-Industries/tetration/pull/112)); THI-599 optional backlog.
 

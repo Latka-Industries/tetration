@@ -4,7 +4,7 @@ Thin protocol for **one query** over **one pinned sealed generation**, split by 
 shards. Not a cluster scheduler.
 
 **Product boundary:** [`docs/distributed_boundary.md`](../../../docs/distributed_boundary.md)
-(0.7.1 THI-615 / THI-616 / THI-618; **0.7.2** materialize/transform THI-617).
+(0.7.1 THI-615 / THI-616 / THI-618; **0.7.2 shipped** materialize/transform THI-617).
 
 ## What ships
 
