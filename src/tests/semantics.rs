@@ -164,7 +164,7 @@ fn recording_fixture_has_media_attrs_and_history() {
     assert_eq!(attrs.get("time_axis").map(String::as_str), Some("0"));
     assert_eq!(
         attrs.get("semantics_profile").map(String::as_str),
-        Some("media_v1")
+        Some("media.v1")
     );
     assert!(summary.history.iter().any(|e| e.op == "semantics"));
 }

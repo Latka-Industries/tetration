@@ -165,7 +165,7 @@ GROUP BY region
 | ---------- | ------- |
 | Physical units | `K`, `uV` as declared string tokens; display convert in caller policy |
 | Coordinate reference systems | `crs` attr (e.g. `EPSG:4326`); geo crops stay caller-side |
-| Provenance | history rows (`op`, `source`, `at`, `params`; PROV-inspired keys under `prov_log_v1`) |
+| Provenance | history rows (`op`, `source`, `at`, `params`; PROV-inspired keys under `prov_log.v1`) |
 | Uncertainty | `uncertainty_kind` + `uncertainty_sibling` flat attrs |
 | Domain vocabularies | `semantics_profile` doc ids — registry in [`semantics_profiles.md`](semantics_profiles.md) |
 

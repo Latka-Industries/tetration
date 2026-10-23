@@ -33,7 +33,7 @@ pub const PACKAGE_SEMANTICS_VERSION: u32 = 1;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DatasetSemanticsDecl {
-    /// Doc profile id (`media_v1`, `cf_lite_v1`, …). Not a Rust enum.
+    /// Doc profile id (`media.v1`, `cf_lite.v1`, …). Not a Rust enum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantics_profile: Option<String>,
     /// Declared string attrs (same vocabulary as footer `attrs`).

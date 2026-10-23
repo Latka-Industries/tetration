@@ -17,7 +17,7 @@
 //! `pipeline`, and `label_filter`. Zone maps + secondary indexes (`value_postings`,
 //! `sorted_axis_range`, `coord_label_postings`) live as **embedded footer spills**
 //! (`history_version = 2`; convert / writer auto-embed) and/or generation sidecars.
-//! Semantics profiles (`media_v1` / …), package `SEMANTICS.json`, and advisory lint are
+//! Semantics profiles (`media.v1` / …), package `SEMANTICS.json`, and advisory lint are
 //! declare-only (fold-inert). Distributed query stays a thin protocol
 //! ([`docs/distributed_boundary.md`](../docs/distributed_boundary.md)): associative scalar folds
 //! plus dense materialize / tier-C / transform (`write: ram`) with an optional localhost
