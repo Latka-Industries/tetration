@@ -123,7 +123,7 @@ Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spe
 | `apply <path.tet> --from FILE` | Stamp `dim_names` and attrs from one-file `tet-semantics.toml`. Prints what was stamped vs left in the TOML (profiles and units are not written). Does not rewrite `--from`. Refuses a sealed `.tet.d`. `--annotate` prints a combined TOML with live values and `# key =` comments for missing recommended attrs; `-o FILE` writes that copy and must not be `--from`. |
 | `scaffold <path.tet>` | Emit combined `tet-semantics.toml` (default) or `--format json`: declare sections plus policy. Missing recommended keys are TOML comments. With none → catalog lines + doc URLs only (no fake config). `-o FILE` writes instead of stdout. |
 | `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
-| `package-write <path.tet.d>` | Write declare-only `generations/<G>/SEMANTICS.json` from packed footer attrs (default `CURRENT`; `--generation N`; `--no-manifest` skips MANIFEST stamp). |
+| `package-write <path.tet.d>` | Write declare-only `generations/<G>/SEMANTICS.json` from packed footer attrs and `dim_names` (default `CURRENT`; `--generation N`; `--no-manifest` skips MANIFEST stamp). Does not rewrite `packed.tet`. |
 | `package-show <path.tet.d>` | Print `SEMANTICS.json` for a sealed generation (default `CURRENT`). |
 | `lint <path.tet\|.tet.d>` | Advisory profile-contract lint (missing recommended attrs). Does not refuse open; exit 0 always. |
 

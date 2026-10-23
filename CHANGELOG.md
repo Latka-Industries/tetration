@@ -6,6 +6,7 @@
 
 - `tet semantics apply <path.tet> --from tet-semantics.toml` stamps `dim_names` and string attrs (including `semantics_profile`) into a mutable `.tet` footer. Profile formulas and `[units.*]` stay in the TOML. `coords` is rejected. Sealed `.tet.d` generations are not rewritten in place (THI-633).
 - `tet semantics scaffold` emits the combined one-file shape (declare + policy). `scaffold -o` and `apply --annotate` fill live values and comment missing recommended keys. `--from` is never rewritten (THI-639).
+- Package `SEMANTICS.json` copies footer `dim_names` (still version 1, ignore-unknown). A dataset with only axis names is included. Fold answers are unchanged (THI-636).
 
 ### Changed
 
