@@ -18,7 +18,6 @@ pub mod package;
 pub mod package_semantics;
 pub(crate) mod secondary_index;
 pub mod semantics;
-pub mod semantics_lint;
 pub mod session;
 pub mod shard;
 pub mod store;
@@ -79,14 +78,13 @@ pub use secondary_index::{
     read_secondary_index_file, secondary_index_for_packed, sorted_axis_ranges, value_postings,
 };
 pub use semantics::{
-    DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, declared_attrs,
-    declared_attrs_for_dataset, get_dataset_attr, is_declared_key, metadata_has_declared_attrs,
-    scaffold_policy, scaffold_policy_from_path, set_dataset_attrs, write_recording_fixture,
-};
-pub use semantics_lint::{
-    PROV_LOG_RECOMMENDED_PARAMS, SemanticsLintFinding, SemanticsLintReport, SemanticsLintSeverity,
-    format_lint_report, lint_declared_semantics, lint_package_semantics, lint_summary,
-    lint_tet_path, normalize_profile_id, recommended_keys_for_profile,
+    DECLARED_ATTR_KEYS, DOCUMENTED_PROFILE_IDS, PROV_LOG_RECOMMENDED_PARAMS, SEMANTICS_GUIDE_URL,
+    ScaffoldFormat, SemanticsLintFinding, SemanticsLintReport, SemanticsLintSeverity,
+    declared_attrs, declared_attrs_for_dataset, format_lint_report, get_dataset_attr,
+    is_declared_key, is_documented_profile, lint_declared_semantics, lint_package_semantics,
+    lint_summary, lint_tet_path, metadata_has_declared_attrs, normalize_profile_id,
+    recommended_keys_for_profile, scaffold_policy, scaffold_policy_from_path, set_dataset_attrs,
+    write_recording_fixture,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,
