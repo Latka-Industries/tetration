@@ -60,6 +60,16 @@ pub fn generation_manifest_key(generation: u64) -> String {
     )
 }
 
+/// Optional declare-only `SEMANTICS.json` key for a sealed generation.
+#[must_use]
+pub fn package_semantics_key(generation: u64) -> String {
+    format!(
+        "generations/{}/{}",
+        format_generation_id(generation),
+        crate::catalog::SEMANTICS_FILE
+    )
+}
+
 /// Resolve [`GenerationPin`] against `store` and return a pinned packed object.
 ///
 /// Reads `CURRENT` at most once when pin is [`GenerationPin::Current`]. Callers keep

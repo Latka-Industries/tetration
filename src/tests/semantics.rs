@@ -1,11 +1,14 @@
-//! Declared semantics helpers (THI-583).
+//! Declared semantics helpers (THI-583) + package SEMANTICS.json (THI-620).
 
 use crate::catalog::{
-    ScaffoldFormat, declared_attrs, get_dataset_attr, is_declared_key, metadata_has_declared_attrs,
-    read_tet_summary_v1, scaffold_policy, set_dataset_attrs, write_recording_fixture,
+    DatasetSemanticsDecl, PackageSemanticsV1, SEMANTICS_FILE, SEMANTICS_PRESENT, ScaffoldFormat,
+    TetDatasetWrite, TetPackage, TetShardWriter, declared_attrs, get_dataset_attr, is_declared_key,
+    metadata_has_declared_attrs, read_package_semantics, read_tet_summary_v1, scaffold_policy,
+    set_dataset_attrs, write_package_semantics, write_recording_fixture,
 };
 use crate::layout::mmap_file_read;
 use crate::query::{QueryDocument, plan_query_with_tet_mmap};
+use crate::verify::verify_tet_package;
 
 use super::fixture::write_multichunk_2x3_tiles;
 
@@ -163,4 +166,73 @@ fn recording_fixture_has_media_attrs_and_history() {
         Some("media_v1")
     );
     assert!(summary.history.iter().any(|e| e.op == "semantics"));
+}
+
+#[test]
+fn package_semantics_json_roundtrip_and_verify() {
+    let dir = tempfile::tempdir().unwrap();
+    let pkg = TetPackage::create(dir.path().join("sem.tet.d")).unwrap();
+    let mut w = TetShardWriter::create(&pkg, "s", "only").unwrap();
+    w.push_dataset(
+        TetDatasetWrite::f32_row_major("a", &[2], &[2], {
+            let mut b = Vec::new();
+            for v in [1.0f32, 2.0] {
+                b.extend_from_slice(&v.to_le_bytes());
+            }
+            b
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    w.seal().unwrap();
+    crate::catalog::publish_parts(&pkg, 1, &["only".to_owned()]).unwrap();
+    let packed = pkg.packed_tet_path(1);
+
+    // Declare-only sidecar — do not rewrite sealed packed.tet (would break MANIFEST lens).
+    let mut doc = PackageSemanticsV1::empty(1);
+    let mut attrs = std::collections::BTreeMap::new();
+    attrs.insert("units".into(), "K".into());
+    attrs.insert("semantics_profile".into(), "cf_lite_v1".into());
+    attrs.insert("standard_name".into(), "air_temperature".into());
+    doc.datasets.insert(
+        "a".into(),
+        DatasetSemanticsDecl {
+            semantics_profile: Some("cf_lite_v1".into()),
+            attrs,
+        },
+    );
+    let _sha = write_package_semantics(&pkg, 1, &doc, true).unwrap();
+
+    let path = pkg.generation_dir(1).join(SEMANTICS_FILE);
+    assert!(path.is_file());
+    let manifest = pkg.read_manifest(1).unwrap();
+    assert_eq!(manifest.semantics.as_deref(), Some(SEMANTICS_PRESENT));
+    assert!(manifest.semantics_sha256.is_some());
+
+    let again = read_package_semantics(&pkg, 1).unwrap().unwrap();
+    assert_eq!(again, doc);
+
+    let report = verify_tet_package(pkg.root()).unwrap();
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.check == "semantics" && f.ok),
+        "{:?}",
+        report.findings
+    );
+    assert!(report.ok);
+
+    // Fold answers still ignore SEMANTICS.json / footer attrs.
+    let q: QueryDocument = serde_json::from_str(r#"{"dataset":"a","mean":[]}"#).unwrap();
+    let mean = {
+        let mmap = mmap_file_read(&packed).unwrap();
+        plan_query_with_tet_mmap(&q, None, &mmap, Some(0))
+            .unwrap()
+            .execution
+            .unwrap()
+            .operation_mean
+            .unwrap()
+    };
+    assert!((mean - 1.5).abs() < 1e-5);
 }

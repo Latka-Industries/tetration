@@ -69,6 +69,13 @@ pub struct GenerationManifest {
     /// Hex SHA-256 of the `INDEX.json` bytes. Set only when [`Self::secondary_indexes`] is `"present"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secondary_indexes_sha256: Option<String>,
+    /// `"present"` when this seal recorded optional declare-only `SEMANTICS.json` (0.7.3).
+    /// Absent on older generations; unknown to pre-0.7.3 verify (ignored).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantics: Option<String>,
+    /// Hex SHA-256 of `SEMANTICS.json`. Set only when [`Self::semantics`] is `"present"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantics_sha256: Option<String>,
 }
 
 /// Options for [`TetPackage::pack_generation_with`] (decision I — `tet pack`).
@@ -387,6 +394,8 @@ impl TetPackage {
             zone_maps_sha256: Some(embedded.zone_maps_sha256),
             secondary_indexes: Some(embedded.secondary_index.status.to_owned()),
             secondary_indexes_sha256: embedded.secondary_index.sha256.clone(),
+            semantics: None,
+            semantics_sha256: None,
         };
 
         write_json_atomic(&lock_dir.join(MANIFEST_FILE), &manifest)?;

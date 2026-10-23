@@ -172,6 +172,8 @@ pub fn seal_staged_generation_with_options(
         zone_maps_sha256: Some(embedded.zone_maps_sha256),
         secondary_indexes: Some(embedded.secondary_index.status.to_owned()),
         secondary_indexes_sha256: embedded.secondary_index.sha256.clone(),
+        semantics: None,
+        semantics_sha256: None,
     };
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
         .map_err(|e| CatalogError::InvalidPackageProtocol(e.to_string()))?;

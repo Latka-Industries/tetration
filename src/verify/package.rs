@@ -7,9 +7,9 @@ use crate::catalog::package::sha256_file_hex;
 use crate::catalog::zone::sha256_hex;
 use crate::catalog::{
     CatalogError, DEFAULT_PUBLISH_LOCK_STALE, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
-    SECONDARY_INDEX_FILE, SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, TetPackage,
-    ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, format_generation_id, known_index_entries,
-    secondary_index_for_packed, zone_maps_for_packed,
+    SECONDARY_INDEX_FILE, SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT, SEMANTICS_FILE,
+    SEMANTICS_PRESENT, TetPackage, ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, decode_package_semantics,
+    format_generation_id, known_index_entries, secondary_index_for_packed, zone_maps_for_packed,
 };
 
 use super::options::VerifyOptions;
@@ -214,6 +214,7 @@ fn verify_sealed_generation(
     let findings = check_zone_maps(package, generation, &manifest, &packed, opts, findings)?;
     let findings =
         check_secondary_indexes(package, generation, &manifest, &packed, opts, findings)?;
+    let findings = check_package_semantics(package, generation, &manifest, findings)?;
     check_packed_layout(&packed, opts, &prefix, findings)
 }
 
@@ -449,6 +450,115 @@ fn check_secondary_indexes(
                 "secondary_indexes",
                 "advisory: generation sealed without secondary indexes".to_owned(),
             ));
+            Ok(findings)
+        }
+    }
+}
+
+fn check_package_semantics(
+    package: &TetPackage,
+    generation: u64,
+    manifest: &GenerationManifest,
+    mut findings: Vec<VerifyFinding>,
+) -> Result<Vec<VerifyFinding>, Vec<VerifyFinding>> {
+    let path = package.generation_dir(generation).join(SEMANTICS_FILE);
+    match manifest.semantics.as_deref() {
+        Some(SEMANTICS_PRESENT) => {
+            if !path.is_file() {
+                findings.push(err_finding(
+                    "semantics",
+                    format!(
+                        "generations/{}/{} missing (present)",
+                        format_generation_id(generation),
+                        SEMANTICS_FILE
+                    ),
+                ));
+                return Err(findings);
+            }
+            let bytes = match fs::read(&path) {
+                Ok(b) => b,
+                Err(e) => {
+                    findings.push(err_finding("semantics", e.to_string()));
+                    return Err(findings);
+                }
+            };
+            let actual = sha256_hex(&bytes);
+            match &manifest.semantics_sha256 {
+                Some(expected) if expected == &actual => {}
+                Some(expected) => {
+                    findings.push(err_finding(
+                        "semantics_sha256",
+                        format!("{SEMANTICS_FILE} sha256 {actual} != MANIFEST {expected}"),
+                    ));
+                    return Err(findings);
+                }
+                None => {
+                    findings.push(err_finding(
+                        "semantics_sha256",
+                        "MANIFEST semantics is present but semantics_sha256 is absent".to_owned(),
+                    ));
+                    return Err(findings);
+                }
+            }
+            let doc = match decode_package_semantics(&bytes) {
+                Ok(d) => d,
+                Err(e) => {
+                    findings.push(err_finding("semantics", e.to_string()));
+                    return Err(findings);
+                }
+            };
+            if doc.generation != generation {
+                findings.push(err_finding(
+                    "semantics",
+                    format!(
+                        "SEMANTICS.json generation {} != directory {generation}",
+                        doc.generation
+                    ),
+                ));
+                return Err(findings);
+            }
+            findings.push(ok_finding("semantics", Some(SEMANTICS_PRESENT.to_owned())));
+            Ok(findings)
+        }
+        Some(other) => {
+            findings.push(err_finding(
+                "semantics",
+                format!("unsupported MANIFEST semantics value {other:?}"),
+            ));
+            Err(findings)
+        }
+        None => {
+            if path.is_file() {
+                // Sidecar without MANIFEST stamp: still parse (declare-only); warn.
+                let bytes = match fs::read(&path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        findings.push(err_finding("semantics", e.to_string()));
+                        return Err(findings);
+                    }
+                };
+                match decode_package_semantics(&bytes) {
+                    Ok(doc) if doc.generation == generation => {
+                        findings.push(warn_finding(
+                            "semantics",
+                            format!(
+                                "{SEMANTICS_FILE} present without MANIFEST semantics stamp (ok; declare-only)"
+                            ),
+                        ));
+                    }
+                    Ok(_) => {
+                        findings.push(err_finding(
+                            "semantics",
+                            format!("{SEMANTICS_FILE} generation field mismatch"),
+                        ));
+                        return Err(findings);
+                    }
+                    Err(e) => {
+                        findings.push(err_finding("semantics", e.to_string()));
+                        return Err(findings);
+                    }
+                }
+            }
             Ok(findings)
         }
     }

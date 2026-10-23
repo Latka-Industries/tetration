@@ -15,6 +15,7 @@ mod history;
 mod index;
 pub mod metadata;
 pub mod package;
+pub mod package_semantics;
 pub(crate) mod secondary_index;
 pub mod semantics;
 pub mod session;
@@ -61,6 +62,11 @@ pub use package::{
     DEFAULT_PUBLISH_LOCK_STALE, GcOptions, GcPlan, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
     PackGenerationOptions, PackageProtocol, TetPackage, TetPackagePin, format_generation_id,
 };
+pub use package_semantics::{
+    DatasetSemanticsDecl, PACKAGE_SEMANTICS_VERSION, PackageSemanticsV1, SEMANTICS_FILE,
+    SEMANTICS_PRESENT, decode_package_semantics, encode_package_semantics, read_package_semantics,
+    write_package_semantics, write_package_semantics_from_packed,
+};
 pub use secondary_index::{
     COORD_LABEL_POSTINGS_KIND, CoordLabelPosting, GenerationSecondaryIndex, PreparedSecondaryIndex,
     SECONDARY_INDEX_FILE, SECONDARY_INDEX_OMITTED, SECONDARY_INDEX_PRESENT,
@@ -89,9 +95,9 @@ pub use store::{
     ObjectMeta, PackageStore, ParsedTetUri, PinnedPackedTet, PruneOptions, PruneRefusal,
     PruneRefuseReason, PruneReport, PruneTarget, PublishGeneration, PublishOptions, ReadAt,
     S3PackageLocation, TetOpenTarget, TetUriError, WritePart, assemble_object_from_ranges,
-    begin_publish_store, fetch_ranges, heartbeat_key, merge_byte_ranges, packed_tet_key,
-    parse_s3_package_uri, parse_tet_uri, pin_packed_tet, plan_catalog_fetch, prune_store,
-    publish_lock_exists, publish_lock_is_stale, publish_staged_parts,
+    begin_publish_store, fetch_ranges, heartbeat_key, merge_byte_ranges, package_semantics_key,
+    packed_tet_key, parse_s3_package_uri, parse_tet_uri, pin_packed_tet, plan_catalog_fetch,
+    prune_store, publish_lock_exists, publish_lock_is_stale, publish_staged_parts,
     publish_staged_parts_with_options, publishing_lock_key, quarantine_publish_lock,
     read_superblock_at, read_tet_summary_at_store, seal_staged_generation,
     seal_staged_generation_with_options, secondary_index_key, stage_part, touch_publish_heartbeat,

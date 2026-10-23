@@ -153,7 +153,7 @@ GROUP BY region
 
 **Shipped in 0.5.1 (declared + policy split):** optional **declared** science/media facts in footer `metadata.datasets[<name>].attrs` and append-only history, plus caller **policy** outside the file (`tet-semantics.toml` / `.json`). Helpers and CLI: `tet semantics set` / `scaffold`. Spec: [`semantics.md`](semantics.md). Worked recording fixture: `fixtures/small/tet/recording.tet`. Climate appears only as attrs / a doc profile id — **not** a climate runtime in the crate. Declared attrs do **not** change fold/query answers by themselves.
 
-**In flight (0.7.3 / THI-612):** profile registry contracts ([`semantics_profiles.md`](semantics_profiles.md)); optional declare-only package `SEMANTICS.json`; policy linter + reference snippets; richer PROV-shaped history helpers. Still fold-inert.
+**In flight (0.7.3 / THI-612):** profile registry contracts ([`semantics_profiles.md`](semantics_profiles.md)); optional declare-only package `SEMANTICS.json` (THI-620); policy linter + reference snippets; richer PROV-shaped history helpers. Still fold-inert.
 
 **Still prospective (after 0.7.3):** full CF / PROV compliance suites, UCUM conversion graphs inside `packed.tet`, plugin / dynamic code load, required in-tree policy interpreter that mutates folds.
 
