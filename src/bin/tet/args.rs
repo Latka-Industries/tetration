@@ -342,6 +342,15 @@ pub enum SemanticsCmd {
         #[arg(long)]
         generation: Option<u64>,
     },
+    /// Advisory lint: claimed `semantics_profile` vs recommended attrs (does not refuse open).
+    Lint {
+        /// Path to `.tet` file, or `.tet.d` package (lints CURRENT `SEMANTICS.json` when present,
+        /// else packed footer).
+        path: PathBuf,
+        /// Package generation id (default: CURRENT). Only used for `.tet.d`.
+        #[arg(long)]
+        generation: Option<u64>,
+    },
 }
 
 /// `tet qhist` — platform query history (not `tet info --history` footer).

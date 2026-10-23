@@ -1,0 +1,6 @@
+# Reference notes for prov_log_v1 (THI-621).
+# Prefer history[].params (agent, activity, entity, used, generated) over parallel attrs.
+# See docs/semantics_profiles.md#prov_log_v1.
+
+[profiles.prov_log_v1]
+# No numeric policy — provenance is fold-inert.
