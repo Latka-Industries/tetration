@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-23
+
 ### Added
 
 - `tet semantics apply <path.tet> --from tet-semantics.toml` stamps `dim_names` and string attrs (including `semantics_profile`) into a mutable `.tet` footer. Profile formulas and `[units.*]` stay in the TOML. `coords` is rejected. Sealed `.tet.d` generations are not rewritten in place (THI-633).
@@ -11,7 +13,11 @@
 ### Changed
 
 - Semantics profile ids are `name.vN`: `media.v1`, `timeseries.v1`, `cf_lite.v1`, `prov_log.v1`. Aliases `media_v1` / `v1.media` (same pattern for the others; `climate_v1` and `cf_lite_v1` → `cf_lite.v1`) still normalize. Open minting is unchanged (THI-634).
-- Documented profiles are a `ProfileContract` palette in `catalog::semantics::profiles` (ids, aliases, recommended keys, rate attr, infer hints). Lint / scaffold read the palette; unknown ids stay open-mint.
+- Documented profiles are a `ProfileContract` palette in `catalog::semantics::profiles` (ids, aliases, recommended keys, rate attr, infer hints). Lint / scaffold read the palette; unknown ids stay open-mint (#182).
+
+### Notes
+
+- Semver minor on the 0.7 line for the one-file TOML apply cut (THI-632). Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). No new Python API — pin **tet-py** and docs site after crates.io publish. Wizard (THI-638) and docs-site pins (THI-637) stay follow-ups.
 
 ## [0.7.3] - 2026-10-23
 
