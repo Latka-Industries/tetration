@@ -238,6 +238,7 @@ pub fn lint_package_semantics(doc: &PackageSemanticsV1) -> SemanticsLintReport {
 /// Format a report for CLI / logs.
 #[must_use]
 pub fn format_lint_report(report: &SemanticsLintReport) -> String {
+    use std::fmt::Write as _;
     if report.findings.is_empty() {
         return "semantics lint: ok (no findings)\n".to_owned();
     }
@@ -248,12 +249,11 @@ pub fn format_lint_report(report: &SemanticsLintReport) -> String {
             SemanticsLintSeverity::Info => "info",
         };
         let profile = f.profile.as_deref().unwrap_or("-");
-        out.push_str(&format!(
-            "{sev}: [{code}] dataset={dataset} profile={profile}: {message}\n",
-            code = f.code,
-            dataset = f.dataset,
-            message = f.message,
-        ));
+        let _ = writeln!(
+            out,
+            "{sev}: [{}] dataset={} profile={profile}: {}",
+            f.code, f.dataset, f.message
+        );
     }
     if report.ok() {
         out.push_str("semantics lint: ok (info only)\n");
