@@ -124,9 +124,7 @@ pub fn is_documented_profile(id: &str) -> bool {
 /// Recommended declared attr keys for a documented profile (empty → unknown / minted).
 #[must_use]
 pub fn recommended_keys_for_profile(profile: &str) -> &'static [&'static str] {
-    profile_contract(profile)
-        .map(|p| p.recommended_keys)
-        .unwrap_or(&[])
+    profile_contract(profile).map_or(&[], |p| p.recommended_keys)
 }
 
 /// Attr used in scaffold index↔seconds formulas, when this profile defines one.
