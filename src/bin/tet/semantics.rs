@@ -4,9 +4,10 @@ use std::fs;
 use std::path::Path;
 
 use tetration::catalog::{
-    ScaffoldFormat, TetPackage, encode_package_semantics, format_lint_report,
-    lint_package_semantics, lint_tet_path, read_package_semantics, scaffold_policy_from_path,
-    set_dataset_attrs, write_package_semantics_from_packed,
+    ScaffoldFormat, TetPackage, apply_semantics_toml, encode_package_semantics,
+    format_apply_report, format_lint_report, lint_package_semantics, lint_tet_path,
+    read_package_semantics, scaffold_policy_from_path, set_dataset_attrs,
+    write_package_semantics_from_packed,
 };
 use tetration::verify::looks_like_tet_package;
 
@@ -15,6 +16,7 @@ use crate::util::cli_error;
 
 pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
     match cmd {
+        SemanticsCmd::Apply { path, from } => run_apply(&path, &from),
         SemanticsCmd::Scaffold {
             path,
             output,
@@ -34,6 +36,12 @@ pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
         SemanticsCmd::PackageShow { path, generation } => run_package_show(&path, generation),
         SemanticsCmd::Lint { path, generation } => run_lint(&path, generation),
     }
+}
+
+fn run_apply(path: &Path, from: &Path) -> Result<(), String> {
+    let report = apply_semantics_toml(path, from).map_err(cli_error)?;
+    eprint!("{}", format_apply_report(path, &report));
+    Ok(())
 }
 
 fn run_scaffold(path: &Path, output: Option<&Path>, format: &str) -> Result<(), String> {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `tet semantics apply <path.tet> --from tet-semantics.toml` stamps `dim_names` and string attrs (including `semantics_profile`) into a mutable `.tet` footer. Profile formulas and `[units.*]` stay in the TOML. `coords` is rejected. Sealed `.tet.d` generations are not rewritten in place (THI-633).
+
 ### Changed
 
 - Semantics profile ids are `name.vN`: `media.v1`, `timeseries.v1`, `cf_lite.v1`, `prov_log.v1`. Aliases `media_v1` / `v1.media` (same pattern for the others; `climate_v1` and `cf_lite_v1` → `cf_lite.v1`) still normalize. Open minting is unchanged (THI-634).

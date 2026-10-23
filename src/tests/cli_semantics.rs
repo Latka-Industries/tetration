@@ -88,6 +88,63 @@ fn cli_semantics_set_then_info_and_scaffold() {
 }
 
 #[test]
+fn cli_semantics_apply_prints_stamped_vs_left() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("clip.tet");
+    write_multichunk_2x3_tiles(&path, "frames");
+    let toml = dir.path().join("tet-semantics.toml");
+    std::fs::write(
+        &toml,
+        r#"
+schema_version = 1
+
+[datasets.frames]
+dim_names = ["y", "x"]
+
+[datasets.frames.attrs]
+semantics_profile = "media.v1"
+frame_rate = 30
+time_axis = 0
+
+[profiles.media.v1]
+index_to_seconds = "index / frame_rate"
+
+[units.Hz]
+display = "Hz"
+"#,
+    )
+    .unwrap();
+    let before = std::fs::read(&toml).unwrap();
+    let out = tet_command(&[
+        "semantics",
+        "apply",
+        path.to_str().unwrap(),
+        "--from",
+        toml.to_str().unwrap(),
+    ])
+    .output()
+    .expect("spawn tet semantics apply");
+    assert!(
+        out.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("dim_names=[y, x]"), "{err}");
+    assert!(err.contains("profiles media.v1"), "{err}");
+    assert!(err.contains("units Hz"), "{err}");
+    assert!(!err.contains("index_to_seconds"), "{err}");
+    assert_eq!(std::fs::read(&toml).unwrap(), before);
+
+    let info = tet_command(&["info", path.to_str().unwrap()])
+        .output()
+        .expect("spawn tet info");
+    assert!(info.status.success());
+    let info_out = String::from_utf8_lossy(&info.stdout);
+    assert!(info_out.contains("frame_rate: 30"), "{info_out}");
+}
+
+#[test]
 fn cli_scaffold_bare_file_links_docs() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bare.tet");

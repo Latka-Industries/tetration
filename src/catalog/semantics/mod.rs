@@ -3,13 +3,19 @@
 //! - [`declare`] — footer attrs / scaffold / set (0.5.1)
 //! - [`profiles`] — documented profile ids + recommended-key tables (0.7.3)
 //! - [`lint`] — advisory contract checks against [`profiles`]
+//! - [`apply`] — one-file TOML declare stamp (`dim_names` + attrs); policy stays in the file
 //!
 //! Package-level `SEMANTICS.json` lives in [`super::package_semantics`].
 
+pub mod apply;
 pub mod declare;
 pub mod lint;
 pub mod profiles;
 
+pub use apply::{
+    SemanticsApplyReport, SemanticsDocument, StampedDataset, apply_semantics_toml,
+    format_apply_report, parse_semantics_toml,
+};
 pub use declare::{
     DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, declared_attrs,
     declared_attrs_for_dataset, get_dataset_attr, is_declared_key, metadata_has_declared_attrs,

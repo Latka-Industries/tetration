@@ -9,7 +9,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet repair`](#tet-repair) `<path.tet\|.tet.d>`   | —      | Plan or apply safe in-place fixes (footer, stale publish)   |
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
-| [`tet semantics`](#tet-semantics) `scaffold\|set`  | —      | Declare science/media attrs / scaffold caller policy         |
+| [`tet semantics`](#tet-semantics) `apply\|scaffold\|set`  | —      | Stamp dims/attrs from TOML, or scaffold caller policy         |
 | [`tet worker`](#tet-worker) `[--job PATH]`         | —      | Distributed harness: `WorkerJobV1` JSON → `WorkerPartialV1` JSON |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet` (auto-embeds ZONE/INDEX) |
 | [`tet index`](#tet-index) `<path.tet>`             | —      | (Re)embed or `--clear` ZONE/INDEX footer spills (0.7.0)     |
@@ -120,6 +120,7 @@ Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spe
 
 | Subcommand | Effect |
 | ---------- | ------ |
+| `apply <path.tet> --from FILE` | Stamp `dim_names` and attrs from one-file `tet-semantics.toml`. Prints what was stamped vs left in the TOML (profiles and units are not written). Does not rewrite `--from`. Refuses a sealed `.tet.d`. |
 | `scaffold <path.tet>` | Emit `tet-semantics.toml` (default) or `--format json`. With declared attrs → real stubs; with none → catalog lines + doc URLs only (no fake config). `-o FILE` writes instead of stdout. |
 | `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
 | `package-write <path.tet.d>` | Write declare-only `generations/<G>/SEMANTICS.json` from packed footer attrs (default `CURRENT`; `--generation N`; `--no-manifest` skips MANIFEST stamp). |
