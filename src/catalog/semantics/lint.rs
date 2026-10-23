@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::declare::{declared_attrs, is_declared_key};
-use super::profiles::{normalize_profile_id, recommended_keys_for_profile};
+use super::profiles::{PROV_LOG_V1, normalize_profile_id, recommended_keys_for_profile};
 use crate::catalog::history::HistoryEvent;
 use crate::catalog::package_semantics::PackageSemanticsV1;
 use crate::catalog::{CatalogError, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1};
@@ -105,7 +105,7 @@ pub fn lint_declared_semantics(
                 });
             }
         }
-        if canonical == "prov_log.v1" {
+        if canonical == PROV_LOG_V1.id {
             lint_prov_log_history(name, history, &mut findings);
         }
     }
@@ -121,9 +121,9 @@ fn lint_prov_log_history(
         findings.push(SemanticsLintFinding {
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
-            profile: Some("prov_log.v1".into()),
+            profile: Some(PROV_LOG_V1.id.into()),
             code: "empty_history".into(),
-            message: "claims prov_log.v1 but history is empty".into(),
+            message: format!("claims {} but history is empty", PROV_LOG_V1.id),
         });
         return;
     }
@@ -141,18 +141,24 @@ fn lint_prov_log_history(
         findings.push(SemanticsLintFinding {
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
-            profile: Some("prov_log.v1".into()),
+            profile: Some(PROV_LOG_V1.id.into()),
             code: "missing_prov_param".into(),
-            message: "claims prov_log.v1 but no history row has agent / params.agent".into(),
+            message: format!(
+                "claims {} but no history row has agent / params.agent",
+                PROV_LOG_V1.id
+            ),
         });
     }
     if !any_activity {
         findings.push(SemanticsLintFinding {
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
-            profile: Some("prov_log.v1".into()),
+            profile: Some(PROV_LOG_V1.id.into()),
             code: "missing_prov_param".into(),
-            message: "claims prov_log.v1 but no history row has activity / params.activity".into(),
+            message: format!(
+                "claims {} but no history row has activity / params.activity",
+                PROV_LOG_V1.id
+            ),
         });
     }
 }

@@ -11,6 +11,7 @@
 ### Changed
 
 - Semantics profile ids are `name.vN`: `media.v1`, `timeseries.v1`, `cf_lite.v1`, `prov_log.v1`. Aliases `media_v1` / `v1.media` (same pattern for the others; `climate_v1` and `cf_lite_v1` → `cf_lite.v1`) still normalize. Open minting is unchanged (THI-634).
+- Documented profiles are a `ProfileContract` palette in `catalog::semantics::profiles` (ids, aliases, recommended keys, rate attr, infer hints). Lint / scaffold read the palette; unknown ids stay open-mint.
 
 ## [0.7.3] - 2026-10-23
 
