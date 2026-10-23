@@ -7,10 +7,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use super::history::HistoryEvent;
-use super::package_semantics::PackageSemanticsV1;
-use super::semantics::{declared_attrs, is_declared_key};
-use super::{CatalogError, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1};
+use super::declare::{declared_attrs, is_declared_key};
+use super::profiles::{normalize_profile_id, recommended_keys_for_profile};
+use crate::catalog::history::HistoryEvent;
+use crate::catalog::package_semantics::PackageSemanticsV1;
+use crate::catalog::{CatalogError, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1};
 use crate::layout::mmap_file_read;
 
 /// Severity of a linter finding (advisory only).
@@ -49,43 +50,6 @@ impl SemanticsLintReport {
             .any(|f| f.severity == SemanticsLintSeverity::Warning)
     }
 }
-
-/// Normalize legacy / alias profile ids to registry ids.
-#[must_use]
-pub fn normalize_profile_id(id: &str) -> &str {
-    match id {
-        "climate_v1" => "cf_lite_v1",
-        other => other,
-    }
-}
-
-/// Recommended declared attr keys for a documented profile (empty → unknown).
-#[must_use]
-pub fn recommended_keys_for_profile(profile: &str) -> &'static [&'static str] {
-    match normalize_profile_id(profile) {
-        "media_v1" => &[
-            "semantics_profile",
-            "media_kind",
-            "frame_rate",
-            "frame_rate_unit",
-            "time_axis",
-        ],
-        "timeseries_v1" => &[
-            "semantics_profile",
-            "media_kind",
-            "sample_rate",
-            "sample_rate_unit",
-            "time_axis",
-            "units",
-        ],
-        "cf_lite_v1" => &["semantics_profile", "units", "standard_name", "crs"],
-        "prov_log_v1" => &["semantics_profile"],
-        _ => &[],
-    }
-}
-
-/// Recommended `history[].params` keys when claiming `prov_log_v1`.
-pub const PROV_LOG_RECOMMENDED_PARAMS: &[&str] = &["agent", "activity"];
 
 /// Lint footer metadata (+ optional history) for profile contract gaps.
 #[must_use]
@@ -226,7 +190,7 @@ pub fn lint_package_semantics(doc: &PackageSemanticsV1) -> SemanticsLintReport {
         }
         meta.datasets.insert(
             name.clone(),
-            super::metadata::DatasetMetadataV1 {
+            crate::catalog::metadata::DatasetMetadataV1 {
                 attrs,
                 ..Default::default()
             },

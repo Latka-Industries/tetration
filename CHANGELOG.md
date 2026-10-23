@@ -8,6 +8,7 @@
 - Optional declare-only package **`SEMANTICS.json`** beside sealed generations (`PackageSemanticsV1`, MANIFEST `semantics` / `semantics_sha256`, verify, `tet semantics package-write` / `package-show`); ignore-unknown; not read by query (THI-620 / THI-612)
 - Semantics **policy linter** (`lint_declared_semantics` / `tet semantics lint`) + reference snippets under [`docs/semantics_snippets/`](docs/semantics_snippets/) (THI-621 / THI-612)
 - Richer PROV-shaped history: optional `HistoryEvent` fields `agent` / `activity` / `entity`, `with_prov` helper, ignore-unknown history keys (THI-624 / THI-612)
+- Refactor: `catalog::semantics` module (`declare` / `profiles` / `lint`) — profile recommended-key tables live in `profiles.rs` for later registry PRs
 
 ## [0.7.2] - 2026-10-23
 

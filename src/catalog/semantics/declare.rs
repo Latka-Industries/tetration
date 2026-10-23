@@ -10,9 +10,13 @@ use serde::Serialize;
 
 use crate::utils::dtype::ElementDtype;
 
-use super::history::{FooterBlobV1, HistoryEvent, read_footer_blob_from_path, write_footer_blob};
-use super::metadata::DatasetMetadataV1;
-use super::{CatalogError, DatasetRecordV1, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1};
+use crate::catalog::history::{
+    FooterBlobV1, HistoryEvent, read_footer_blob_from_path, write_footer_blob,
+};
+use crate::catalog::metadata::DatasetMetadataV1;
+use crate::catalog::{
+    CatalogError, DatasetRecordV1, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1,
+};
 
 /// Recommended declared attr keys (`docs/semantics.md`). Unknown keys remain allowed.
 pub const DECLARED_ATTR_KEYS: &[&str] = &[
@@ -421,7 +425,7 @@ fn collect_unit_tokens(declared: &BTreeMap<String, BTreeMap<String, String>>) ->
 ///
 /// Returns [`CatalogError`] when write or footer update fails.
 pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
-    use super::{
+    use crate::catalog::{
         CHUNK_PAYLOAD_CODEC_V1, DATASET_DTYPE_TAG_V1, RawArrayWrite, write_raw_array_file,
     };
 
