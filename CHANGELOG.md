@@ -6,6 +6,7 @@
 
 - Semantics **profile registry** docs ([`docs/semantics_profiles.md`](docs/semantics_profiles.md)): contracts for `media_v1`, `timeseries_v1`, `cf_lite_v1`, `prov_log_v1` (legacy `climate_v1` → `cf_lite_v1`); open id minting; fold-inert reminder (THI-623 / THI-612)
 - Optional declare-only package **`SEMANTICS.json`** beside sealed generations (`PackageSemanticsV1`, MANIFEST `semantics` / `semantics_sha256`, verify, `tet semantics package-write` / `package-show`); ignore-unknown; not read by query (THI-620 / THI-612)
+- Semantics **policy linter** (`lint_declared_semantics` / `tet semantics lint`) + reference snippets under [`docs/semantics_snippets/`](docs/semantics_snippets/) (THI-621 / THI-612)
 
 ## [0.7.2] - 2026-10-23
 

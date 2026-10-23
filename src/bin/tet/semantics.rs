@@ -4,9 +4,11 @@ use std::fs;
 use std::path::Path;
 
 use tetration::catalog::{
-    ScaffoldFormat, TetPackage, encode_package_semantics, read_package_semantics,
-    scaffold_policy_from_path, set_dataset_attrs, write_package_semantics_from_packed,
+    ScaffoldFormat, TetPackage, encode_package_semantics, format_lint_report,
+    lint_package_semantics, lint_tet_path, read_package_semantics, scaffold_policy_from_path,
+    set_dataset_attrs, write_package_semantics_from_packed,
 };
+use tetration::verify::looks_like_tet_package;
 
 use crate::args::SemanticsCmd;
 use crate::util::cli_error;
@@ -30,6 +32,7 @@ pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
             no_manifest,
         } => run_package_write(&path, generation, !no_manifest),
         SemanticsCmd::PackageShow { path, generation } => run_package_show(&path, generation),
+        SemanticsCmd::Lint { path, generation } => run_lint(&path, generation),
     }
 }
 
@@ -107,6 +110,23 @@ fn run_package_show(path: &Path, generation: Option<u64>) -> Result<(), String> 
             Ok(())
         }
     }
+}
+
+fn run_lint(path: &Path, generation: Option<u64>) -> Result<(), String> {
+    let report = if looks_like_tet_package(path) {
+        let package = TetPackage::open(path).map_err(cli_error)?;
+        let g = resolve_generation(&package, generation)?;
+        if let Some(doc) = read_package_semantics(&package, g).map_err(cli_error)? {
+            lint_package_semantics(&doc)
+        } else {
+            let packed = package.packed_tet_path(g);
+            lint_tet_path(&packed).map_err(cli_error)?
+        }
+    } else {
+        lint_tet_path(path).map_err(cli_error)?
+    };
+    print!("{}", format_lint_report(&report));
+    Ok(())
 }
 
 fn parse_set_pair(raw: &str) -> Result<(String, String), String> {

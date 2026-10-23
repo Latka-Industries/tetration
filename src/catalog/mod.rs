@@ -18,6 +18,7 @@ pub mod package;
 pub mod package_semantics;
 pub(crate) mod secondary_index;
 pub mod semantics;
+pub mod semantics_lint;
 pub mod session;
 pub mod shard;
 pub mod store;
@@ -79,6 +80,11 @@ pub use semantics::{
     DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, declared_attrs,
     declared_attrs_for_dataset, get_dataset_attr, is_declared_key, metadata_has_declared_attrs,
     scaffold_policy, scaffold_policy_from_path, set_dataset_attrs, write_recording_fixture,
+};
+pub use semantics_lint::{
+    PROV_LOG_RECOMMENDED_PARAMS, SemanticsLintFinding, SemanticsLintReport, SemanticsLintSeverity,
+    format_lint_report, lint_declared_semantics, lint_package_semantics, lint_summary,
+    lint_tet_path, normalize_profile_id, recommended_keys_for_profile,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,

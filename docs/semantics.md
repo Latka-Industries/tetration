@@ -26,6 +26,7 @@ Open, verify, and query stay valid when none of these keys are present. Declared
 
 - **`tet semantics scaffold`**: declared attrs → policy stubs; none → catalog + site doc URL (no invented commented config).
 - **`tet semantics set`**: declare or clear attrs on a dataset (rewrites footer metadata; does not reinterpret values).
+- **`tet semantics lint`**: advisory profile-contract checks (e.g. claims `cf_lite_v1` but missing `units`). Reference policy snippets: [`semantics_snippets/`](semantics_snippets/).
 
 ## Out of scope
 

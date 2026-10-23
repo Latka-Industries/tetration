@@ -124,6 +124,7 @@ Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spe
 | `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
 | `package-write <path.tet.d>` | Write declare-only `generations/<G>/SEMANTICS.json` from packed footer attrs (default `CURRENT`; `--generation N`; `--no-manifest` skips MANIFEST stamp). |
 | `package-show <path.tet.d>` | Print `SEMANTICS.json` for a sealed generation (default `CURRENT`). |
+| `lint <path.tet\|.tet.d>` | Advisory profile-contract lint (missing recommended attrs). Does not refuse open; exit 0 always. |
 
 Worked recording fixture: `fixtures/small/tet/recording.tet` (`frame_rate`, `time_axis`, provenance).
 
