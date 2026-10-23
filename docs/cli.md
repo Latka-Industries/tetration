@@ -116,7 +116,7 @@ Stored under the platform cache (`query_history.jsonl`), not in the `.tet` file.
 
 ## `tet semantics`
 
-Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spec: [semantics.md](semantics.md). Not a plugin host; attrs do not change query answers by themselves.
+Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spec: [semantics.md](semantics.md); profile contracts: [semantics_profiles.md](semantics_profiles.md). Not a plugin host; attrs do not change query answers by themselves.
 
 | Subcommand | Effect |
 | ---------- | ------ |
