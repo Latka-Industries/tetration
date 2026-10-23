@@ -6,16 +6,21 @@ Anyone may mint a new profile id. Shipping a profile here only means: we documen
 
 Published guide index: [docs.tetration.sh/guides/semantics](https://docs.tetration.sh/guides/semantics/). Crate contract: [`semantics.md`](semantics.md).
 
-## Registry (0.7.3)
+## Registry
+
+Canonical ids are `name.vN`. TOML policy tables use that spelling (`[profiles.media.v1]`). Lint normalizes the aliases below and still accepts any other string (open minting).
 
 | Profile id | Purpose | Status |
 | ---------- | ------- | ------ |
-| [`media_v1`](#media_v1) | Video / imaging frames along a time axis | Documented; fixture `fixtures/small/tet/recording.tet` |
-| [`timeseries_v1`](#timeseries_v1) | Continuous / sampled signals | Documented |
-| [`cf_lite_v1`](#cf_lite_v1) | CF-inspired climate/grid attrs (declare-only) | Documented (prefer over legacy `climate_v1`) |
-| [`prov_log_v1`](#prov_log_v1) | PROV-inspired history / params expectations | Documented |
-| `climate_v1` | Legacy alias for early 0.5.1 examples | **Alias** → treat as [`cf_lite_v1`](#cf_lite_v1) |
-| *(any other string)* | Caller-minted | Valid; tools that do not know it ignore it |
+| [`media.v1`](#mediav1) | Video / imaging frames along a time axis | Documented; fixture `fixtures/small/tet/recording.tet` |
+| [`timeseries.v1`](#timeseriesv1) | Continuous / sampled signals | Documented |
+| [`cf_lite.v1`](#cf_litev1) | CF-inspired climate/grid attrs (declare-only) | Documented |
+| [`prov_log.v1`](#prov_logv1) | PROV-inspired history / params expectations | Documented |
+| `media_v1`, `v1.media` | Legacy spellings | **Alias** → [`media.v1`](#mediav1) |
+| `timeseries_v1`, `v1.timeseries` | Legacy spellings | **Alias** → [`timeseries.v1`](#timeseriesv1) |
+| `cf_lite_v1`, `v1.cf_lite`, `climate_v1` | Legacy spellings (`climate_v1` is the 0.5.1 name) | **Alias** → [`cf_lite.v1`](#cf_litev1) |
+| `prov_log_v1`, `v1.prov_log` | Legacy spellings | **Alias** → [`prov_log.v1`](#prov_logv1) |
+| *(any other string)* | Caller-minted | Valid; advisory lint only |
 
 ### Shared rules (all profiles)
 
@@ -26,7 +31,7 @@ Published guide index: [docs.tetration.sh/guides/semantics](https://docs.tetrati
 
 ---
 
-## `media_v1`
+## `media.v1`
 
 **Intent:** sealed frame stacks / video-like tensors where wall-clock ↔ index mapping is caller-side.
 
@@ -34,7 +39,7 @@ Published guide index: [docs.tetration.sh/guides/semantics](https://docs.tetrati
 
 | Key | Role |
 | --- | ---- |
-| `semantics_profile` | `"media_v1"` |
+| `semantics_profile` | `"media.v1"` |
 | `media_kind` | e.g. `"video"` |
 | `frame_rate` | decimal string samples per `frame_rate_unit` |
 | `frame_rate_unit` | usually `"Hz"` |
@@ -51,11 +56,11 @@ Published guide index: [docs.tetration.sh/guides/semantics](https://docs.tetrati
 
 ### Example
 
-`fixtures/small/tet/recording.tet` — dataset `frames`, `frame_rate=30`, `time_axis=0`, `semantics_profile=media_v1`.
+`fixtures/small/tet/recording.tet` — dataset `frames`, `frame_rate=30`, `time_axis=0`, `semantics_profile=media.v1`.
 
 ---
 
-## `timeseries_v1`
+## `timeseries.v1`
 
 **Intent:** 1-D (or leading-time) continuous recordings (e.g. electrophys, sensors).
 
@@ -63,7 +68,7 @@ Published guide index: [docs.tetration.sh/guides/semantics](https://docs.tetrati
 
 | Key | Role |
 | --- | ---- |
-| `semantics_profile` | `"timeseries_v1"` |
+| `semantics_profile` | `"timeseries.v1"` |
 | `media_kind` | e.g. `"timeseries"` |
 | `sample_rate` / `sample_rate_unit` | decimal + unit (usually `"Hz"`) |
 | `time_axis` | time axis index |
@@ -77,17 +82,17 @@ Published guide index: [docs.tetration.sh/guides/semantics](https://docs.tetrati
 
 ---
 
-## `cf_lite_v1`
+## `cf_lite.v1`
 
 **Intent:** CF-*inspired* declare-only climate / grid labels. **Not** a CF compliance suite and **not** a climate runtime.
 
-Legacy doc/scaffold id **`climate_v1`** means the same contract; prefer writing `cf_lite_v1` on new files.
+Legacy ids **`cf_lite_v1`**, **`v1.cf_lite`**, and **`climate_v1`** mean the same contract; prefer writing `cf_lite.v1` on new files.
 
 ### Recommended attrs
 
 | Key | Role |
 | --- | ---- |
-| `semantics_profile` | `"cf_lite_v1"` (or legacy `"climate_v1"`) |
+| `semantics_profile` | `"cf_lite.v1"` (aliases: `cf_lite_v1`, `v1.cf_lite`, `climate_v1`) |
 | `units` | e.g. `"K"` |
 | `standard_name` | optional CF-style name string |
 | `crs` | e.g. `"EPSG:4326"` |
@@ -101,7 +106,7 @@ Legacy doc/scaffold id **`climate_v1`** means the same contract; prefer writing 
 
 ---
 
-## `prov_log_v1`
+## `prov_log.v1`
 
 **Intent:** richer append-only provenance expectations on `history` rows (PROV-*inspired*). **Not** a W3C PROV graph engine.
 
@@ -109,7 +114,7 @@ Legacy doc/scaffold id **`climate_v1`** means the same contract; prefer writing 
 
 | Key | Role |
 | --- | ---- |
-| `semantics_profile` | `"prov_log_v1"` on datasets that participate in the log (optional) |
+| `semantics_profile` | `"prov_log.v1"` on datasets that participate in the log (optional) |
 
 ### History / params expectations
 
@@ -128,13 +133,13 @@ Prefer documenting lineage with first-class history fields and/or `history[].par
 
 ### Tool expectations
 
-- Linters may warn when `prov_log_v1` is claimed but history rows lack `agent`/`activity`.
+- Linters may warn when `prov_log.v1` is claimed but history rows lack `agent`/`activity`.
 - Tools **MUST NOT** reinterpret chunk values from provenance rows.
 
 ---
 
 ## Minting a new profile
 
-1. Pick a stable, TOML-safe id (`snake_case` + `_vN`).
+1. Pick a stable id (`name.vN`, TOML-nested as `[profiles.name.vN]`). Aliases `name_vN` and `vN.name` normalize when they match a documented profile; other strings stay as minted.
 2. Document recommended attrs + tool expectations (fold-inert reminder).
 3. Optionally add lint rules / policy snippets in your repo — the crate will not reject unknown ids.

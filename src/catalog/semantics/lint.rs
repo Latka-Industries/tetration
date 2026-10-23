@@ -1,7 +1,7 @@
 //! Optional semantics policy linter (0.7.3 / THI-621).
 //!
 //! Warns when a dataset claims a documented profile id but is missing recommended
-//! attrs (or when history looks thin under `prov_log_v1`). Does **not** refuse open
+//! attrs (or when history looks thin under `prov_log.v1`). Does **not** refuse open
 //! or change fold answers. Unknown profile ids produce an informational finding only.
 
 use std::collections::BTreeMap;
@@ -105,7 +105,7 @@ pub fn lint_declared_semantics(
                 });
             }
         }
-        if canonical == "prov_log_v1" {
+        if canonical == "prov_log.v1" {
             lint_prov_log_history(name, history, &mut findings);
         }
     }
@@ -121,9 +121,9 @@ fn lint_prov_log_history(
         findings.push(SemanticsLintFinding {
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
-            profile: Some("prov_log_v1".into()),
+            profile: Some("prov_log.v1".into()),
             code: "empty_history".into(),
-            message: "claims prov_log_v1 but history is empty".into(),
+            message: "claims prov_log.v1 but history is empty".into(),
         });
         return;
     }
@@ -141,18 +141,18 @@ fn lint_prov_log_history(
         findings.push(SemanticsLintFinding {
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
-            profile: Some("prov_log_v1".into()),
+            profile: Some("prov_log.v1".into()),
             code: "missing_prov_param".into(),
-            message: "claims prov_log_v1 but no history row has agent / params.agent".into(),
+            message: "claims prov_log.v1 but no history row has agent / params.agent".into(),
         });
     }
     if !any_activity {
         findings.push(SemanticsLintFinding {
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
-            profile: Some("prov_log_v1".into()),
+            profile: Some("prov_log.v1".into()),
             code: "missing_prov_param".into(),
-            message: "claims prov_log_v1 but no history row has activity / params.activity".into(),
+            message: "claims prov_log.v1 but no history row has activity / params.activity".into(),
         });
     }
 }
@@ -238,7 +238,7 @@ mod tests {
         meta.datasets.insert(
             "tas".into(),
             DatasetMetadataV1 {
-                attrs: BTreeMap::from([("semantics_profile".into(), "cf_lite_v1".into())]),
+                attrs: BTreeMap::from([("semantics_profile".into(), "cf_lite.v1".into())]),
                 ..Default::default()
             },
         );
@@ -270,5 +270,73 @@ mod tests {
         let report = lint_declared_semantics(&meta, &[]);
         assert!(report.ok());
         assert!(report.findings.iter().any(|f| f.code == "profile_alias"));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.message.contains("cf_lite.v1"))
+        );
+    }
+
+    #[test]
+    fn media_dot_v1_with_recommended_keys_is_clean() {
+        let mut meta = TetMetadataV1::default();
+        meta.datasets.insert(
+            "frames".into(),
+            DatasetMetadataV1 {
+                attrs: BTreeMap::from([
+                    ("semantics_profile".into(), "media.v1".into()),
+                    ("media_kind".into(), "video".into()),
+                    ("frame_rate".into(), "30".into()),
+                    ("frame_rate_unit".into(), "Hz".into()),
+                    ("time_axis".into(), "0".into()),
+                ]),
+                ..Default::default()
+            },
+        );
+        let report = lint_declared_semantics(&meta, &[]);
+        assert!(report.ok(), "{:?}", report.findings);
+        assert!(report.findings.is_empty());
+    }
+
+    #[test]
+    fn v1_media_alias_prefers_canonical_id() {
+        let mut meta = TetMetadataV1::default();
+        meta.datasets.insert(
+            "frames".into(),
+            DatasetMetadataV1 {
+                attrs: BTreeMap::from([
+                    ("semantics_profile".into(), "v1.media".into()),
+                    ("media_kind".into(), "video".into()),
+                    ("frame_rate".into(), "30".into()),
+                    ("frame_rate_unit".into(), "Hz".into()),
+                    ("time_axis".into(), "0".into()),
+                ]),
+                ..Default::default()
+            },
+        );
+        let report = lint_declared_semantics(&meta, &[]);
+        assert!(report.ok());
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| { f.code == "profile_alias" && f.message.contains("media.v1") })
+        );
+    }
+
+    #[test]
+    fn unknown_profile_is_advisory_only() {
+        let mut meta = TetMetadataV1::default();
+        meta.datasets.insert(
+            "a".into(),
+            DatasetMetadataV1 {
+                attrs: BTreeMap::from([("semantics_profile".into(), "lab.custom".into())]),
+                ..Default::default()
+            },
+        );
+        let report = lint_declared_semantics(&meta, &[]);
+        assert!(report.ok());
+        assert!(report.findings.iter().any(|f| f.code == "unknown_profile"));
     }
 }

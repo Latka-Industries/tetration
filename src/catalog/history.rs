@@ -47,7 +47,7 @@ fn history_version_supported(version: u32) -> bool {
     version == HISTORY_VERSION_V1 || version == HISTORY_VERSION_V2
 }
 
-/// Recommended PROV-inspired `params` / first-class field names (`prov_log_v1`).
+/// Recommended PROV-inspired `params` / first-class field names (`prov_log.v1`).
 pub const HISTORY_PARAM_AGENT: &str = "agent";
 /// Recommended PROV-inspired activity label.
 pub const HISTORY_PARAM_ACTIVITY: &str = "activity";

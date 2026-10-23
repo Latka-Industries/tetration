@@ -377,18 +377,18 @@ fn collect_profile_ids(declared: &BTreeMap<String, BTreeMap<String, String>>) ->
         }
         if attrs.contains_key("frame_rate") || attrs.get("media_kind").is_some_and(|k| k == "video")
         {
-            profiles.insert("media_v1".to_owned());
+            profiles.insert("media.v1".to_owned());
         } else if attrs.contains_key("sample_rate")
             || attrs.get("media_kind").is_some_and(|k| k == "timeseries")
         {
-            profiles.insert("timeseries_v1".to_owned());
+            profiles.insert("timeseries.v1".to_owned());
         } else if attrs.contains_key("crs") || attrs.contains_key("standard_name") {
             // climate-as-attrs example only — doc profile id, not a runtime mode
-            profiles.insert("climate_v1".to_owned());
+            profiles.insert("cf_lite.v1".to_owned());
         }
     }
     if profiles.is_empty() {
-        profiles.insert("media_v1".to_owned());
+        profiles.insert("media.v1".to_owned());
     }
     profiles
 }
@@ -453,7 +453,7 @@ pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
     attrs.insert("frame_rate_unit".into(), "Hz".into());
     attrs.insert("time_axis".into(), "0".into());
     attrs.insert("media_kind".into(), "video".into());
-    attrs.insert("semantics_profile".into(), "media_v1".into());
+    attrs.insert("semantics_profile".into(), "media.v1".into());
     attrs.insert("pixel_unit".into(), "px".into());
 
     let mut event = HistoryEvent::new("semantics", "fixtures/small/tet/recording.tet");
