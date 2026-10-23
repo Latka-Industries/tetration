@@ -629,4 +629,45 @@ display = "Hz"
         let err = parse_semantics_toml(ver).unwrap_err().to_string();
         assert!(err.contains("unsupported"), "{err}");
     }
+
+    #[test]
+    fn canonical_media_snippet_parses_as_apply_input() {
+        let text = include_str!("../../../docs/semantics_snippets/media.v1.toml");
+        let doc = parse_semantics_toml(text).unwrap();
+        assert_eq!(
+            doc.datasets["frames"].dim_names.as_deref(),
+            Some(["t".to_owned(), "y".to_owned(), "x".to_owned()].as_slice())
+        );
+        assert_eq!(
+            doc.datasets["frames"]
+                .attrs
+                .get("semantics_profile")
+                .map(String::as_str),
+            Some("media.v1")
+        );
+        assert_eq!(
+            doc.profiles["media.v1"]
+                .get("index_to_seconds")
+                .map(String::as_str),
+            Some("index / frame_rate")
+        );
+        assert!(doc.units.contains_key("Hz"));
+        parse_semantics_toml(include_str!(
+            "../../../docs/semantics_snippets/timeseries.v1.toml"
+        ))
+        .unwrap();
+        let cf = parse_semantics_toml(include_str!(
+            "../../../docs/semantics_snippets/cf_lite.v1.toml"
+        ))
+        .unwrap();
+        assert!(cf.profiles.contains_key("cf_lite.v1"));
+        assert_eq!(
+            cf.units["K"].get("offset").map(String::as_str),
+            Some("-273.15")
+        );
+        parse_semantics_toml(include_str!(
+            "../../../docs/semantics_snippets/prov_log.v1.toml"
+        ))
+        .unwrap();
+    }
 }

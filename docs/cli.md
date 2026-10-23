@@ -120,8 +120,8 @@ Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spe
 
 | Subcommand | Effect |
 | ---------- | ------ |
-| `apply <path.tet> --from FILE` | Stamp `dim_names` and attrs from one-file `tet-semantics.toml`. Prints what was stamped vs left in the TOML (profiles and units are not written). Does not rewrite `--from`. Refuses a sealed `.tet.d`. |
-| `scaffold <path.tet>` | Emit `tet-semantics.toml` (default) or `--format json`. With declared attrs → real stubs; with none → catalog lines + doc URLs only (no fake config). `-o FILE` writes instead of stdout. |
+| `apply <path.tet> --from FILE` | Stamp `dim_names` and attrs from one-file `tet-semantics.toml`. Prints what was stamped vs left in the TOML (profiles and units are not written). Does not rewrite `--from`. Refuses a sealed `.tet.d`. `--annotate` prints a combined TOML with live values and `# key =` comments for missing recommended attrs; `-o FILE` writes that copy and must not be `--from`. |
+| `scaffold <path.tet>` | Emit combined `tet-semantics.toml` (default) or `--format json`: declare sections plus policy. Missing recommended keys are TOML comments. With none → catalog lines + doc URLs only (no fake config). `-o FILE` writes instead of stdout. |
 | `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
 | `package-write <path.tet.d>` | Write declare-only `generations/<G>/SEMANTICS.json` from packed footer attrs (default `CURRENT`; `--generation N`; `--no-manifest` skips MANIFEST stamp). |
 | `package-show <path.tet.d>` | Print `SEMANTICS.json` for a sealed generation (default `CURRENT`). |

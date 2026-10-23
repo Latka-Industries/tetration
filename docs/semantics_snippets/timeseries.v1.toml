@@ -1,0 +1,25 @@
+# One-file example for timeseries.v1.
+# Apply stamps dim_names and attrs. The rate formulas stay here.
+
+schema_version = 1
+
+[datasets.signal]
+dim_names = ["t"]
+
+[datasets.signal.attrs]
+semantics_profile = "timeseries.v1"
+media_kind = "timeseries"
+sample_rate = 1000
+sample_rate_unit = "Hz"
+time_axis = 0
+units = "uV"
+
+[profiles.timeseries.v1]
+index_to_seconds = "index / sample_rate"
+seconds_to_index = "floor(seconds * sample_rate)"
+
+[units.Hz]
+display = "Hz"
+
+[units.uV]
+display = "uV"

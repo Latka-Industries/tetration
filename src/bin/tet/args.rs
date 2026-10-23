@@ -308,6 +308,13 @@ pub enum SemanticsCmd {
         /// One-file semantics TOML (`schema_version`, datasets, profiles, units).
         #[arg(long, value_name = "FILE")]
         from: PathBuf,
+        /// Print (or `-o`) an annotated TOML with live values and missing recommended keys
+        /// as comments. Does not rewrite `--from`.
+        #[arg(long)]
+        annotate: bool,
+        /// Write the annotated TOML here. Requires `--annotate`. Must not be `--from`.
+        #[arg(short = 'o', long, value_name = "FILE")]
+        output: Option<PathBuf>,
     },
     /// Emit caller-policy stubs from declared attrs (or catalog + doc links when none).
     Scaffold {

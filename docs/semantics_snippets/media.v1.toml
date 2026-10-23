@@ -1,0 +1,23 @@
+# Canonical one-file semantics example (THI-632 / THI-639).
+# `tet semantics apply clip.tet --from tet-semantics.toml` stamps dim_names and attrs.
+# Profile formulas and units stay in this file.
+
+schema_version = 1
+
+[datasets.frames]
+dim_names = ["t", "y", "x"]
+
+[datasets.frames.attrs]
+semantics_profile = "media.v1"
+media_kind = "video"
+frame_rate = 30
+frame_rate_unit = "Hz"
+time_axis = 0
+pixel_unit = "px"
+
+[profiles.media.v1]
+index_to_seconds = "index / frame_rate"
+seconds_to_index = "floor(seconds * frame_rate)"
+
+[units.Hz]
+display = "Hz"

@@ -1,0 +1,21 @@
+# One-file example for cf_lite.v1.
+# Display convert only — does not rewrite fold answers inside the crate.
+
+schema_version = 1
+
+[datasets.tas]
+dim_names = ["time", "lat", "lon"]
+
+[datasets.tas.attrs]
+semantics_profile = "cf_lite.v1"
+units = "K"
+standard_name = "air_temperature"
+crs = "EPSG:4326"
+
+[profiles.cf_lite.v1]
+# Tools may use standard_name / crs for labels; no in-crate CF engine.
+
+[units.K]
+display = "°C"
+scale = 1.0
+offset = -273.15

@@ -1,0 +1,11 @@
+# One-file notes for prov_log.v1.
+# Prefer history agent / activity / entity over parallel attrs.
+# See docs/semantics_profiles.md.
+
+schema_version = 1
+
+[datasets.frames.attrs]
+semantics_profile = "prov_log.v1"
+
+[profiles.prov_log.v1]
+# No numeric policy — provenance is fold-inert.
