@@ -47,11 +47,23 @@ fn history_version_supported(version: u32) -> bool {
     version == HISTORY_VERSION_V1 || version == HISTORY_VERSION_V2
 }
 
+/// Recommended PROV-inspired `params` / first-class field names (`prov_log_v1`).
+pub const HISTORY_PARAM_AGENT: &str = "agent";
+/// Recommended PROV-inspired activity label.
+pub const HISTORY_PARAM_ACTIVITY: &str = "activity";
+/// Recommended PROV-inspired entity label.
+pub const HISTORY_PARAM_ENTITY: &str = "entity";
+/// Recommended PROV-inspired input entity id.
+pub const HISTORY_PARAM_USED: &str = "used";
+/// Recommended PROV-inspired output entity id.
+pub const HISTORY_PARAM_GENERATED: &str = "generated";
+
 /// One provenance row in the `THST` footer `history` array.
 ///
 /// New files use JSON objects. Legacy files may store `[op, source, at]` triples; readers accept both.
+/// Unknown object keys are **ignored** (forward compatible; SPEC COMPATIBILITY). Optional
+/// PROV-shaped fields (`agent` / `activity` / `entity`) are fold-inert (0.7.3 / THI-624).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct HistoryEvent {
     pub op: String,
     pub source: String,
@@ -60,6 +72,15 @@ pub struct HistoryEvent {
     pub parents: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub params: BTreeMap<String, String>,
+    /// PROV-inspired agent (who/what). Prefer this or `params.agent`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    /// PROV-inspired activity kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<String>,
+    /// PROV-inspired entity label for this row's primary object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity: Option<String>,
 }
 
 impl HistoryEvent {
@@ -72,7 +93,63 @@ impl HistoryEvent {
             at: unix_timestamp_now(),
             parents: Vec::new(),
             params: BTreeMap::new(),
+            agent: None,
+            activity: None,
+            entity: None,
         }
+    }
+
+    /// Attach PROV-shaped first-class fields (also mirrored into `params` for older tools).
+    #[must_use]
+    pub fn with_prov(
+        mut self,
+        agent: Option<impl Into<String>>,
+        activity: Option<impl Into<String>>,
+        entity: Option<impl Into<String>>,
+    ) -> Self {
+        if let Some(a) = agent {
+            let a = a.into();
+            self.params
+                .insert(HISTORY_PARAM_AGENT.to_owned(), a.clone());
+            self.agent = Some(a);
+        }
+        if let Some(a) = activity {
+            let a = a.into();
+            self.params
+                .insert(HISTORY_PARAM_ACTIVITY.to_owned(), a.clone());
+            self.activity = Some(a);
+        }
+        if let Some(e) = entity {
+            let e = e.into();
+            self.params
+                .insert(HISTORY_PARAM_ENTITY.to_owned(), e.clone());
+            self.entity = Some(e);
+        }
+        self
+    }
+
+    /// Effective agent: first-class field, else `params.agent`.
+    #[must_use]
+    pub fn agent_ref(&self) -> Option<&str> {
+        self.agent
+            .as_deref()
+            .or_else(|| self.params.get(HISTORY_PARAM_AGENT).map(String::as_str))
+    }
+
+    /// Effective activity: first-class field, else `params.activity`.
+    #[must_use]
+    pub fn activity_ref(&self) -> Option<&str> {
+        self.activity
+            .as_deref()
+            .or_else(|| self.params.get(HISTORY_PARAM_ACTIVITY).map(String::as_str))
+    }
+
+    /// Effective entity: first-class field, else `params.entity`.
+    #[must_use]
+    pub fn entity_ref(&self) -> Option<&str> {
+        self.entity
+            .as_deref()
+            .or_else(|| self.params.get(HISTORY_PARAM_ENTITY).map(String::as_str))
     }
 
     /// Legacy tuple view for callers that used `(op, source, at)`.
@@ -151,6 +228,15 @@ impl HistoryEvent {
             metadata::validate_attr_string(k, "history param key", limits.attr_string_bytes)?;
             metadata::validate_attr_string(v, "history param value", limits.attr_string_bytes)?;
         }
+        if let Some(a) = &self.agent {
+            metadata::validate_attr_string(a, "history agent", limits.attr_string_bytes)?;
+        }
+        if let Some(a) = &self.activity {
+            metadata::validate_attr_string(a, "history activity", limits.attr_string_bytes)?;
+        }
+        if let Some(e) = &self.entity {
+            metadata::validate_attr_string(e, "history entity", limits.attr_string_bytes)?;
+        }
         Ok(())
     }
 }
@@ -198,6 +284,9 @@ impl HistoryEventWire {
                 at,
                 parents: Vec::new(),
                 params: BTreeMap::new(),
+                agent: None,
+                activity: None,
+                entity: None,
             },
             Self::Event(ev) => ev,
         }
