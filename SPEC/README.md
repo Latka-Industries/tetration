@@ -322,4 +322,5 @@ Amendments require an explicit PR that updates this file and the linked normativ
 
 - [`docs/roadmap.md`](../docs/roadmap.md) — Phase 18 (this SPEC + conformance)
 - [`docs/semantics.md`](../docs/semantics.md) — declared attrs vs caller policy
+- [`docs/semantics_profiles.md`](../docs/semantics_profiles.md) — profile contracts (`media_v1`, `cf_lite_v1`, …); informative
 - [`README.md`](../README.md) — install, library sketch, concurrency overview

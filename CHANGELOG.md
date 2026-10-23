@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Semantics **profile registry** docs ([`docs/semantics_profiles.md`](docs/semantics_profiles.md)): contracts for `media_v1`, `timeseries_v1`, `cf_lite_v1`, `prov_log_v1` (legacy `climate_v1` → `cf_lite_v1`); open id minting; fold-inert reminder (THI-623 / THI-612)
+
 ## [0.7.2] - 2026-10-23
 
 ### Added
