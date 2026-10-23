@@ -166,10 +166,10 @@ fn lint_prov_log_history(
     let mut any_agent = false;
     let mut any_activity = false;
     for ev in history {
-        if ev.params.contains_key("agent") {
+        if ev.agent_ref().is_some() {
             any_agent = true;
         }
-        if ev.params.contains_key("activity") {
+        if ev.activity_ref().is_some() {
             any_activity = true;
         }
     }
@@ -179,7 +179,7 @@ fn lint_prov_log_history(
             dataset: dataset.to_owned(),
             profile: Some("prov_log_v1".into()),
             code: "missing_prov_param".into(),
-            message: "claims prov_log_v1 but no history row has params.agent".into(),
+            message: "claims prov_log_v1 but no history row has agent / params.agent".into(),
         });
     }
     if !any_activity {
@@ -188,7 +188,7 @@ fn lint_prov_log_history(
             dataset: dataset.to_owned(),
             profile: Some("prov_log_v1".into()),
             code: "missing_prov_param".into(),
-            message: "claims prov_log_v1 but no history row has params.activity".into(),
+            message: "claims prov_log_v1 but no history row has activity / params.activity".into(),
         });
     }
 }

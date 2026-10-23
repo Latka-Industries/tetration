@@ -1,10 +1,11 @@
-//! Declared semantics helpers (THI-583) + package SEMANTICS.json (THI-620).
+//! Declared semantics helpers (THI-583) + package SEMANTICS.json (THI-620) + PROV history (THI-624).
 
 use crate::catalog::{
-    DatasetSemanticsDecl, PackageSemanticsV1, SEMANTICS_FILE, SEMANTICS_PRESENT, ScaffoldFormat,
-    TetDatasetWrite, TetPackage, TetShardWriter, declared_attrs, get_dataset_attr, is_declared_key,
-    metadata_has_declared_attrs, read_package_semantics, read_tet_summary_v1, scaffold_policy,
-    set_dataset_attrs, write_package_semantics, write_recording_fixture,
+    DatasetSemanticsDecl, FooterBlobV1, HistoryEvent, PackageSemanticsV1, SEMANTICS_FILE,
+    SEMANTICS_PRESENT, ScaffoldFormat, TetDatasetWrite, TetPackage, TetShardWriter, declared_attrs,
+    get_dataset_attr, is_declared_key, metadata_has_declared_attrs, read_package_semantics,
+    read_tet_summary_v1, scaffold_policy, set_dataset_attrs, write_footer_blob,
+    write_package_semantics, write_recording_fixture,
 };
 use crate::layout::mmap_file_read;
 use crate::query::{QueryDocument, plan_query_with_tet_mmap};
@@ -235,4 +236,41 @@ fn package_semantics_json_roundtrip_and_verify() {
             .unwrap()
     };
     assert!((mean - 1.5).abs() < 1e-5);
+}
+
+#[test]
+fn history_prov_fields_roundtrip_and_ignore_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("prov.tet");
+    write_multichunk_2x3_tiles(&path, "a");
+
+    let mut blob = FooterBlobV1::default();
+    blob.history
+        .push(HistoryEvent::new("semantics", "test").with_prov(
+            Some("tet-test"),
+            Some("annotate"),
+            Some("dataset:a"),
+        ));
+    write_footer_blob(&path, &blob).unwrap();
+
+    let mmap = mmap_file_read(&path).unwrap();
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    let ev = &summary.history[0];
+    assert_eq!(ev.agent_ref(), Some("tet-test"));
+    assert_eq!(ev.activity_ref(), Some("annotate"));
+    assert_eq!(ev.entity_ref(), Some("dataset:a"));
+    assert_eq!(ev.params.get("agent").map(String::as_str), Some("tet-test"));
+
+    // Unknown keys ignored (forward compatible).
+    let raw = serde_json::json!({
+        "history": [{
+            "op": "x",
+            "source": "y",
+            "at": "1",
+            "agent": "a",
+            "future_prov_key": true
+        }]
+    });
+    let parsed: FooterBlobV1 = serde_json::from_value(raw).unwrap();
+    assert_eq!(parsed.history[0].agent.as_deref(), Some("a"));
 }

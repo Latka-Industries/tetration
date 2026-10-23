@@ -113,18 +113,18 @@ Legacy doc/scaffold id **`climate_v1`** means the same contract; prefer writing 
 
 ### History / params expectations
 
-Prefer documenting lineage in `history[].params` (and later first-class PROV-shaped fields) rather than inventing parallel attr keys:
+Prefer documenting lineage with first-class history fields and/or `history[].params` rather than inventing parallel attr keys:
 
-| Param / field | PROV-ish role | Example |
+| Field / param | PROV-ish role | Example |
 | ------------- | ------------- | ------- |
 | `agent` | who/what ran the step | `"tet-convert"` |
 | `activity` | kind of activity | `"import"` |
 | `entity` | output entity label | `"dataset:tas"` |
-| `used` | input entity id | `"s3://bucket/in.nc"` |
-| `generated` | output entity id | `"generations/00000003/packed.tet"` |
-| `note` | free text | `"QC pass"` |
+| `used` (params) | input entity id | `"s3://bucket/in.nc"` |
+| `generated` (params) | output entity id | `"generations/00000003/packed.tet"` |
+| `note` (params) | free text | `"QC pass"` |
 
-`op` / `source` / `at` / `parents` remain the required row spine ([`semantics.md`](semantics.md)).
+`HistoryEvent::with_prov` sets first-class `agent` / `activity` / `entity` and mirrors them into `params` for older tools. `op` / `source` / `at` / `parents` remain the required row spine ([`semantics.md`](semantics.md)). Unknown history object keys are ignored on read.
 
 ### Tool expectations
 
