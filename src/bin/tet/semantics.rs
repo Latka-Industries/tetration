@@ -1,9 +1,12 @@
-//! `tet semantics` — declare attrs / scaffold caller policy.
+//! `tet semantics` — declare attrs / scaffold caller policy / package SEMANTICS.json.
 
 use std::fs;
 use std::path::Path;
 
-use tetration::catalog::{ScaffoldFormat, scaffold_policy_from_path, set_dataset_attrs};
+use tetration::catalog::{
+    ScaffoldFormat, TetPackage, encode_package_semantics, read_package_semantics,
+    scaffold_policy_from_path, set_dataset_attrs, write_package_semantics_from_packed,
+};
 
 use crate::args::SemanticsCmd;
 use crate::util::cli_error;
@@ -21,6 +24,12 @@ pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
             set,
             clear,
         } => run_set(&path, &dataset, &set, &clear),
+        SemanticsCmd::PackageWrite {
+            path,
+            generation,
+            no_manifest,
+        } => run_package_write(&path, generation, !no_manifest),
+        SemanticsCmd::PackageShow { path, generation } => run_package_show(&path, generation),
     }
 }
 
@@ -57,6 +66,47 @@ fn run_set(path: &Path, dataset: &str, set: &[String], clear: &[String]) -> Resu
         path.display()
     );
     Ok(())
+}
+
+fn resolve_generation(package: &TetPackage, generation: Option<u64>) -> Result<u64, String> {
+    match generation {
+        Some(g) => Ok(g),
+        None => package
+            .current()
+            .map_err(cli_error)?
+            .ok_or_else(|| cli_error("package has no CURRENT generation; pass --generation")),
+    }
+}
+
+fn run_package_write(
+    path: &Path,
+    generation: Option<u64>,
+    update_manifest: bool,
+) -> Result<(), String> {
+    let package = TetPackage::open(path).map_err(cli_error)?;
+    let g = resolve_generation(&package, generation)?;
+    let (doc, sha) =
+        write_package_semantics_from_packed(&package, g, update_manifest).map_err(cli_error)?;
+    eprintln!(
+        "semantics: wrote generations/{g:08}/SEMANTICS.json ({} dataset(s), sha256={sha})",
+        doc.datasets.len()
+    );
+    Ok(())
+}
+
+fn run_package_show(path: &Path, generation: Option<u64>) -> Result<(), String> {
+    let package = TetPackage::open(path).map_err(cli_error)?;
+    let g = resolve_generation(&package, generation)?;
+    match read_package_semantics(&package, g).map_err(cli_error)? {
+        None => Err(cli_error(format!(
+            "generations/{g:08}/SEMANTICS.json not present"
+        ))),
+        Some(doc) => {
+            let (bytes, _) = encode_package_semantics(&doc).map_err(cli_error)?;
+            print!("{}", String::from_utf8_lossy(&bytes));
+            Ok(())
+        }
+    }
 }
 
 fn parse_set_pair(raw: &str) -> Result<(String, String), String> {

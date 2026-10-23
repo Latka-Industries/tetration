@@ -323,6 +323,25 @@ pub enum SemanticsCmd {
         #[arg(long = "clear", value_name = "KEY")]
         clear: Vec<String>,
     },
+    /// Write declare-only `SEMANTICS.json` for a sealed package generation (from packed footer).
+    PackageWrite {
+        /// Path to `.tet.d` package root.
+        path: PathBuf,
+        /// Generation id (default: CURRENT).
+        #[arg(long)]
+        generation: Option<u64>,
+        /// Skip stamping MANIFEST `semantics` / `semantics_sha256`.
+        #[arg(long)]
+        no_manifest: bool,
+    },
+    /// Print `SEMANTICS.json` for a sealed package generation (if present).
+    PackageShow {
+        /// Path to `.tet.d` package root.
+        path: PathBuf,
+        /// Generation id (default: CURRENT).
+        #[arg(long)]
+        generation: Option<u64>,
+    },
 }
 
 /// `tet qhist` — platform query history (not `tet info --history` footer).

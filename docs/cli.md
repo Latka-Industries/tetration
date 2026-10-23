@@ -122,6 +122,8 @@ Declared science/media facts in the `.tet` footer, plus caller-policy stubs. Spe
 | ---------- | ------ |
 | `scaffold <path.tet>` | Emit `tet-semantics.toml` (default) or `--format json`. With declared attrs → real stubs; with none → catalog lines + doc URLs only (no fake config). `-o FILE` writes instead of stdout. |
 | `set <path.tet> --dataset NAME --set KEY=VAL` | Declare attrs (repeatable `--set` / `--clear KEY`). Rewrites footer metadata; appends a `semantics` history row. |
+| `package-write <path.tet.d>` | Write declare-only `generations/<G>/SEMANTICS.json` from packed footer attrs (default `CURRENT`; `--generation N`; `--no-manifest` skips MANIFEST stamp). |
+| `package-show <path.tet.d>` | Print `SEMANTICS.json` for a sealed generation (default `CURRENT`). |
 
 Worked recording fixture: `fixtures/small/tet/recording.tet` (`frame_rate`, `time_axis`, provenance).
 
