@@ -94,7 +94,7 @@ fn scaffold_empty_vs_declared() {
         &[
             ("frame_rate", "30"),
             ("frame_rate_unit", "Hz"),
-            ("semantics_profile", "media_v1"),
+            ("semantics_profile", "media.v1"),
         ],
         &[] as &[&str],
     )
@@ -102,17 +102,24 @@ fn scaffold_empty_vs_declared() {
     let mmap = mmap_file_read(&bare).unwrap();
     let summary = read_tet_summary_v1(&mmap).unwrap();
     let stub = scaffold_policy(&summary, ScaffoldFormat::Toml);
-    assert!(stub.contains("[profiles.media_v1]"));
-    assert!(!stub.contains("[[profiles]]"));
-    assert!(!stub.contains("id = "));
-    assert!(!stub.contains("[profiles.\""));
-    assert!(stub.contains("index_to_seconds"));
-    assert!(stub.contains("[units.Hz]"));
+    assert!(stub.contains("schema_version = 1"), "{stub}");
+    assert!(stub.contains("[datasets.temperature]"), "{stub}");
+    assert!(stub.contains("[datasets.temperature.attrs]"), "{stub}");
+    assert!(stub.contains("[profiles.media.v1]"), "{stub}");
+    assert!(stub.contains("semantics_profile = \"media.v1\""), "{stub}");
+    assert!(stub.contains("# media_kind ="), "{stub}");
+    assert!(stub.contains("# time_axis ="), "{stub}");
+    assert!(!stub.contains("[[profiles]]"), "{stub}");
+    assert!(!stub.contains("id = "), "{stub}");
+    assert!(stub.contains("index_to_seconds"), "{stub}");
+    assert!(stub.contains("[units.Hz]"), "{stub}");
 
     let json = scaffold_policy(&summary, ScaffoldFormat::Json);
-    assert!(json.contains("\"media_v1\""));
-    assert!(!json.contains("\"id\""));
-    assert!(json.contains("declared"));
+    assert!(json.contains("\"schema_version\": 1"), "{json}");
+    assert!(json.contains("\"media.v1\""), "{json}");
+    assert!(json.contains("\"datasets\""), "{json}");
+    assert!(!json.contains("\"declared\""), "{json}");
+    assert!(!json.contains("\"id\""), "{json}");
 }
 
 #[test]
@@ -167,6 +174,10 @@ fn recording_fixture_has_media_attrs_and_history() {
         Some("media.v1")
     );
     assert!(summary.history.iter().any(|e| e.op == "semantics"));
+    let stub = scaffold_policy(&summary, ScaffoldFormat::Toml);
+    assert!(stub.contains("dim_names = [\"t\", \"y\", \"x\"]"), "{stub}");
+    assert!(stub.contains("[profiles.media.v1]"), "{stub}");
+    assert!(!stub.contains("# frame_rate ="), "{stub}");
 }
 
 #[test]

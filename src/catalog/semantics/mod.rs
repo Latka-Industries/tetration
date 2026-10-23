@@ -17,9 +17,10 @@ pub use apply::{
     format_apply_report, parse_semantics_toml,
 };
 pub use declare::{
-    DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, declared_attrs,
+    DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL, ScaffoldFormat, ScaffoldPolicy, declared_attrs,
     declared_attrs_for_dataset, get_dataset_attr, is_declared_key, metadata_has_declared_attrs,
-    scaffold_policy, scaffold_policy_from_path, set_dataset_attrs, write_recording_fixture,
+    scaffold_annotated_toml, scaffold_policy, scaffold_policy_from_path, set_dataset_attrs,
+    write_recording_fixture,
 };
 pub use lint::{
     SemanticsLintFinding, SemanticsLintReport, SemanticsLintSeverity, format_lint_report,

@@ -4,11 +4,12 @@ use std::fs;
 use std::path::Path;
 
 use tetration::catalog::{
-    ScaffoldFormat, TetPackage, apply_semantics_toml, encode_package_semantics,
+    ScaffoldFormat, ScaffoldPolicy, TetPackage, apply_semantics_toml, encode_package_semantics,
     format_apply_report, format_lint_report, lint_package_semantics, lint_tet_path,
-    read_package_semantics, scaffold_policy_from_path, set_dataset_attrs,
-    write_package_semantics_from_packed,
+    parse_semantics_toml, read_package_semantics, read_tet_summary_v1, scaffold_annotated_toml,
+    scaffold_policy_from_path, set_dataset_attrs, write_package_semantics_from_packed,
 };
+use tetration::layout::mmap_file_read;
 use tetration::verify::looks_like_tet_package;
 
 use crate::args::SemanticsCmd;
@@ -16,7 +17,12 @@ use crate::util::cli_error;
 
 pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
     match cmd {
-        SemanticsCmd::Apply { path, from } => run_apply(&path, &from),
+        SemanticsCmd::Apply {
+            path,
+            from,
+            annotate,
+            output,
+        } => run_apply(&path, &from, annotate, output.as_deref()),
         SemanticsCmd::Scaffold {
             path,
             output,
@@ -38,10 +44,62 @@ pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
     }
 }
 
-fn run_apply(path: &Path, from: &Path) -> Result<(), String> {
+fn run_apply(
+    path: &Path,
+    from: &Path,
+    annotate: bool,
+    output: Option<&Path>,
+) -> Result<(), String> {
+    if output.is_some() && !annotate {
+        return Err(cli_error(
+            "apply -o requires --annotate; apply does not rewrite --from",
+        ));
+    }
+    if let Some(out) = output
+        && same_path(out, from)
+    {
+        return Err(cli_error(
+            "apply --annotate -o must not be the --from file (the source TOML is never rewritten)",
+        ));
+    }
     let report = apply_semantics_toml(path, from).map_err(cli_error)?;
     eprint!("{}", format_apply_report(path, &report));
+    if annotate {
+        let text = annotated_from_sources(path, from)?;
+        if let Some(out) = output {
+            if let Some(parent) = out.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                fs::create_dir_all(parent).map_err(cli_error)?;
+            }
+            fs::write(out, text).map_err(cli_error)?;
+        } else {
+            print!("{text}");
+        }
+    }
     Ok(())
+}
+
+fn annotated_from_sources(tet: &Path, from: &Path) -> Result<String, String> {
+    let toml_text = fs::read_to_string(from).map_err(cli_error)?;
+    let doc = parse_semantics_toml(&toml_text).map_err(cli_error)?;
+    let mmap = mmap_file_read(tet).map_err(cli_error)?;
+    let summary = read_tet_summary_v1(&mmap).map_err(cli_error)?;
+    let overlay = ScaffoldPolicy {
+        profiles: doc.profiles,
+        units: doc.units,
+    };
+    Ok(scaffold_annotated_toml(
+        &summary,
+        Some(&overlay).filter(|p| !p.profiles.is_empty() || !p.units.is_empty()),
+    ))
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    if a == b {
+        return true;
+    }
+    matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
 }
 
 fn run_scaffold(path: &Path, output: Option<&Path>, format: &str) -> Result<(), String> {

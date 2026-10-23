@@ -79,13 +79,14 @@ pub use secondary_index::{
 };
 pub use semantics::{
     DECLARED_ATTR_KEYS, DOCUMENTED_PROFILE_IDS, PROV_LOG_RECOMMENDED_PARAMS, SEMANTICS_GUIDE_URL,
-    ScaffoldFormat, SemanticsApplyReport, SemanticsDocument, SemanticsLintFinding,
+    ScaffoldFormat, ScaffoldPolicy, SemanticsApplyReport, SemanticsDocument, SemanticsLintFinding,
     SemanticsLintReport, SemanticsLintSeverity, StampedDataset, apply_semantics_toml,
     declared_attrs, declared_attrs_for_dataset, format_apply_report, format_lint_report,
     get_dataset_attr, is_declared_key, is_documented_profile, lint_declared_semantics,
     lint_package_semantics, lint_summary, lint_tet_path, metadata_has_declared_attrs,
-    normalize_profile_id, parse_semantics_toml, recommended_keys_for_profile, scaffold_policy,
-    scaffold_policy_from_path, set_dataset_attrs, write_recording_fixture,
+    normalize_profile_id, parse_semantics_toml, recommended_keys_for_profile,
+    scaffold_annotated_toml, scaffold_policy, scaffold_policy_from_path, set_dataset_attrs,
+    write_recording_fixture,
 };
 pub use session::{
     FileMetadataDraft, TetDatasetStreamSpec, TetDatasetWrite, TetFile, TetWriterSession,

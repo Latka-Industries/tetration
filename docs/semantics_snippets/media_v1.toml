@@ -1,9 +1,0 @@
-# Reference caller policy for media_v1 (THI-621).
-# Copy beside your app as tet-semantics.toml — the crate does not load this by default.
-
-[profiles.media_v1]
-index_to_seconds = "index / frame_rate"
-seconds_to_index = "floor(seconds * frame_rate)"
-
-[units.Hz]
-display = "Hz"

@@ -66,9 +66,11 @@ fn cli_semantics_set_then_info_and_scaffold() {
         String::from_utf8_lossy(&scaffold.stderr)
     );
     let stub = String::from_utf8_lossy(&scaffold.stdout);
-    assert!(stub.contains("[profiles.media_v1]"), "{stub}");
+    assert!(stub.contains("schema_version = 1"), "{stub}");
+    assert!(stub.contains("[datasets.frames]"), "{stub}");
+    assert!(stub.contains("[profiles.media.v1]"), "{stub}");
+    assert!(stub.contains("# frame_rate_unit ="), "{stub}");
     assert!(!stub.contains("id = "), "{stub}");
-    assert!(!stub.contains("[profiles.\""), "{stub}");
 
     let out_path = dir.path().join("tet-semantics.json");
     let scaffold_json = tet_command(&[
@@ -84,7 +86,10 @@ fn cli_semantics_set_then_info_and_scaffold() {
     .expect("spawn scaffold -o");
     assert!(scaffold_json.status.success());
     let written = std::fs::read_to_string(&out_path).unwrap();
-    assert!(written.contains("\"declared\""));
+    assert!(written.contains("\"schema_version\": 1"), "{written}");
+    assert!(written.contains("\"datasets\""), "{written}");
+    assert!(written.contains("\"media.v1\""), "{written}");
+    assert!(!written.contains("\"declared\""), "{written}");
 }
 
 #[test]
@@ -142,6 +147,48 @@ display = "Hz"
     assert!(info.status.success());
     let info_out = String::from_utf8_lossy(&info.stdout);
     assert!(info_out.contains("frame_rate: 30"), "{info_out}");
+
+    let annotated = dir.path().join("annotated.toml");
+    let again = tet_command(&[
+        "semantics",
+        "apply",
+        path.to_str().unwrap(),
+        "--from",
+        toml.to_str().unwrap(),
+        "--annotate",
+        "-o",
+        annotated.to_str().unwrap(),
+    ])
+    .output()
+    .expect("spawn tet semantics apply --annotate");
+    assert!(
+        again.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&again.stderr)
+    );
+    assert_eq!(std::fs::read(&toml).unwrap(), before);
+    let body = std::fs::read_to_string(&annotated).unwrap();
+    assert!(body.contains("# media_kind ="), "{body}");
+    assert!(
+        body.contains("index_to_seconds = \"index / frame_rate\""),
+        "{body}"
+    );
+    assert!(body.contains("[units.Hz]"), "{body}");
+
+    let same = tet_command(&[
+        "semantics",
+        "apply",
+        path.to_str().unwrap(),
+        "--from",
+        toml.to_str().unwrap(),
+        "--annotate",
+        "-o",
+        toml.to_str().unwrap(),
+    ])
+    .output()
+    .expect("spawn apply -o --from");
+    assert!(!same.status.success());
+    assert_eq!(std::fs::read(&toml).unwrap(), before);
 }
 
 #[test]
