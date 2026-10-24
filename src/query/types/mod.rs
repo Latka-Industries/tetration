@@ -5,21 +5,24 @@ mod document;
 mod error;
 mod plan;
 mod response;
+mod simple_op;
 mod transform_method;
 
 pub(crate) use cell_filter::{CellPredicate, INTEGER_FILTER_FILL_MSG, fold_keeps_element};
 
 pub use document::{
-    AlignSpec, AxisSlice, ExecutionDeviceHint, ExecutionHints, GroupBySpec, LabelFilterSpec,
-    Operation, OutputHint, OutputHints, PipelineStep, QueryDocument, ValueCompareOp, ValueFilter,
-    ValuePredicate, WindowAlign, WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AxisSlice, AxisToken, ExecutionDeviceHint, ExecutionHints, GroupBySpec,
+    LabelFilterSpec, Operation, OutputHint, OutputHints, PipelineStep, QueryDocument,
+    ValueCompareOp, ValueFilter, ValuePredicate, WindowAlign, WindowMode, WindowPad, WindowSpec,
+    WriteHints, WriteTarget,
 };
 pub use error::TetError;
-pub use plan::{CHUNK_TOUCH_POLICY, ChunkTouchPolicy, PlannedChunkIo, ReadPlan};
+pub use plan::{ChunkTouchPolicy, PlannedChunkIo, ReadPlan};
 pub(crate) use plan::{LabelEqPred, LabelGroupRemap};
 pub use response::{
     AlignmentAxisResult, AlignmentResult, DatasetResolution, QueryExecutionPreview, QueryResponse,
 };
+pub use simple_op::SimpleOp;
 pub use transform_method::TransformMethod;
 
 pub(crate) use response::{ExecutionPreviewIo, OperationPreviewFields, QueryExecutionPreviewBuild};

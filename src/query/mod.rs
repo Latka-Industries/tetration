@@ -75,9 +75,9 @@ pub use engine::{
 pub use execute::{ExecuteQueryOptions, execute_query_document, execute_query_json};
 pub use plan::fetch::{chunk_payload_ranges, plan_query_fetch};
 pub use types::{
-    AlignSpec, AlignmentAxisResult, AlignmentResult, AxisSlice, CHUNK_TOUCH_POLICY,
-    ChunkTouchPolicy, DatasetResolution, ExecutionDeviceHint, ExecutionHints, GroupBySpec,
-    Operation, OutputHint, OutputHints, PlannedChunkIo, QueryDocument, QueryExecutionPreview,
-    QueryResponse, ReadPlan, TetError, TransformMethod, ValueCompareOp, ValueFilter,
-    ValuePredicate, WindowAlign, WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
+    AlignSpec, AlignmentAxisResult, AlignmentResult, AxisSlice, AxisToken, ChunkTouchPolicy,
+    DatasetResolution, ExecutionDeviceHint, ExecutionHints, GroupBySpec, Operation, OutputHint,
+    OutputHints, PlannedChunkIo, QueryDocument, QueryExecutionPreview, QueryResponse, ReadPlan,
+    SimpleOp, TetError, TransformMethod, ValueCompareOp, ValueFilter, ValuePredicate, WindowAlign,
+    WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
 };

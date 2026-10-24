@@ -6,8 +6,14 @@
 use serde::{Deserialize, Serialize};
 
 use super::error::TetError;
+use super::simple_op::SimpleOp;
 
 // `QueryDocument` JSON wire format: see `document_wire.rs` (flat op keys, `mean: 0`, `spill: "…"`, …).
+
+/// Pre-resolve axis token: decimal index (`"0"`) or footer dimension name (`"time"`).
+///
+/// Kept as [`String`] on the wire/document for now; plan-time resolve rewrites names to indices.
+pub type AxisToken = String;
 
 /// Per-axis slice: `start` inclusive, `stop` exclusive, `step` ≥ 1 when present.
 ///
@@ -166,48 +172,102 @@ macro_rules! operation_axes_match {
 }
 
 impl Operation {
+    /// Every accepted top-level reduction / transform wire key (parse + serialize).
+    ///
+    /// [`SimpleOp::WIRE_KEYS`] plus parametric keys (`quantile` / `histogram` / `null_count` /
+    /// `transform`).
+    pub const WIRE_KEYS: &'static [&'static str] = &[
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "count",
+        "var",
+        "std",
+        "product",
+        "norm_l1",
+        "norm_l2",
+        "all_finite",
+        "any_nan",
+        "any_inf",
+        "arg_min",
+        "arg_max",
+        "median",
+        "quantile",
+        "histogram",
+        "nan_count",
+        "inf_count",
+        "null_count",
+        "covariance",
+        "correlation",
+        "nan_mean",
+        "nan_std",
+        "transform",
+    ];
+
     /// Per-axis decimal dimension indices for this operation.
     #[must_use]
-    pub fn axes(&self) -> &[String] {
+    pub fn axes(&self) -> &[AxisToken] {
         operation_axes_match!(self)
     }
 
     /// Mutable axis list for plan-time name → index resolution.
-    pub(crate) fn axes_mut(&mut self) -> &mut Vec<String> {
+    pub(crate) fn axes_mut(&mut self) -> &mut Vec<AxisToken> {
         operation_axes_match!(self)
     }
 
     /// Top-level JSON wire key (`"mean"`, `"arg_min"`, …).
     #[must_use]
     pub fn wire_key(&self) -> &'static str {
+        if let Some(simple) = self.simple_op() {
+            return simple.as_str();
+        }
         match self {
-            Self::Sum { .. } => "sum",
-            Self::Mean { .. } => "mean",
-            Self::Min { .. } => "min",
-            Self::Max { .. } => "max",
-            Self::Count { .. } => "count",
-            Self::Var { .. } => "var",
-            Self::Std { .. } => "std",
-            Self::Product { .. } => "product",
-            Self::NormL1 { .. } => "norm_l1",
-            Self::NormL2 { .. } => "norm_l2",
-            Self::AllFinite { .. } => "all_finite",
-            Self::AnyNan { .. } => "any_nan",
-            Self::AnyInf { .. } => "any_inf",
-            Self::NanCount { .. } => "nan_count",
-            Self::InfCount { .. } => "inf_count",
             Self::NullCount { .. } => "null_count",
-            Self::ArgMin { .. } => "arg_min",
-            Self::ArgMax { .. } => "arg_max",
-            Self::Median { .. } => "median",
             Self::Quantile { .. } => "quantile",
             Self::Histogram { .. } => "histogram",
-            Self::Covariance { .. } => "covariance",
-            Self::Correlation { .. } => "correlation",
-            Self::NanMean { .. } => "nan_mean",
-            Self::NanStd { .. } => "nan_std",
             Self::Transform { .. } => "transform",
+            _ => unreachable!("simple_op covers axes-only variants"),
         }
+    }
+
+    /// Axes-only kind when this is not a parametric op.
+    #[must_use]
+    pub fn simple_op(&self) -> Option<SimpleOp> {
+        Some(match self {
+            Self::Sum { .. } => SimpleOp::Sum,
+            Self::Mean { .. } => SimpleOp::Mean,
+            Self::Min { .. } => SimpleOp::Min,
+            Self::Max { .. } => SimpleOp::Max,
+            Self::Count { .. } => SimpleOp::Count,
+            Self::Var { .. } => SimpleOp::Var,
+            Self::Std { .. } => SimpleOp::Std,
+            Self::Product { .. } => SimpleOp::Product,
+            Self::NormL1 { .. } => SimpleOp::NormL1,
+            Self::NormL2 { .. } => SimpleOp::NormL2,
+            Self::AllFinite { .. } => SimpleOp::AllFinite,
+            Self::AnyNan { .. } => SimpleOp::AnyNan,
+            Self::AnyInf { .. } => SimpleOp::AnyInf,
+            Self::ArgMin { .. } => SimpleOp::ArgMin,
+            Self::ArgMax { .. } => SimpleOp::ArgMax,
+            Self::Median { .. } => SimpleOp::Median,
+            Self::NanCount { .. } => SimpleOp::NanCount,
+            Self::InfCount { .. } => SimpleOp::InfCount,
+            Self::Covariance { .. } => SimpleOp::Covariance,
+            Self::Correlation { .. } => SimpleOp::Correlation,
+            Self::NanMean { .. } => SimpleOp::NanMean,
+            Self::NanStd { .. } => SimpleOp::NanStd,
+            Self::Quantile { .. }
+            | Self::Histogram { .. }
+            | Self::NullCount { .. }
+            | Self::Transform { .. } => return None,
+        })
+    }
+
+    /// Axes-only ops from a flat wire key. Parametric keys return [`None`].
+    #[must_use]
+    pub(crate) fn from_axes_key(name: &str, axes: Vec<AxisToken>) -> Option<Self> {
+        SimpleOp::parse(name).map(|op| op.with_axes(axes))
     }
 
     /// Tier-C ops that require a full logical materialize (not streaming fold).
@@ -287,11 +347,24 @@ pub enum OutputHint {
 }
 
 /// Optional output routing hints on a query document.
+///
+/// Wire key is top-level `"spill": "path"` (export), not transform [`WriteHints`] (`"write"`).
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct OutputHints {
     #[serde(default)]
     pub preferred: Option<OutputHint>,
+}
+
+impl OutputHints {
+    /// Path from `"spill": "…"` when preferred is [`OutputHint::SpillArray`].
+    #[must_use]
+    pub fn spill_handle(&self) -> Option<&str> {
+        match self.preferred.as_ref() {
+            Some(OutputHint::SpillArray { handle }) => Some(handle.as_str()),
+            _ => None,
+        }
+    }
 }
 
 /// Comparison operator for a numeric cell-value predicate (`filter` wire key).
@@ -662,6 +735,57 @@ pub struct QueryDocument {
     pub pipeline: Option<Vec<PipelineStep>>,
 }
 
+impl QueryDocument {
+    /// True when top-level `spill` requests an export array file.
+    ///
+    /// Distinct from transform [`Self::write`] routing — the two must not both be set.
+    #[must_use]
+    pub fn requests_export_spill(&self) -> bool {
+        matches!(
+            self.output.as_ref().and_then(|o| o.preferred.as_ref()),
+            Some(OutputHint::SpillArray { .. })
+        )
+    }
+
+    /// Export spill path from top-level `spill`, when present.
+    #[must_use]
+    pub fn export_spill_handle(&self) -> Option<&str> {
+        self.output.as_ref().and_then(OutputHints::spill_handle)
+    }
+
+    /// Empty document used when serializing an analytics fragment (pipeline step / tests).
+    #[must_use]
+    pub(crate) fn analytics_scratch() -> Self {
+        Self {
+            layout_version: None,
+            dataset: String::new(),
+            selection: None,
+            filter: None,
+            label_filter: None,
+            group_by: None,
+            window: None,
+            align: None,
+            operation: None,
+            output: None,
+            write: None,
+            execution: None,
+            pipeline: None,
+        }
+    }
+
+    /// Transform output routing (`write` wire key).
+    #[must_use]
+    pub fn write_hints(&self) -> Option<&WriteHints> {
+        self.write.as_ref()
+    }
+
+    /// Transform [`WriteTarget`], when `write` is set.
+    #[must_use]
+    pub fn write_target(&self) -> Option<WriteTarget> {
+        self.write.as_ref().map(|w| w.target)
+    }
+}
+
 /// One closed stage in a query `pipeline`.
 ///
 /// Order is fixed: `select`, then `filter`, then one reduction (`group_by` or `window` optional),
@@ -769,40 +893,109 @@ impl ExecutionDeviceHint {
         )))
     }
 
+    /// `&'static str` wire token when no ordinal index must be formatted.
+    ///
+    /// Returns `None` for `cuda:N` / `rocm:N` with `N != 0` — use [`Self::to_token`].
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
+    pub const fn as_static_str(self) -> Option<&'static str> {
         match self {
-            Self::Cpu => "cpu",
-            Self::Auto => "auto",
-            Self::Metal => "metal",
-            Self::Cuda(0) => "cuda:0",
-            Self::CudaMulti => "cuda:multi",
-            Self::Rocm(0) => "rocm:0",
-            Self::RocmMulti => "rocm:multi",
-            Self::Cuda(n) => {
-                let _ = n;
-                "cuda"
-            }
-            Self::Rocm(n) => {
-                let _ = n;
-                "rocm"
-            }
+            Self::Cpu => Some("cpu"),
+            Self::Auto => Some("auto"),
+            Self::Metal => Some("metal"),
+            Self::Cuda(0) => Some("cuda"),
+            Self::CudaMulti => Some("cuda:multi"),
+            Self::Rocm(0) => Some("rocm"),
+            Self::RocmMulti => Some("rocm:multi"),
+            Self::Cuda(_) | Self::Rocm(_) => None,
         }
     }
 
-    /// Wire/JSON token (includes index for `cuda:N`).
+    /// Wire/JSON token (includes index for `cuda:N` / `rocm:N`). Prefer this for logs and JSON.
     #[must_use]
     pub fn to_token(self) -> String {
-        match self {
-            Self::Cpu => "cpu".to_string(),
-            Self::Auto => "auto".to_string(),
-            Self::Metal => "metal".to_string(),
-            Self::Cuda(0) => "cuda".to_string(),
-            Self::Cuda(n) => format!("cuda:{n}"),
-            Self::CudaMulti => "cuda:multi".to_string(),
-            Self::Rocm(0) => "rocm".to_string(),
-            Self::Rocm(n) => format!("rocm:{n}"),
-            Self::RocmMulti => "rocm:multi".to_string(),
+        match self.as_static_str() {
+            Some(s) => s.to_owned(),
+            None => match self {
+                Self::Cuda(n) => format!("cuda:{n}"),
+                Self::Rocm(n) => format!("rocm:{n}"),
+                // Covered by `as_static_str`.
+                Self::Cpu | Self::Auto | Self::Metal | Self::CudaMulti | Self::RocmMulti => {
+                    unreachable!("as_static_str covers index-free devices")
+                }
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod operation_wire_tests {
+    use super::super::SimpleOp;
+    use super::{Operation, TransformMethod};
+
+    #[test]
+    fn wire_keys_match_wire_key_and_from_axes() {
+        let samples: &[Operation] = &[
+            Operation::Sum { axes: vec![] },
+            Operation::Mean { axes: vec![] },
+            Operation::Min { axes: vec![] },
+            Operation::Max { axes: vec![] },
+            Operation::Count { axes: vec![] },
+            Operation::Var { axes: vec![] },
+            Operation::Std { axes: vec![] },
+            Operation::Product { axes: vec![] },
+            Operation::NormL1 { axes: vec![] },
+            Operation::NormL2 { axes: vec![] },
+            Operation::AllFinite { axes: vec![] },
+            Operation::AnyNan { axes: vec![] },
+            Operation::AnyInf { axes: vec![] },
+            Operation::ArgMin { axes: vec![] },
+            Operation::ArgMax { axes: vec![] },
+            Operation::Median { axes: vec![] },
+            Operation::Quantile {
+                axes: vec![],
+                q: 0.5,
+            },
+            Operation::Histogram {
+                axes: vec![],
+                bins: 1,
+                min: None,
+                max: None,
+            },
+            Operation::NanCount { axes: vec![] },
+            Operation::InfCount { axes: vec![] },
+            Operation::NullCount {
+                axes: vec![],
+                fill: None,
+            },
+            Operation::Covariance { axes: vec![] },
+            Operation::Correlation { axes: vec![] },
+            Operation::NanMean { axes: vec![] },
+            Operation::NanStd { axes: vec![] },
+            Operation::Transform {
+                method: TransformMethod::Zscore,
+                axes: vec![],
+            },
+        ];
+        assert_eq!(samples.len(), Operation::WIRE_KEYS.len());
+        assert_eq!(
+            SimpleOp::WIRE_KEYS.len() + SimpleOp::PARAMETRIC_WIRE_KEYS.len(),
+            Operation::WIRE_KEYS.len()
+        );
+        for op in samples {
+            let key = op.wire_key();
+            assert!(
+                Operation::WIRE_KEYS.contains(&key),
+                "wire_key {key:?} missing from WIRE_KEYS"
+            );
+            if let Some(simple) = op.simple_op() {
+                assert_eq!(simple.as_str(), key);
+                let rebuilt = Operation::from_axes_key(key, vec![]).expect(key);
+                assert_eq!(rebuilt.wire_key(), key);
+                assert_eq!(rebuilt.simple_op(), Some(simple));
+            } else {
+                assert!(Operation::from_axes_key(key, vec![]).is_none());
+                assert!(SimpleOp::PARAMETRIC_WIRE_KEYS.contains(&key));
+            }
         }
     }
 }

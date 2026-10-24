@@ -8,8 +8,7 @@ use std::fmt::Write as _;
 use crate::query::cli::pretty;
 use crate::query::cli::text::truncate_field;
 use crate::query::types::{
-    CHUNK_TOUCH_POLICY, DatasetResolution, Operation, QueryExecutionPreview, QueryResponse,
-    ReadPlan,
+    ChunkTouchPolicy, DatasetResolution, Operation, QueryExecutionPreview, QueryResponse, ReadPlan,
 };
 
 use super::format_num::{fmt_f64, missing_field};
@@ -177,13 +176,10 @@ fn push_plan_table(out: &mut String, plan: &ReadPlan) {
     write_kv_section(out, "read_plan", &rows);
 }
 
-fn short_touch_policy(policy: &str) -> &'static str {
-    if policy == CHUNK_TOUCH_POLICY.dense_half_open_unit_step {
-        "dense"
-    } else if policy == CHUNK_TOUCH_POLICY.strided_half_open {
-        "strided"
-    } else {
-        "other"
+fn short_touch_policy(policy: ChunkTouchPolicy) -> &'static str {
+    match policy {
+        ChunkTouchPolicy::DenseHalfOpenUnitStep => "dense",
+        ChunkTouchPolicy::StridedHalfOpen => "strided",
     }
 }
 

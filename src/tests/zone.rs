@@ -10,7 +10,7 @@ use crate::catalog::{
     ZONE_MAPS_FILE, ZONE_MAPS_REQUIRED, publish_staged_parts, read_zone_maps_file, stage_part,
     zone_maps_key,
 };
-use crate::query::types::CHUNK_TOUCH_POLICY;
+use crate::query::types::ChunkTouchPolicy;
 use crate::query::{
     ExecuteQueryOptions, execute_query_document, parse_query_json, plan_query_with_tet_mmap,
     validate_query,
@@ -267,7 +267,7 @@ fn read_plan_carries_zone_stats_and_renamed_count() {
     assert_eq!(parsed.logical_element_count, 2);
     assert_eq!(
         parsed.chunk_touch_policy,
-        CHUNK_TOUCH_POLICY.dense_half_open_unit_step
+        ChunkTouchPolicy::DenseHalfOpenUnitStep
     );
 }
 

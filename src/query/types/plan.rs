@@ -19,13 +19,63 @@ pub struct PlannedChunkIo {
     pub zone: Option<ChunkZoneStat>,
 }
 
-fn chunk_touch_policy_static(s: &str) -> Result<&'static str, String> {
-    if s == CHUNK_TOUCH_POLICY.dense_half_open_unit_step {
-        Ok(CHUNK_TOUCH_POLICY.dense_half_open_unit_step)
-    } else if s == CHUNK_TOUCH_POLICY.strided_half_open {
-        Ok(CHUNK_TOUCH_POLICY.strided_half_open)
-    } else {
-        Err(format!("unknown chunk_touch_policy {s:?}"))
+/// How `selection` maps to chunk coordinates ([`ReadPlan::chunk_touch_policy`]).
+///
+/// Wire strings stay the long historical tokens for JSON compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChunkTouchPolicy {
+    /// Half-open intervals with effective step 1 on every axis (JSON `step` omitted or 1).
+    DenseHalfOpenUnitStep,
+    /// Per-axis JSON `step` applied when deciding which chunks are touched.
+    StridedHalfOpen,
+}
+
+impl ChunkTouchPolicy {
+    /// Stable JSON / plan wire token.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DenseHalfOpenUnitStep => {
+                "dense_half_open_intervals_per_axis_json_step_ignored_for_chunk_touch_list"
+            }
+            Self::StridedHalfOpen => {
+                "strided_half_open_per_axis_json_step_applied_to_chunk_touch_list"
+            }
+        }
+    }
+
+    /// Parse a plan wire token.
+    ///
+    /// # Errors
+    ///
+    /// Unknown token string.
+    pub fn parse(s: &str) -> Result<Self, String> {
+        if s == Self::DenseHalfOpenUnitStep.as_str() {
+            Ok(Self::DenseHalfOpenUnitStep)
+        } else if s == Self::StridedHalfOpen.as_str() {
+            Ok(Self::StridedHalfOpen)
+        } else {
+            Err(format!("unknown chunk_touch_policy {s:?}"))
+        }
+    }
+}
+
+impl Serialize for ChunkTouchPolicy {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ChunkTouchPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::parse(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -34,7 +84,7 @@ fn chunk_touch_policy_static(s: &str) -> Result<&'static str, String> {
 #[serde(rename_all = "snake_case")]
 pub struct ReadPlan {
     /// How `selection` maps to chunk coordinates in this build.
-    pub chunk_touch_policy: &'static str,
+    pub chunk_touch_policy: ChunkTouchPolicy,
     pub chunk_count: usize,
     /// Chunks dropped by value-filter zone pushdown (0 when no `filter` or no zone stats).
     ///
@@ -108,7 +158,7 @@ pub(crate) struct LabelGroupRemap {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct ReadPlanWire {
-    chunk_touch_policy: String,
+    chunk_touch_policy: ChunkTouchPolicy,
     chunk_count: usize,
     #[serde(default)]
     zone_filter_skipped_chunks: usize,
@@ -132,10 +182,8 @@ impl<'de> Deserialize<'de> for ReadPlan {
         D: serde::Deserializer<'de>,
     {
         let wire = ReadPlanWire::deserialize(deserializer)?;
-        let chunk_touch_policy = chunk_touch_policy_static(&wire.chunk_touch_policy)
-            .map_err(serde::de::Error::custom)?;
         Ok(Self {
-            chunk_touch_policy,
+            chunk_touch_policy: wire.chunk_touch_policy,
             chunk_count: wire.chunk_count,
             zone_filter_skipped_chunks: wire.zone_filter_skipped_chunks,
             index_filter_skipped_chunks: wire.index_filter_skipped_chunks,
@@ -155,18 +203,3 @@ impl<'de> Deserialize<'de> for ReadPlan {
         })
     }
 }
-
-/// Stable string tokens for [`ReadPlan::chunk_touch_policy`] (JSON wire compatibility).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChunkTouchPolicy {
-    /// Half-open intervals with effective step 1 on every axis (JSON `step` omitted or 1).
-    pub dense_half_open_unit_step: &'static str,
-    /// Per-axis JSON `step` applied when deciding which chunks are touched.
-    pub strided_half_open: &'static str,
-}
-
-/// Singleton tokens for chunk-touch policy strings on the wire.
-pub const CHUNK_TOUCH_POLICY: ChunkTouchPolicy = ChunkTouchPolicy {
-    dense_half_open_unit_step: "dense_half_open_intervals_per_axis_json_step_ignored_for_chunk_touch_list",
-    strided_half_open: "strided_half_open_per_axis_json_step_applied_to_chunk_touch_list",
-};

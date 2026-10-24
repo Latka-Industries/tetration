@@ -57,6 +57,14 @@ fn execution_device_hint_parse_tokens() {
         ExecutionDeviceHint::parse("rocm:2").unwrap(),
         ExecutionDeviceHint::Rocm(2)
     );
+    assert_eq!(ExecutionDeviceHint::Cuda(0).to_token(), "cuda");
+    assert_eq!(ExecutionDeviceHint::Cuda(2).to_token(), "cuda:2");
+    assert_eq!(ExecutionDeviceHint::Cuda(0).as_static_str(), Some("cuda"));
+    assert_eq!(ExecutionDeviceHint::Cuda(2).as_static_str(), None);
+    assert_eq!(
+        ExecutionDeviceHint::parse(&ExecutionDeviceHint::Cuda(2).to_token()).unwrap(),
+        ExecutionDeviceHint::Cuda(2)
+    );
 }
 
 #[test]
@@ -147,13 +155,13 @@ fn resolve_device_metal_falls_back_without_metal_feature() {
 #[test]
 fn resolve_device_auto_large_prefers_metal_when_enabled() {
     use crate::query::GPU_AUTO_MIN_LOGICAL_BYTES;
-    use crate::query::types::ReadPlan;
+    use crate::query::types::{ChunkTouchPolicy, ReadPlan};
 
     let doc = crate::query::parse_query_json(r#"{"dataset":"a","mean":[]}"#).unwrap();
     validate_query(&doc).unwrap();
     let elems = usize::try_from(GPU_AUTO_MIN_LOGICAL_BYTES / 4 + 1).unwrap();
     let plan = ReadPlan {
-        chunk_touch_policy: "dense",
+        chunk_touch_policy: ChunkTouchPolicy::DenseHalfOpenUnitStep,
         chunk_count: 0,
         zone_filter_skipped_chunks: 0,
         index_filter_skipped_chunks: 0,
@@ -186,7 +194,7 @@ fn resolve_device_auto_large_prefers_metal_when_enabled() {
 
 #[test]
 fn resolve_device_auto_huge_selection_still_routes_gpu_for_streaming_fold() {
-    use crate::query::types::ReadPlan;
+    use crate::query::types::{ChunkTouchPolicy, ReadPlan};
     use crate::utils::host_memory;
 
     if !metal_backend_available() && !cuda_backend_available() {
@@ -202,7 +210,7 @@ fn resolve_device_auto_huge_selection_still_routes_gpu_for_streaming_fold() {
     let doc = crate::query::parse_query_json(r#"{"dataset":"a","mean":[]}"#).unwrap();
     let elems = (logical_bytes / 4) as usize;
     let plan = ReadPlan {
-        chunk_touch_policy: "dense",
+        chunk_touch_policy: ChunkTouchPolicy::DenseHalfOpenUnitStep,
         chunk_count: 0,
         zone_filter_skipped_chunks: 0,
         index_filter_skipped_chunks: 0,

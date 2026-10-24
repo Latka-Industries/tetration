@@ -12,7 +12,7 @@ use crate::catalog::{
 };
 use crate::layout::{create_empty_v1_file, mmap_file_read};
 use crate::query::{
-    CHUNK_TOUCH_POLICY, Operation, OutputHint, QueryInputFormat, QueryLimits, SpillPathAllowlist,
+    ChunkTouchPolicy, Operation, OutputHint, QueryInputFormat, QueryLimits, SpillPathAllowlist,
     TempSpillFile, ValueCompareOp, ValuePredicate, detect_query_input_format,
     materialize_read_plan_f32_le, materialize_read_plan_f32_le_into,
     materialize_read_plan_f32_le_into_parallel, materialize_read_plan_f32_le_parallel,
@@ -354,7 +354,7 @@ fn read_plan_strided_step_touches_fewer_chunks_than_dense() {
     let dense = plan_query_with_tet_mmap(&doc_dense, None, &mmap, None).unwrap();
     assert_eq!(
         dense.read_plan.as_ref().unwrap().chunk_touch_policy,
-        CHUNK_TOUCH_POLICY.dense_half_open_unit_step
+        ChunkTouchPolicy::DenseHalfOpenUnitStep
     );
     assert_eq!(dense.read_plan.as_ref().unwrap().chunk_count, 2);
 
@@ -366,7 +366,7 @@ fn read_plan_strided_step_touches_fewer_chunks_than_dense() {
     let strided = plan_query_with_tet_mmap(&doc_strided, None, &mmap, None).unwrap();
     assert_eq!(
         strided.read_plan.as_ref().unwrap().chunk_touch_policy,
-        CHUNK_TOUCH_POLICY.strided_half_open
+        ChunkTouchPolicy::StridedHalfOpen
     );
     assert_eq!(strided.read_plan.as_ref().unwrap().chunk_count, 1);
     assert_eq!(
@@ -417,7 +417,7 @@ fn plan_query_resolves_dataset_in_file() {
     assert_eq!(rp.chunk_count, 2);
     assert_eq!(
         rp.chunk_touch_policy,
-        CHUNK_TOUCH_POLICY.dense_half_open_unit_step
+        ChunkTouchPolicy::DenseHalfOpenUnitStep
     );
     assert_eq!(rp.total_stored_bytes, 24);
     assert_eq!(rp.chunks[0].chunk_index, vec![0, 0]);

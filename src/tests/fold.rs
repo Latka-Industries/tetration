@@ -6,14 +6,14 @@ use crate::query::fold::fold_policy::{
 };
 use crate::query::fold::linear_scan;
 use crate::query::types::{
-    CellPredicate, ExecutionHints, LabelEqPred, PlannedChunkIo, ReadPlan, ValueCompareOp,
-    ValueFilter, ValuePredicate,
+    CellPredicate, ChunkTouchPolicy, ExecutionHints, LabelEqPred, PlannedChunkIo, ReadPlan,
+    ValueCompareOp, ValueFilter, ValuePredicate,
 };
 use crate::utils::dtype::ElementDtype;
 
 fn sample_plan(chunks: Vec<PlannedChunkIo>, shape: u64) -> ReadPlan {
     ReadPlan {
-        chunk_touch_policy: "dense",
+        chunk_touch_policy: ChunkTouchPolicy::DenseHalfOpenUnitStep,
         chunk_count: chunks.len(),
         zone_filter_skipped_chunks: 0,
         index_filter_skipped_chunks: 0,

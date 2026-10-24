@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use super::document::Operation;
+use super::transform_method::TransformMethod;
 use crate::query::materialize::DecodePreviewBundle;
 
 /// Per-axis outcome inside [`AlignmentResult`].
@@ -139,8 +140,8 @@ pub(crate) struct OperationPreviewFields {
     pub nan_std: Option<f64>,
     pub reduced_nan_mean: Option<Vec<f64>>,
     pub reduced_nan_std: Option<Vec<f64>>,
-    /// Pass-1 transform method token (e.g. `zscore`, `softmax`).
-    pub transform_method: Option<String>,
+    /// Pass-1 transform method when `operation` is `transform`.
+    pub transform_method: Option<TransformMethod>,
     /// First [`crate::query::transform::warnings::MAX_LISTED_DIV_BY_ZERO_INDICES`] logical indices with div-by-zero (or similar) in pass 2.
     pub transform_div_by_zero_indices: Option<Vec<u64>>,
     /// Total pass-2 elements that became NaN due to div-by-zero or invalid `sqrt` shift.
@@ -362,7 +363,7 @@ pub struct QueryExecutionPreview {
     pub operation_correlation_order: Option<u64>,
     /// Pass-1 transform method when `operation` is `transform`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transform_method: Option<String>,
+    pub transform_method: Option<TransformMethod>,
     /// Listed logical indices for transform div-by-zero warnings (capped at 256).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transform_div_by_zero_indices: Option<Vec<u64>>,
