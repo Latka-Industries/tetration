@@ -15,9 +15,148 @@ use super::apply::{
 };
 use super::declare::{bare_or_quoted, dotted_table, dtype_label, toml_string};
 use super::profiles::{
-    DOCUMENTED_PROFILES, normalize_profile_id, rate_attr_for_profile, recommended_keys_for_profile,
+    CF_LITE_V1, MEDIA_V1, PROV_LOG_V1, ProfileContract, TIMESERIES_V1, normalize_profile_id,
+    rate_attr_for_profile, recommended_keys_for_profile,
 };
 use crate::catalog::{CatalogError, DatasetRecordV1, TetFileSummaryV1, read_tet_summary_v1};
+
+const ATTR_SEMANTICS_PROFILE: &str = "semantics_profile";
+const ATTR_TIME_AXIS: &str = "time_axis";
+
+/// Documented profiles the wizard walks — keeps UI copy next to the id, not scattered string matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WizardProfile {
+    Media,
+    Timeseries,
+    CfLite,
+    ProvLog,
+}
+
+impl WizardProfile {
+    const ALL: [Self; 4] = [Self::Media, Self::Timeseries, Self::CfLite, Self::ProvLog];
+
+    fn from_id(id: &str) -> Option<Self> {
+        match normalize_profile_id(id) {
+            "media.v1" => Some(Self::Media),
+            "timeseries.v1" => Some(Self::Timeseries),
+            "cf_lite.v1" => Some(Self::CfLite),
+            "prov_log.v1" => Some(Self::ProvLog),
+            _ => None,
+        }
+    }
+
+    fn contract(self) -> &'static ProfileContract {
+        match self {
+            Self::Media => &MEDIA_V1,
+            Self::Timeseries => &TIMESERIES_V1,
+            Self::CfLite => &CF_LITE_V1,
+            Self::ProvLog => &PROV_LOG_V1,
+        }
+    }
+
+    fn id(self) -> &'static str {
+        self.contract().id
+    }
+
+    fn blurb(self) -> &'static str {
+        match self {
+            Self::Media => "video / frame stacks",
+            Self::Timeseries => "sampled signals",
+            Self::CfLite => "CF-lite grids",
+            Self::ProvLog => "provenance via history",
+        }
+    }
+
+    fn attr_help(self) -> &'static str {
+        match self {
+            Self::Media => {
+                "Facts for a frame stack: kind, rate along time_axis, optional frame_rate_unit (not fixed to Hz)."
+            }
+            Self::Timeseries => {
+                "Facts for a continuous signal: sample_rate (+ unit), time_axis, physical units."
+            }
+            Self::CfLite => {
+                "CF-style labels only — units / standard_name / crs; no climate engine in the crate."
+            }
+            Self::ProvLog => {
+                "Profile id alone is enough here; prefer history rows for agent/activity."
+            }
+        }
+    }
+
+    fn extras_help(self) -> &'static str {
+        match self {
+            Self::Media => {
+                "Optional KEY=VAL beyond the list (e.g. pixel_unit=px, color_space=sRGB)."
+            }
+            Self::Timeseries => "Optional KEY=VAL beyond the list (e.g. start_time=ISO-8601).",
+            Self::CfLite => "Optional KEY=VAL beyond the list (e.g. uncertainty_kind=1sigma).",
+            Self::ProvLog => {
+                "Optional KEY=VAL; provenance prefers history rows over inventing attrs."
+            }
+        }
+    }
+
+    fn attr_hint(self, key: &str) -> Option<&'static str> {
+        match (self, key) {
+            (Self::Media, "media_kind") => Some("video"),
+            (Self::Media, "frame_rate") => Some("30"),
+            (Self::Media, "frame_rate_unit") | (Self::Timeseries, "sample_rate_unit") => Some("Hz"),
+            (Self::Media | Self::Timeseries, ATTR_TIME_AXIS) => Some("0"),
+            (Self::Timeseries, "media_kind") => Some("timeseries"),
+            (Self::Timeseries, "sample_rate") => Some("30000"),
+            (Self::Timeseries, "units") => Some("1"),
+            (Self::CfLite, "units") => Some("K"),
+            (Self::CfLite, "standard_name") => Some("air_temperature"),
+            (Self::CfLite, "crs") => Some("EPSG:4326"),
+            _ => None,
+        }
+    }
+
+    fn select_label(self) -> String {
+        format!("{} — {}", self.id(), self.blurb())
+    }
+
+    fn recommended_attr_keys(self) -> Vec<&'static str> {
+        recommended_attr_keys(self.id())
+    }
+}
+
+/// Wizard section banners — one place for the `── … ──` titles.
+#[derive(Debug, Clone, Copy)]
+enum WizardSection {
+    Axes,
+    Profile,
+    Recommended,
+    IncludedPolicy,
+    Confirm,
+    Extras,
+    Redo,
+}
+
+impl WizardSection {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Axes => "── axes ──",
+            Self::Profile => "── profile ──",
+            Self::Recommended => "── recommended attrs ──",
+            Self::IncludedPolicy => "── included policy ──",
+            Self::Confirm => "── confirm ──",
+            Self::Extras => "── extras ──",
+            Self::Redo => {
+                "── redo ──  last selection shown in [brackets]; empty keeps it, - clears"
+            }
+        }
+    }
+
+    fn titled(self, suffix: &str) -> String {
+        match self {
+            Self::Recommended => format!("── recommended attrs ({suffix}) ──"),
+            Self::IncludedPolicy => format!("── included policy ({suffix}) ──"),
+            other => other.title().to_owned(),
+        }
+    }
+}
 
 /// CLI / library options for one wizard run.
 #[derive(Debug, Clone)]
@@ -294,7 +433,7 @@ pub fn run_semantics_wizard(
             break;
         }
         io.println("")?;
-        io.println("── redo ──  last selection shown in [brackets]; empty keeps it, - clears")?;
+        io.println(WizardSection::Redo.title())?;
     }
 
     let toml_text = render_wizard_toml(&dataset, &draft);
@@ -404,7 +543,7 @@ fn collect_draft(
 ) -> Result<DatasetDraft, CatalogError> {
     let dim_names = prompt_dim_names(ds, previous, io)?;
     let mut attrs = prompt_profile_and_attrs(ds, &dim_names, previous, io)?;
-    let profile_for_extras = attrs.get("semantics_profile").cloned();
+    let profile_for_extras = attrs.get(ATTR_SEMANTICS_PROFILE).cloned();
     prompt_extras(profile_for_extras.as_deref(), &mut attrs, io)?;
     Ok(DatasetDraft { dim_names, attrs })
 }
@@ -456,44 +595,46 @@ fn prompt_profile_and_attrs(
     io.println("")?;
     print_block(io, &format_profile_menu())?;
 
-    let profile_items: Vec<String> = DOCUMENTED_PROFILES
+    let profile_items: Vec<String> = WizardProfile::ALL
         .iter()
-        .map(|p| format!("{} — {}", p.id, profile_blurb(p.id)))
+        .map(|p| p.select_label())
         .collect();
-    let profile_last = previous.attrs.get("semantics_profile").map(String::as_str);
-    if let Some(i) = io.select("semantics_profile", &profile_items, profile_last)? {
+    let profile_last = previous
+        .attrs
+        .get(ATTR_SEMANTICS_PROFILE)
+        .map(String::as_str);
+    if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_items, profile_last)? {
         attrs.insert(
-            "semantics_profile".to_owned(),
-            DOCUMENTED_PROFILES[i].id.to_owned(),
+            ATTR_SEMANTICS_PROFILE.to_owned(),
+            WizardProfile::ALL[i].id().to_owned(),
         );
     }
 
-    let profile_id = attrs
-        .get("semantics_profile")
-        .map(|s| normalize_profile_id(s).to_owned());
-    let keys = profile_id
-        .as_deref()
-        .map(recommended_attr_keys)
+    let profile = attrs
+        .get(ATTR_SEMANTICS_PROFILE)
+        .and_then(|s| WizardProfile::from_id(s));
+    let keys = profile
+        .map(WizardProfile::recommended_attr_keys)
         .unwrap_or_default();
 
-    if let Some(id) = profile_id.as_deref() {
+    if let Some(profile) = profile {
         io.println("")?;
-        io.println(&format_included_policy(id))?;
+        io.println(&format_included_policy(profile))?;
         io.println("")?;
-        print_block(io, &format_recommended_header(id))?;
+        print_block(io, &format_recommended_header(profile))?;
         for key in &keys {
-            if *key == "time_axis" {
+            if *key == ATTR_TIME_AXIS {
                 prompt_time_axis(ds, dim_names, previous, &mut attrs, io)?;
                 continue;
             }
             let prev = previous.attrs.get(*key).map(String::as_str);
-            let label = attr_prompt_label(id, key, prev.is_none());
+            let label = attr_prompt_label(profile, key, prev.is_none());
             keep_or_set_attr(&mut attrs, key, io.prompt(&label, prev)?.as_deref(), prev);
         }
     }
 
     for (k, v) in &previous.attrs {
-        if k == "semantics_profile" || attrs.contains_key(k) || keys.contains(&k.as_str()) {
+        if k == ATTR_SEMANTICS_PROFILE || attrs.contains_key(k) || keys.contains(&k.as_str()) {
             continue;
         }
         attrs.insert(k.clone(), v.clone());
@@ -520,8 +661,8 @@ fn keep_or_set_attr(
     }
 }
 
-fn attr_prompt_label(profile: &str, key: &str, show_hint: bool) -> String {
-    match (show_hint, attr_hint(profile, key)) {
+fn attr_prompt_label(profile: WizardProfile, key: &str, show_hint: bool) -> String {
+    match (show_hint, profile.attr_hint(key)) {
         (true, Some(hint)) => format!("{key}  (e.g. {hint})"),
         _ => key.to_owned(),
     }
@@ -532,10 +673,9 @@ fn prompt_extras(
     attrs: &mut BTreeMap<String, String>,
     io: &mut dyn WizardIo,
 ) -> Result<(), CatalogError> {
-    let profile_id = profile_id.map(normalize_profile_id);
     io.println("")?;
-    io.println("── extras ──")?;
-    io.println(extras_help(profile_id))?;
+    io.println(WizardSection::Extras.title())?;
+    io.println(extras_help(profile_id.and_then(WizardProfile::from_id)))?;
     io.println("Empty line finishes.")?;
     while let Some(raw) = io.prompt("  extra", None)? {
         if raw == "-" {
@@ -556,17 +696,9 @@ fn prompt_extras(
     Ok(())
 }
 
-fn extras_help(profile_id: Option<&str>) -> &'static str {
-    match profile_id {
-        Some("media.v1") => {
-            "Optional KEY=VAL beyond the list (e.g. pixel_unit=px, color_space=sRGB)."
-        }
-        Some("timeseries.v1") => "Optional KEY=VAL beyond the list (e.g. start_time=ISO-8601).",
-        Some("cf_lite.v1") => "Optional KEY=VAL beyond the list (e.g. uncertainty_kind=1sigma).",
-        Some("prov_log.v1") => {
-            "Optional KEY=VAL; provenance prefers history rows over inventing attrs."
-        }
-        Some(_) => "Optional KEY=VAL for any other declare attrs you want stamped.",
+fn extras_help(profile: Option<WizardProfile>) -> &'static str {
+    match profile {
+        Some(p) => p.extras_help(),
         None => "Optional KEY=VAL declare attrs (no profile — open minting).",
     }
 }
@@ -574,7 +706,7 @@ fn extras_help(profile_id: Option<&str>) -> &'static str {
 fn format_axes_header(ds: &DatasetRecordV1) -> String {
     #[cfg(feature = "tetration-cli")]
     {
-        let mut out = section_open("── axes ──");
+        let mut out = section_open(WizardSection::Axes.title());
         push_dim(&mut out, "Name each axis in rank order (all required).");
         let rows: Vec<Vec<String>> = ds
             .shape
@@ -588,7 +720,7 @@ fn format_axes_header(ds: &DatasetRecordV1) -> String {
     #[cfg(not(feature = "tetration-cli"))]
     {
         let mut out = String::new();
-        let _ = writeln!(out, "── axes ──");
+        let _ = writeln!(out, "{}", WizardSection::Axes.title());
         let _ = writeln!(out, "Name each axis in rank order (all required).");
         for (i, size) in ds.shape.iter().enumerate() {
             let _ = writeln!(out, "  axis {i}  size {size}");
@@ -597,32 +729,22 @@ fn format_axes_header(ds: &DatasetRecordV1) -> String {
     }
 }
 
-fn profile_blurb(id: &str) -> &'static str {
-    match id {
-        "media.v1" => "video / frame stacks",
-        "timeseries.v1" => "sampled signals",
-        "cf_lite.v1" => "CF-lite grids",
-        "prov_log.v1" => "provenance via history",
-        _ => "",
-    }
-}
-
 fn recommended_attr_keys(id: &str) -> Vec<&'static str> {
     recommended_keys_for_profile(id)
         .iter()
         .copied()
-        .filter(|k| *k != "semantics_profile")
+        .filter(|k| *k != ATTR_SEMANTICS_PROFILE)
         .collect()
 }
 
-fn profile_includes_list(id: &str) -> String {
-    recommended_attr_keys(id).join(", ")
+fn profile_includes_list(profile: WizardProfile) -> String {
+    profile.recommended_attr_keys().join(", ")
 }
 
 fn format_profile_menu() -> String {
     #[cfg(feature = "tetration-cli")]
     {
-        let mut out = section_open("── profile ──");
+        let mut out = section_open(WizardSection::Profile.title());
         push_dim(
             &mut out,
             "Soft contract for callers — not a crate runtime mode.",
@@ -631,15 +753,15 @@ fn format_profile_menu() -> String {
             &mut out,
             "Pick stamps semantics_profile; rate formulas go in the TOML only.",
         );
-        let rows: Vec<Vec<String>> = DOCUMENTED_PROFILES
+        let rows: Vec<Vec<String>> = WizardProfile::ALL
             .iter()
             .enumerate()
             .map(|(i, p)| {
                 vec![
                     (i + 1).to_string(),
-                    p.id.to_owned(),
-                    profile_blurb(p.id).to_owned(),
-                    profile_includes_list(p.id),
+                    p.id().to_owned(),
+                    p.blurb().to_owned(),
+                    profile_includes_list(*p),
                 ]
             })
             .collect();
@@ -650,7 +772,7 @@ fn format_profile_menu() -> String {
     #[cfg(not(feature = "tetration-cli"))]
     {
         let mut out = String::new();
-        let _ = writeln!(out, "── profile ──");
+        let _ = writeln!(out, "{}", WizardSection::Profile.title());
         let _ = writeln!(
             out,
             "Doc profile id — soft contract for callers (not a crate runtime mode)."
@@ -659,40 +781,25 @@ fn format_profile_menu() -> String {
             out,
             "Picking one stamps semantics_profile; rate formulas stay in the TOML."
         );
-        for (i, p) in DOCUMENTED_PROFILES.iter().enumerate() {
-            let _ = writeln!(out, "  {}. {}", i, p.id);
-            let _ = writeln!(out, "     {}", profile_blurb(p.id));
-            let _ = writeln!(out, "     includes: {}", profile_includes_list(p.id));
+        for (i, p) in WizardProfile::ALL.iter().enumerate() {
+            let _ = writeln!(out, "  {}. {}", i, p.id());
+            let _ = writeln!(out, "     {}", p.blurb());
+            let _ = writeln!(out, "     includes: {}", profile_includes_list(*p));
         }
         let _ = writeln!(out, "  (index · id · empty/skip = none)");
         out
     }
 }
 
-fn profile_attr_help(id: &str) -> &'static str {
-    match id {
-        "media.v1" => {
-            "Facts for a frame stack: kind, rate along time_axis, optional frame_rate_unit (not fixed to Hz)."
-        }
-        "timeseries.v1" => {
-            "Facts for a continuous signal: sample_rate (+ unit), time_axis, physical units."
-        }
-        "cf_lite.v1" => {
-            "CF-style labels only — units / standard_name / crs; no climate engine in the crate."
-        }
-        "prov_log.v1" => "Profile id alone is enough here; prefer history rows for agent/activity.",
-        _ => "Recommended keys for this profile id (advisory; open minting allows others).",
-    }
-}
-
-fn format_recommended_header(id: &str) -> String {
+fn format_recommended_header(profile: WizardProfile) -> String {
+    let title = WizardSection::Recommended.titled(profile.id());
     #[cfg(feature = "tetration-cli")]
     {
-        let mut out = section_open(&format!("── recommended attrs ({id}) ──"));
-        push_dim(&mut out, profile_attr_help(id));
+        let mut out = section_open(&title);
+        push_dim(&mut out, profile.attr_help());
         push_dim(
             &mut out,
-            &format!("walk keys: {}", profile_includes_list(id)),
+            &format!("walk keys: {}", profile_includes_list(profile)),
         );
         push_dim(
             &mut out,
@@ -703,9 +810,9 @@ fn format_recommended_header(id: &str) -> String {
     #[cfg(not(feature = "tetration-cli"))]
     {
         let mut out = String::new();
-        let _ = writeln!(out, "── recommended attrs ({id}) ──");
-        let _ = writeln!(out, "{}", profile_attr_help(id));
-        let _ = writeln!(out, "walk keys: {}", profile_includes_list(id));
+        let _ = writeln!(out, "{title}");
+        let _ = writeln!(out, "{}", profile.attr_help());
+        let _ = writeln!(out, "walk keys: {}", profile_includes_list(profile));
         let _ = writeln!(out, "Enter keeps last · - clears · hints are examples only");
         out
     }
@@ -731,34 +838,18 @@ fn prompt_time_axis(
             format!("{i}  {name}  size {}", ds.shape[i])
         })
         .collect();
-    let last = previous.attrs.get("time_axis").map(String::as_str);
-    if let Some(i) = io.select("time_axis", &items, last)? {
-        attrs.insert("time_axis".to_owned(), i.to_string());
+    let last = previous.attrs.get(ATTR_TIME_AXIS).map(String::as_str);
+    if let Some(i) = io.select(ATTR_TIME_AXIS, &items, last)? {
+        attrs.insert(ATTR_TIME_AXIS.to_owned(), i.to_string());
     }
     Ok(())
-}
-
-fn attr_hint(profile: &str, key: &str) -> Option<&'static str> {
-    match (profile, key) {
-        ("media.v1", "media_kind") => Some("video"),
-        ("media.v1", "frame_rate") => Some("30"),
-        ("media.v1", "frame_rate_unit") | ("timeseries.v1", "sample_rate_unit") => Some("Hz"),
-        ("media.v1" | "timeseries.v1", "time_axis") => Some("0"),
-        ("timeseries.v1", "media_kind") => Some("timeseries"),
-        ("timeseries.v1", "sample_rate") => Some("30000"),
-        ("timeseries.v1", "units") => Some("1"),
-        ("cf_lite.v1", "units") => Some("K"),
-        ("cf_lite.v1", "standard_name") => Some("air_temperature"),
-        ("cf_lite.v1", "crs") => Some("EPSG:4326"),
-        _ => None,
-    }
 }
 
 fn format_confirm(dataset: &str, ds: &DatasetRecordV1, draft: &DatasetDraft) -> String {
     #[cfg(feature = "tetration-cli")]
     {
         use console::style;
-        let mut out = section_open("── confirm ──");
+        let mut out = section_open(WizardSection::Confirm.title());
         push_table(
             &mut out,
             &["field", "value"],
@@ -788,7 +879,7 @@ fn format_confirm(dataset: &str, ds: &DatasetRecordV1, draft: &DatasetDraft) -> 
     #[cfg(not(feature = "tetration-cli"))]
     {
         let mut out = String::new();
-        let _ = writeln!(out, "── confirm ──");
+        let _ = writeln!(out, "{}", WizardSection::Confirm.title());
         let _ = writeln!(out, "dataset    {dataset}");
         let _ = writeln!(out, "shape      {}", shape_label(&ds.shape));
         let _ = writeln!(out, "dim_names  [{}]", draft.dim_names.join(", "));
@@ -806,21 +897,22 @@ fn format_confirm(dataset: &str, ds: &DatasetRecordV1, draft: &DatasetDraft) -> 
 }
 
 fn append_included_policy(out: &mut String, draft: &DatasetDraft) {
-    if let Some(id) = draft
+    if let Some(profile) = draft
         .attrs
-        .get("semantics_profile")
-        .map(|s| normalize_profile_id(s))
+        .get(ATTR_SEMANTICS_PROFILE)
+        .and_then(|s| WizardProfile::from_id(s))
     {
-        out.push_str(&format_included_policy(id));
+        out.push_str(&format_included_policy(profile));
     }
 }
 
-fn format_included_policy(profile_id: &str) -> String {
+fn format_included_policy(profile: WizardProfile) -> String {
+    let id = profile.id();
     #[cfg(feature = "tetration-cli")]
     {
-        let mut out = section_open(&format!("── included policy ({profile_id}) ──"));
+        let mut out = section_open(&WizardSection::IncludedPolicy.titled(id));
         push_dim(&mut out, "TOML only · not stamped · not editable here");
-        let formulas = profile_policy_formulas(profile_id);
+        let formulas = profile_policy_formulas(id);
         if formulas.is_empty() {
             push_dim(
                 &mut out,
@@ -840,9 +932,10 @@ fn format_included_policy(profile_id: &str) -> String {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "── included policy ({profile_id}) ──  TOML only · not stamped · not editable here"
+            "{}  TOML only · not stamped · not editable here",
+            WizardSection::IncludedPolicy.titled(id)
         );
-        let formulas = profile_policy_formulas(profile_id);
+        let formulas = profile_policy_formulas(id);
         if formulas.is_empty() {
             let _ = writeln!(
                 out,
@@ -894,7 +987,7 @@ fn render_wizard_toml(dataset: &str, draft: &DatasetDraft) -> String {
     }
     out.push('\n');
 
-    if let Some(id) = draft.attrs.get("semantics_profile") {
+    if let Some(id) = draft.attrs.get(ATTR_SEMANTICS_PROFILE) {
         let canonical = normalize_profile_id(id);
         out.push_str(&dotted_table("profiles", canonical));
         out.push('\n');
