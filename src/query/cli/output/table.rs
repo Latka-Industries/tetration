@@ -1,65 +1,112 @@
-//! Human-readable ASCII tables for `tet query --format table`.
+//! Human-readable tables for `tet query --format table` / `table-verbose`.
+//!
+//! - **table** — query overview + separate result table (scalar = one row, no elements).
+//! - **table-verbose** — plan / execution / result sections (short fields only).
 
 use std::fmt::Write as _;
 
+use crate::query::cli::pretty;
 use crate::query::cli::text::truncate_field;
 use crate::query::types::{
-    DatasetResolution, Operation, QueryExecutionPreview, QueryResponse, ReadPlan,
+    CHUNK_TOUCH_POLICY, DatasetResolution, Operation, QueryExecutionPreview, QueryResponse,
+    ReadPlan,
 };
 
 use super::format_num::{fmt_f64, missing_field};
 use super::quiet;
 
 const PREVIEW_TABLE_MAX: usize = 16;
+const PATH_CELL_MAX: usize = 48;
 
-pub(super) fn format_table_text(response: &QueryResponse) -> Result<String, String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TableDetail {
+    /// Interactive default: one overview + result.
+    Compact,
+    /// Debug: plan + execution sections (short fields only).
+    Verbose,
+}
+
+pub(super) fn format_table_text(
+    response: &QueryResponse,
+    detail: TableDetail,
+) -> Result<String, String> {
     let mut out = String::new();
-    push_summary_table(&mut out, response);
 
     if let Some(catalog) = response.catalog.as_ref()
         && !catalog.matched
     {
+        push_overview(&mut out, response, detail);
         push_catalog_miss_table(&mut out, catalog);
         return Ok(out);
     }
 
-    if let Some(plan) = response.read_plan.as_ref() {
-        push_plan_table(&mut out, plan);
-    }
-
-    if let Some(ex) = response.execution.as_ref() {
-        push_execution_io_table(&mut out, ex);
-        let shape = response
-            .read_plan
-            .as_ref()
-            .map(|p| p.logical_selection_shape.as_slice());
-        if let Some(op) = response.operation.as_ref() {
-            push_operation_table(&mut out, op, ex, shape)?;
-        } else {
-            push_preview_table(&mut out, ex, shape);
+    match detail {
+        TableDetail::Compact => {
+            push_overview(&mut out, response, detail);
+            if let Some(ex) = response.execution.as_ref() {
+                let shape = response
+                    .read_plan
+                    .as_ref()
+                    .map(|p| p.logical_selection_shape.as_slice());
+                if let Some(op) = response.operation.as_ref() {
+                    // Scalar: result table is just the answer (no elements). Partial: value grid.
+                    push_operation_table(&mut out, op, ex, shape, /*include_elements*/ false)?;
+                } else {
+                    push_preview_table(&mut out, ex, shape);
+                }
+            }
+        }
+        TableDetail::Verbose => {
+            push_overview(&mut out, response, detail);
+            if let Some(plan) = response.read_plan.as_ref() {
+                push_plan_table(&mut out, plan);
+            }
+            if let Some(ex) = response.execution.as_ref() {
+                push_execution_io_table(&mut out, ex);
+                let shape = response
+                    .read_plan
+                    .as_ref()
+                    .map(|p| p.logical_selection_shape.as_slice());
+                if let Some(op) = response.operation.as_ref() {
+                    push_operation_table(&mut out, op, ex, shape, /*include_elements*/ true)?;
+                } else {
+                    push_preview_table(&mut out, ex, shape);
+                }
+            }
         }
     }
 
     Ok(out)
 }
 
-fn push_summary_table(out: &mut String, response: &QueryResponse) {
-    let mut rows = vec![
-        ("dataset".to_string(), response.dataset.clone()),
-        ("status".to_string(), response.status.to_string()),
-        ("accepted".to_string(), response.accepted.to_string()),
-    ];
-    if let Some(n) = response.selection_axes {
-        rows.push(("selection_axes".to_string(), n.to_string()));
-    }
+fn push_overview(out: &mut String, response: &QueryResponse, detail: TableDetail) {
+    let mut rows = Vec::new();
+    rows.push(("dataset".to_string(), response.dataset.clone()));
     if let Some(op) = response.operation.as_ref() {
-        rows.push(("operation".to_string(), operation_label(op)));
+        rows.push(("op".to_string(), operation_label(op)));
     }
-    if let Some(path) = response.tet_file.as_deref() {
-        rows.push(("tet_file".to_string(), path.to_string()));
+    if let Some(plan) = response.read_plan.as_ref() {
+        rows.push((
+            "shape".to_string(),
+            quiet::fmt_shape(&plan.logical_selection_shape),
+        ));
+        rows.push(("chunks".to_string(), plan.chunk_count.to_string()));
+        let skipped = plan.zone_filter_skipped_chunks + plan.index_filter_skipped_chunks;
+        if skipped > 0 {
+            rows.push(("chunks_skipped".to_string(), skipped.to_string()));
+        }
     }
-    if !response.message.is_empty() {
-        rows.push(("message".to_string(), truncate_field(&response.message, 72)));
+    if let Some(ex) = response.execution.as_ref() {
+        rows.push((
+            "bytes_read".to_string(),
+            ex.total_bytes_read_from_disk.to_string(),
+        ));
+    }
+    if detail == TableDetail::Verbose {
+        rows.push(("status".to_string(), response.status.to_string()));
+        if let Some(path) = response.tet_file.as_deref() {
+            rows.push(("tet_file".to_string(), truncate_field(path, PATH_CELL_MAX)));
+        }
     }
     write_kv_section(out, "query", &rows);
 }
@@ -87,44 +134,57 @@ fn push_catalog_miss_table(out: &mut String, catalog: &DatasetResolution) {
         out.push_str("datasets:\n  (none)\n\n");
         return;
     }
-    out.push_str("datasets:\n");
-    let _ = writeln!(out, "  {:>3}  name", "#");
-    for (i, name) in names.iter().enumerate() {
-        let _ = writeln!(out, "  {:>3}  {}", i, truncate_field(name, 40));
-    }
+    let rows: Vec<Vec<String>> = names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| vec![i.to_string(), truncate_field(name, 40)])
+        .collect();
+    let _ = writeln!(out, "{}", pretty::section_title("datasets:"));
+    out.push_str(&pretty::render_table(&["#", "name"], &rows));
     out.push('\n');
 }
 
 fn push_plan_table(out: &mut String, plan: &ReadPlan) {
     let shape = quiet::fmt_shape(&plan.logical_selection_shape);
-    write_kv_section(
-        out,
-        "read_plan",
-        &[
-            (
-                "chunk_touch_policy".to_string(),
-                plan.chunk_touch_policy.to_string(),
-            ),
-            ("chunk_count".to_string(), plan.chunk_count.to_string()),
-            (
-                "zone_filter_skipped_chunks".to_string(),
-                plan.zone_filter_skipped_chunks.to_string(),
-            ),
-            (
-                "index_filter_skipped_chunks".to_string(),
-                plan.index_filter_skipped_chunks.to_string(),
-            ),
-            (
-                "total_stored_bytes".to_string(),
-                plan.total_stored_bytes.to_string(),
-            ),
-            ("logical_shape".to_string(), shape),
-            (
-                "logical_elements".to_string(),
-                plan.logical_element_count.to_string(),
-            ),
-        ],
-    );
+    let mut rows = vec![
+        (
+            "touch_policy".to_string(),
+            short_touch_policy(plan.chunk_touch_policy).to_owned(),
+        ),
+        ("chunk_count".to_string(), plan.chunk_count.to_string()),
+        (
+            "stored_bytes".to_string(),
+            plan.total_stored_bytes.to_string(),
+        ),
+        ("logical_shape".to_string(), shape),
+        (
+            "logical_elements".to_string(),
+            plan.logical_element_count.to_string(),
+        ),
+    ];
+    if plan.zone_filter_skipped_chunks > 0 {
+        rows.push((
+            "zone_skipped".to_string(),
+            plan.zone_filter_skipped_chunks.to_string(),
+        ));
+    }
+    if plan.index_filter_skipped_chunks > 0 {
+        rows.push((
+            "index_skipped".to_string(),
+            plan.index_filter_skipped_chunks.to_string(),
+        ));
+    }
+    write_kv_section(out, "read_plan", &rows);
+}
+
+fn short_touch_policy(policy: &str) -> &'static str {
+    if policy == CHUNK_TOUCH_POLICY.dense_half_open_unit_step {
+        "dense"
+    } else if policy == CHUNK_TOUCH_POLICY.strided_half_open {
+        "strided"
+    } else {
+        "other"
+    }
 }
 
 fn push_execution_io_table(out: &mut String, ex: &QueryExecutionPreview) {
@@ -138,14 +198,17 @@ fn push_execution_io_table(out: &mut String, ex: &QueryExecutionPreview) {
     if let Some(n) = ex.group_count {
         rows.push(("group_count".to_string(), n.to_string()));
     }
-    if let Some(b) = ex.memory_budget_bytes {
-        rows.push(("memory_budget_bytes".to_string(), b.to_string()));
-    }
     if let Some(path) = ex.spill_f32_path.as_deref() {
-        rows.push(("spill_path".to_string(), path.to_string()));
-    }
-    if let Some(b) = ex.spill_f32_bytes {
-        rows.push(("spill_bytes".to_string(), b.to_string()));
+        rows.push((
+            "spill_path".to_string(),
+            truncate_field(path, PATH_CELL_MAX),
+        ));
+        if let Some(b) = ex.spill_f32_bytes {
+            rows.push(("spill_bytes".to_string(), b.to_string()));
+        }
+        if let Some(b) = ex.memory_budget_bytes {
+            rows.push(("memory_budget_bytes".to_string(), b.to_string()));
+        }
     }
     if let Some(regime) = ex.io_regime {
         rows.push(("io_regime".to_string(), regime.to_string()));
@@ -158,11 +221,12 @@ fn push_operation_table(
     op: &Operation,
     ex: &QueryExecutionPreview,
     shape: Option<&[u64]>,
+    include_elements: bool,
 ) -> Result<(), String> {
     if op.axes().is_empty() {
         let (name, value) = quiet::scalar_operation_display(op, ex)?;
         let mut rows = vec![(name.to_string(), value)];
-        if let Some(n) = ex.operation_element_count {
+        if include_elements && let Some(n) = ex.operation_element_count {
             rows.push(("elements".to_string(), n.to_string()));
         }
         write_kv_section(out, "result", &rows);
@@ -173,12 +237,14 @@ fn push_operation_table(
         } else {
             "result".to_string()
         };
-        out.push_str(&title);
-        out.push_str(":\n");
+        let _ = writeln!(out, "{}", pretty::section_title(&format!("{title}:")));
         write_indexed_f64_table(out, &values);
-        if let Some(n) = ex.operation_element_count {
-            let _ = writeln!(out, "  {:>12}  {}", "elements", n);
-            out.push('\n');
+        if include_elements && let Some(n) = ex.operation_element_count {
+            write_kv_section(
+                out,
+                "result meta",
+                &[("elements".to_string(), n.to_string())],
+            );
         }
     }
     push_preview_table(out, ex, shape);
@@ -234,10 +300,12 @@ fn partial_f64_values(op: &Operation, ex: &QueryExecutionPreview) -> Result<Vec<
 }
 
 fn write_indexed_f64_table(out: &mut String, values: &[f64]) {
-    let _ = writeln!(out, "  {:>6}  value", "#");
-    for (i, v) in values.iter().enumerate() {
-        let _ = writeln!(out, "  {:>6}  {}", i, fmt_f64(*v));
-    }
+    let rows: Vec<Vec<String>> = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| vec![i.to_string(), fmt_f64(*v)])
+        .collect();
+    out.push_str(&pretty::render_table(&["#", "value"], &rows));
     out.push('\n');
 }
 
@@ -251,8 +319,7 @@ fn push_preview_table(out: &mut String, ex: &QueryExecutionPreview, shape: Optio
     } else {
         format!("slice ({label}, shape={shape_label})")
     };
-    out.push_str(&title);
-    out.push_str(":\n");
+    let _ = writeln!(out, "{}", pretty::section_title(&format!("{title}:")));
     let show = values.len().min(PREVIEW_TABLE_MAX);
     let values = &values[..show];
     if let Some(shape) = shape.filter(|s| !s.is_empty()) {
@@ -261,7 +328,11 @@ fn push_preview_table(out: &mut String, ex: &QueryExecutionPreview, shape: Optio
         write_indexed_f64_table(out, values);
     }
     if truncated {
-        let _ = writeln!(out, "  … logical tensor continues beyond preview cap");
+        let _ = writeln!(
+            out,
+            "{}",
+            pretty::dim_line("… logical tensor continues beyond preview cap")
+        );
     }
     out.push('\n');
 }
@@ -285,35 +356,30 @@ fn write_slice_value_table(out: &mut String, shape: &[u64], values: &[f64], trun
 
 fn write_1d_slice_row(out: &mut String, len: usize, values: &[f64]) {
     let cols = len.min(values.len());
-    out.push_str("        ");
-    for c in 0..cols {
-        let _ = write!(out, "  {:>8}", format!("c{c}"));
-    }
-    out.push('\n');
-    out.push_str("     r0 ");
-    for v in values.iter().take(cols) {
-        let _ = write!(out, "  {:>8}", fmt_f64(*v));
-    }
-    out.push('\n');
+    let headers: Vec<String> = (0..cols).map(|c| format!("c{c}")).collect();
+    let row: Vec<String> = values.iter().take(cols).map(|v| fmt_f64(*v)).collect();
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    out.push_str(&pretty::render_table(&header_refs, &[row]));
 }
 
 fn write_2d_slice_grid(out: &mut String, rows: usize, cols: usize, values: &[f64]) {
-    out.push_str("        ");
-    for c in 0..cols {
-        let _ = write!(out, "  {:>8}", format!("c{c}"));
-    }
-    out.push('\n');
-    for r in 0..rows {
-        let _ = write!(out, "  {:>4} ", format!("r{r}"));
-        for c in 0..cols {
-            let i = r * cols + c;
-            let cell = values
-                .get(i)
-                .map_or_else(|| "—".to_string(), |v| fmt_f64(*v));
-            let _ = write!(out, "  {cell:>8}");
-        }
-        out.push('\n');
-    }
+    let mut headers = vec!["row".to_owned()];
+    headers.extend((0..cols).map(|c| format!("c{c}")));
+    let table_rows: Vec<Vec<String>> = (0..rows)
+        .map(|r| {
+            let mut row = vec![format!("r{r}")];
+            for c in 0..cols {
+                let i = r * cols + c;
+                let cell = values
+                    .get(i)
+                    .map_or_else(|| "—".to_string(), |v| fmt_f64(*v));
+                row.push(cell);
+            }
+            row
+        })
+        .collect();
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    out.push_str(&pretty::render_table(&header_refs, &table_rows));
 }
 
 fn preview_values(ex: &QueryExecutionPreview) -> Option<(&'static str, Vec<f64>, bool)> {
@@ -345,13 +411,10 @@ fn preview_values(ex: &QueryExecutionPreview) -> Option<(&'static str, Vec<f64>,
 }
 
 fn write_kv_section(out: &mut String, title: &str, rows: &[(String, String)]) {
-    if rows.is_empty() {
-        return;
-    }
-    let _ = writeln!(out, "{title}:");
-    let key_width = rows.iter().map(|(k, _)| k.len()).max().unwrap_or(4).max(4);
-    for (key, value) in rows {
-        let _ = writeln!(out, "  {key:key_width$}  {value}");
-    }
-    out.push('\n');
+    let titled = if title.ends_with(':') {
+        title.to_owned()
+    } else {
+        format!("{title}:")
+    };
+    out.push_str(&pretty::render_kv_section(&titled, rows));
 }

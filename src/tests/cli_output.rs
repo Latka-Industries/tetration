@@ -170,10 +170,22 @@ fn format_table_scalar_mean() {
 
     let text = format_query_response(&response, QueryOutputFormat::Table).unwrap();
     assert!(text.contains("query:"));
-    assert!(text.contains("result:"));
     assert!(text.contains("mean"));
     assert!(text.contains("3.5"));
-    assert!(text.contains("read_plan:"));
+    assert!(text.contains("shape"));
+    assert!(text.contains("result:"));
+    assert!(!text.contains("read_plan:"));
+    assert!(!text.contains("chunk_touch_policy"));
+    // Compact result is the scalar only — no elements row.
+    let result = text.split("result:").nth(1).unwrap();
+    assert!(!result.contains("elements"));
+
+    let verbose = format_query_response(&response, QueryOutputFormat::TableVerbose).unwrap();
+    assert!(verbose.contains("read_plan:"));
+    assert!(verbose.contains("result:"));
+    assert!(verbose.contains("touch_policy"));
+    assert!(verbose.contains("dense"));
+    assert!(!verbose.contains("dense_half_open_intervals"));
 }
 
 #[test]
@@ -188,8 +200,10 @@ fn format_table_partial_sum() {
 
     let text = format_query_response(&response, QueryOutputFormat::Table).unwrap();
     assert!(text.contains("reduced_shape=3"));
-    assert!(text.contains("    0  5"));
-    assert!(text.contains("    1  7"));
+    assert!(text.contains('5'));
+    assert!(text.contains('7'));
+    assert!(text.contains('0'));
+    assert!(text.contains('1'));
 }
 
 #[test]

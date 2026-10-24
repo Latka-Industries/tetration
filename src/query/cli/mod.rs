@@ -6,6 +6,7 @@
 pub mod history;
 pub mod info;
 pub mod output;
+pub(crate) mod pretty;
 mod text;
 
 pub use history::{

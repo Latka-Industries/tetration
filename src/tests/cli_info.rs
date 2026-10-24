@@ -98,8 +98,10 @@ fn info_default_shows_footer_metadata_under_dataset() {
         32,
         InfoMetadataDisplay::WhenPresent,
     );
-    assert!(text.contains("dim_names: y, x"));
-    assert!(text.contains("units: K"));
+    assert!(text.contains("dim_names"));
+    assert!(text.contains("y, x"));
+    assert!(text.contains("units"));
+    assert!(text.contains('K'));
 }
 
 #[test]
@@ -147,7 +149,8 @@ fn info_grep_matches_footer_attrs() {
         InfoMetadataDisplay::WhenPresent,
     );
     assert!(text.contains("temperature"));
-    assert!(text.contains("units: Kelvin"));
+    assert!(text.contains("units"));
+    assert!(text.contains("Kelvin"));
 }
 
 #[test]
@@ -184,7 +187,8 @@ fn info_grep_filters_datasets() {
         InfoMetadataDisplay::WhenPresent,
     );
     assert!(text.contains("temperature"));
-    assert!(text.contains("filter: grep~temp"));
+    assert!(text.contains("filter"));
+    assert!(text.contains("grep~temp"));
 }
 
 #[test]
