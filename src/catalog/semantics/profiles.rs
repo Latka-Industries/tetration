@@ -133,6 +133,30 @@ pub fn rate_attr_for_profile(profile: &str) -> Option<&'static str> {
     profile_contract(profile).and_then(|p| p.rate_attr)
 }
 
+/// Default fold-inert index↔seconds formulas for a rate attr name (`frame_rate` / `sample_rate`).
+#[must_use]
+pub fn default_rate_formulas(rate_attr: &str) -> std::collections::BTreeMap<String, String> {
+    let mut formulas = std::collections::BTreeMap::new();
+    formulas.insert(
+        "index_to_seconds".to_owned(),
+        format!("index / {rate_attr}"),
+    );
+    formulas.insert(
+        "seconds_to_index".to_owned(),
+        format!("floor(seconds * {rate_attr})"),
+    );
+    formulas
+}
+
+/// Same formulas as [`default_rate_formulas`], as ordered pairs (wizard / display).
+#[must_use]
+pub fn default_rate_formula_pairs(rate_attr: &str) -> [(&'static str, String); 2] {
+    [
+        ("index_to_seconds", format!("index / {rate_attr}")),
+        ("seconds_to_index", format!("floor(seconds * {rate_attr})")),
+    ]
+}
+
 /// Infer a documented profile id from footer attrs when `semantics_profile` is absent.
 #[must_use]
 pub fn infer_profile_id(

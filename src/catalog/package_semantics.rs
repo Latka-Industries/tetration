@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use super::history::read_footer_blob_from_path;
 use super::metadata::DatasetMetadataV1;
 use super::package::{GenerationManifest, TetPackage};
-use super::semantics::{declared_attrs, is_declared_key};
+use super::semantics::{ATTR_SEMANTICS_PROFILE, declared_attrs};
 use super::{CatalogError, read_tet_summary_v1};
 use crate::layout::mmap_file_read;
 
@@ -108,14 +108,15 @@ impl PackageSemanticsV1 {
 }
 
 fn decl_from_dataset_meta(ds: &DatasetMetadataV1) -> DatasetSemanticsDecl {
-    let attrs = declared_attrs(&ds.attrs);
-    let semantics_profile = attrs
-        .get("semantics_profile")
+    let declared = declared_attrs(&ds.attrs);
+    let semantics_profile = declared
+        .get(ATTR_SEMANTICS_PROFILE)
         .filter(|s| !s.is_empty())
         .cloned();
-    let attrs: BTreeMap<String, String> = attrs
+    // Promote profile to the dedicated field; keep attrs free of that key to avoid dual sources.
+    let attrs: BTreeMap<String, String> = declared
         .into_iter()
-        .filter(|(k, _)| is_declared_key(k))
+        .filter(|(k, _)| k.as_str() != ATTR_SEMANTICS_PROFILE)
         .collect();
     let dim_names = ds
         .dim_names
@@ -311,5 +312,24 @@ mod tests {
             doc.datasets["frames"].dim_names.as_deref(),
             Some(["t".to_owned(), "y".to_owned(), "x".to_owned()].as_slice())
         );
+    }
+
+    #[test]
+    fn from_packed_promotes_profile_out_of_attrs() {
+        use crate::catalog::metadata::DatasetMetadataV1;
+        use crate::catalog::semantics::ATTR_SEMANTICS_PROFILE;
+
+        let mut attrs = BTreeMap::new();
+        attrs.insert(ATTR_SEMANTICS_PROFILE.into(), "media.v1".into());
+        attrs.insert("frame_rate".into(), "30".into());
+        let ds = DatasetMetadataV1 {
+            attrs,
+            dim_names: None,
+            coords: None,
+        };
+        let decl = decl_from_dataset_meta(&ds);
+        assert_eq!(decl.semantics_profile.as_deref(), Some("media.v1"));
+        assert!(!decl.attrs.contains_key(ATTR_SEMANTICS_PROFILE));
+        assert_eq!(decl.attrs.get("frame_rate").map(String::as_str), Some("30"));
     }
 }

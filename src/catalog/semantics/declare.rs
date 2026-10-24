@@ -9,20 +9,23 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use super::path_io::read_summary_from_path;
 use super::profiles::{
-    MEDIA_V1, infer_profile_id, normalize_profile_id, rate_attr_for_profile,
+    MEDIA_V1, default_rate_formulas, infer_profile_id, normalize_profile_id, rate_attr_for_profile,
     recommended_keys_for_profile,
 };
-
-use crate::utils::dtype::ElementDtype;
 
 use crate::catalog::history::{
     FooterBlobV1, HistoryEvent, read_footer_blob_from_path, write_footer_blob,
 };
 use crate::catalog::metadata::DatasetMetadataV1;
-use crate::catalog::{
-    CatalogError, DatasetRecordV1, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1,
-};
+use crate::catalog::{CatalogError, DatasetRecordV1, TetFileSummaryV1, TetMetadataV1};
+use crate::utils::dtype::dtype_wire_label;
+
+/// Footer / declare key for the soft profile contract id.
+pub const ATTR_SEMANTICS_PROFILE: &str = "semantics_profile";
+/// Footer / declare key for the time axis index (stringified integer).
+pub const ATTR_TIME_AXIS: &str = "time_axis";
 
 /// Recommended declared attr keys (`docs/semantics.md`). Unknown keys remain allowed.
 pub const DECLARED_ATTR_KEYS: &[&str] = &[
@@ -31,13 +34,13 @@ pub const DECLARED_ATTR_KEYS: &[&str] = &[
     "frame_rate_unit",
     "sample_rate",
     "sample_rate_unit",
-    "time_axis",
+    ATTR_TIME_AXIS,
     "crs",
     "media_kind",
     "color_space",
     "pixel_unit",
     "start_time",
-    "semantics_profile",
+    ATTR_SEMANTICS_PROFILE,
     "uncertainty_kind",
     "uncertainty_sibling",
     "standard_name",
@@ -48,6 +51,7 @@ pub const SEMANTICS_GUIDE_URL: &str = "https://docs.tetration.sh/guides/semantic
 
 /// Output format for [`scaffold_policy`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "tetration-cli", derive(clap::ValueEnum))]
 pub enum ScaffoldFormat {
     /// `tet-semantics.toml` stub.
     Toml,
@@ -219,11 +223,6 @@ pub fn scaffold_policy_from_path(
     Ok(scaffold_policy(&summary, format))
 }
 
-fn read_summary_from_path(path: &Path) -> Result<TetFileSummaryV1, CatalogError> {
-    let data = std::fs::read(path)?;
-    read_tet_summary_v1(&data)
-}
-
 fn ensure_dataset_exists(summary: &TetFileSummaryV1, dataset: &str) -> Result<(), CatalogError> {
     if summary.datasets.iter().any(|d| d.name == dataset) {
         Ok(())
@@ -235,19 +234,7 @@ fn ensure_dataset_exists(summary: &TetFileSummaryV1, dataset: &str) -> Result<()
 }
 
 pub(crate) fn dtype_label(tag: u32) -> &'static str {
-    match ElementDtype::try_from_wire_tag(tag) {
-        Some(ElementDtype::F32) => "f32",
-        Some(ElementDtype::F64) => "f64",
-        Some(ElementDtype::I32) => "i32",
-        Some(ElementDtype::I64) => "i64",
-        Some(ElementDtype::U8) => "u8",
-        Some(ElementDtype::U16) => "u16",
-        Some(ElementDtype::I16) => "i16",
-        Some(ElementDtype::U32) => "u32",
-        Some(ElementDtype::F16) => "f16",
-        Some(ElementDtype::U64) => "u64",
-        None => "?",
-    }
+    dtype_wire_label(tag)
 }
 
 fn catalog_lines(datasets: &[DatasetRecordV1]) -> Vec<String> {
@@ -464,23 +451,18 @@ fn missing_recommended(row: &DeclareRow) -> Vec<&'static str> {
 }
 
 fn profile_for_row(row: &DeclareRow) -> Option<String> {
-    if let Some(id) = row.attrs.get("semantics_profile") {
+    if let Some(id) = row.attrs.get(ATTR_SEMANTICS_PROFILE) {
         return Some(normalize_profile_id(id).to_owned());
     }
-    infer_profile(&row.attrs)
+    infer_profile_id(&row.attrs).map(str::to_owned)
 }
 
 fn generated_profiles(rows: &[DeclareRow]) -> BTreeMap<String, BTreeMap<String, String>> {
     let mut profiles = BTreeMap::new();
     for id in collect_profile_ids(rows) {
-        let mut formulas = BTreeMap::new();
-        if let Some(rate) = rate_attr_for_profile(&id) {
-            formulas.insert("index_to_seconds".to_owned(), format!("index / {rate}"));
-            formulas.insert(
-                "seconds_to_index".to_owned(),
-                format!("floor(seconds * {rate})"),
-            );
-        }
+        let formulas = rate_attr_for_profile(&id)
+            .map(default_rate_formulas)
+            .unwrap_or_default();
         profiles.insert(id, formulas);
     }
     profiles
@@ -526,14 +508,7 @@ fn collect_profile_ids(rows: &[DeclareRow]) -> BTreeSet<String> {
             profiles.insert(id);
         }
     }
-    if profiles.is_empty() && rows.iter().any(|row| !row.attrs.is_empty()) {
-        profiles.insert(MEDIA_V1.id.to_owned());
-    }
     profiles
-}
-
-fn infer_profile(attrs: &BTreeMap<String, String>) -> Option<String> {
-    infer_profile_id(attrs).map(str::to_owned)
 }
 
 fn collect_unit_tokens(rows: &[DeclareRow]) -> BTreeSet<String> {
@@ -576,9 +551,9 @@ pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
     let mut attrs = BTreeMap::new();
     attrs.insert("frame_rate".into(), "30".into());
     attrs.insert("frame_rate_unit".into(), "Hz".into());
-    attrs.insert("time_axis".into(), "0".into());
+    attrs.insert(ATTR_TIME_AXIS.into(), "0".into());
     attrs.insert("media_kind".into(), "video".into());
-    attrs.insert("semantics_profile".into(), MEDIA_V1.id.into());
+    attrs.insert(ATTR_SEMANTICS_PROFILE.into(), MEDIA_V1.id.into());
     attrs.insert("pixel_unit".into(), "px".into());
 
     let mut event = HistoryEvent::new("semantics", "fixtures/small/tet/recording.tet");

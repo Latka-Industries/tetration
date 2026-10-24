@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::catalog::{
-    CHUNK_PAYLOAD_CODEC_V1, ChunkIndexEntryV1, CoordAxisV1, DATASET_DTYPE_TAG_V1,
+    CHUNK_PAYLOAD_CODEC_V1, ChunkIndexEntryV1, CoordAxisV1,
     DatasetMetadataV1, DatasetRecordV1, FileExecutionSettingsV1, HistoryEventV1, TetFileSummaryV1,
     TetMetadataV1,
 };
@@ -623,18 +623,7 @@ fn format_history_section(history: &[HistoryEventV1]) -> String {
 }
 
 fn dtype_label(tag: u32) -> &'static str {
-    let t = DATASET_DTYPE_TAG_V1;
-    if t.is_f32(tag) {
-        "f32"
-    } else if t.is_f64(tag) {
-        "f64"
-    } else if t.is_i32(tag) {
-        "i32"
-    } else if t.is_i64(tag) {
-        "i64"
-    } else {
-        "?"
-    }
+    crate::utils::dtype::dtype_wire_label(tag)
 }
 
 fn codec_label(codec: u32) -> &'static str {
@@ -649,14 +638,7 @@ fn codec_label(codec: u32) -> &'static str {
 }
 
 fn shape_label(shape: &[u64]) -> String {
-    if shape.is_empty() {
-        return "-".to_owned();
-    }
-    shape
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("×")
+    pretty::fmt_shape_dims(shape, "-")
 }
 
 fn chunk_coords_label(ch: &ChunkIndexEntryV1, ds: Option<&DatasetRecordV1>) -> String {

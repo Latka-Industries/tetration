@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use tetration::catalog::ScaffoldFormat;
 use tetration::query::cli::{HistorySettings, QueryOutputFormat};
 
 #[derive(Parser)]
@@ -324,8 +325,8 @@ pub enum SemanticsCmd {
         #[arg(short = 'o', long = "output", value_name = "FILE")]
         output: Option<PathBuf>,
         /// `toml` (default) or `json`.
-        #[arg(long, default_value = "toml", value_name = "toml|json")]
-        format: String,
+        #[arg(long, value_enum, default_value_t = ScaffoldFormat::Toml)]
+        format: ScaffoldFormat,
     },
     /// Declare or clear dataset attrs in the history footer (does not reinterpret values).
     Set {

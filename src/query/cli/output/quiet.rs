@@ -348,15 +348,7 @@ fn fmt_axes(axes: &[String]) -> String {
 }
 
 pub(super) fn fmt_shape(shape: &[u64]) -> String {
-    if shape.is_empty() {
-        "0".to_string()
-    } else {
-        shape
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("×")
-    }
+    crate::cli_pretty::fmt_shape_dims(shape, "0")
 }
 
 fn quiet_scalar_field<T>(

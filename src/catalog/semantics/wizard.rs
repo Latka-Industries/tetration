@@ -13,15 +13,16 @@ use std::path::{Path, PathBuf};
 use super::apply::{
     SemanticsApplyReport, apply_semantics_toml, format_apply_report, parse_semantics_toml,
 };
-use super::declare::{bare_or_quoted, dotted_table, dtype_label, toml_string};
-use super::profiles::{
-    CF_LITE_V1, MEDIA_V1, PROV_LOG_V1, ProfileContract, TIMESERIES_V1, normalize_profile_id,
-    rate_attr_for_profile, recommended_keys_for_profile,
+use super::declare::{
+    ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, bare_or_quoted, dotted_table, dtype_label, toml_string,
 };
-use crate::catalog::{CatalogError, DatasetRecordV1, TetFileSummaryV1, read_tet_summary_v1};
-
-const ATTR_SEMANTICS_PROFILE: &str = "semantics_profile";
-const ATTR_TIME_AXIS: &str = "time_axis";
+use super::path_io::{ensure_mutable_tet, read_summary_from_path};
+use super::profiles::{
+    CF_LITE_V1, MEDIA_V1, PROV_LOG_V1, ProfileContract, TIMESERIES_V1, default_rate_formula_pairs,
+    normalize_profile_id, rate_attr_for_profile,
+};
+use crate::catalog::{CatalogError, DatasetRecordV1, TetFileSummaryV1};
+use crate::cli_pretty::{dim_line, fmt_shape_dims, render_table, section_title};
 
 /// Documented profiles the wizard walks — keeps UI copy next to the id, not scattered string matches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,7 +119,12 @@ impl WizardProfile {
     }
 
     fn recommended_attr_keys(self) -> Vec<&'static str> {
-        recommended_attr_keys(self.id())
+        self.contract()
+            .recommended_keys
+            .iter()
+            .copied()
+            .filter(|k| *k != ATTR_SEMANTICS_PROFILE)
+            .collect()
     }
 }
 
@@ -403,7 +409,7 @@ pub fn run_semantics_wizard(
     opts: &WizardOptions,
     io: &mut dyn WizardIo,
 ) -> Result<WizardResult, CatalogError> {
-    ensure_mutable_tet(tet_path)?;
+    ensure_mutable_tet(tet_path, "semantics wizard")?;
     let summary = read_summary_from_path(tet_path)?;
     if summary.datasets.is_empty() {
         return Err(CatalogError::InvalidSemantics(
@@ -542,9 +548,8 @@ fn collect_draft(
     io: &mut dyn WizardIo,
 ) -> Result<DatasetDraft, CatalogError> {
     let dim_names = prompt_dim_names(ds, previous, io)?;
-    let mut attrs = prompt_profile_and_attrs(ds, &dim_names, previous, io)?;
-    let profile_for_extras = attrs.get(ATTR_SEMANTICS_PROFILE).cloned();
-    prompt_extras(profile_for_extras.as_deref(), &mut attrs, io)?;
+    let (mut attrs, profile) = prompt_profile_and_attrs(ds, &dim_names, previous, io)?;
+    prompt_extras(profile, &mut attrs, io)?;
     Ok(DatasetDraft { dim_names, attrs })
 }
 
@@ -590,7 +595,7 @@ fn prompt_profile_and_attrs(
     dim_names: &[String],
     previous: &DatasetDraft,
     io: &mut dyn WizardIo,
-) -> Result<BTreeMap<String, String>, CatalogError> {
+) -> Result<(BTreeMap<String, String>, Option<WizardProfile>), CatalogError> {
     let mut attrs = BTreeMap::new();
     io.println("")?;
     print_block(io, &format_profile_menu())?;
@@ -603,16 +608,14 @@ fn prompt_profile_and_attrs(
         .attrs
         .get(ATTR_SEMANTICS_PROFILE)
         .map(String::as_str);
-    if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_items, profile_last)? {
-        attrs.insert(
-            ATTR_SEMANTICS_PROFILE.to_owned(),
-            WizardProfile::ALL[i].id().to_owned(),
-        );
-    }
-
-    let profile = attrs
-        .get(ATTR_SEMANTICS_PROFILE)
-        .and_then(|s| WizardProfile::from_id(s));
+    let profile = if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_items, profile_last)?
+    {
+        let p = WizardProfile::ALL[i];
+        attrs.insert(ATTR_SEMANTICS_PROFILE.to_owned(), p.id().to_owned());
+        Some(p)
+    } else {
+        None
+    };
     let keys = profile
         .map(WizardProfile::recommended_attr_keys)
         .unwrap_or_default();
@@ -639,7 +642,7 @@ fn prompt_profile_and_attrs(
         }
         attrs.insert(k.clone(), v.clone());
     }
-    Ok(attrs)
+    Ok((attrs, profile))
 }
 
 fn keep_or_set_attr(
@@ -669,13 +672,13 @@ fn attr_prompt_label(profile: WizardProfile, key: &str, show_hint: bool) -> Stri
 }
 
 fn prompt_extras(
-    profile_id: Option<&str>,
+    profile: Option<WizardProfile>,
     attrs: &mut BTreeMap<String, String>,
     io: &mut dyn WizardIo,
 ) -> Result<(), CatalogError> {
     io.println("")?;
     io.println(WizardSection::Extras.title())?;
-    io.println(extras_help(profile_id.and_then(WizardProfile::from_id)))?;
+    io.println(extras_help(profile))?;
     io.println("Empty line finishes.")?;
     while let Some(raw) = io.prompt("  extra", None)? {
         if raw == "-" {
@@ -704,37 +707,21 @@ fn extras_help(profile: Option<WizardProfile>) -> &'static str {
 }
 
 fn format_axes_header(ds: &DatasetRecordV1) -> String {
-    #[cfg(feature = "tetration-cli")]
-    {
-        let mut out = section_open(WizardSection::Axes.title());
-        push_dim(&mut out, "Name each axis in rank order (all required).");
-        let rows: Vec<Vec<String>> = ds
-            .shape
-            .iter()
-            .enumerate()
-            .map(|(i, size)| vec![i.to_string(), size.to_string()])
-            .collect();
-        push_table(&mut out, &["axis", "size"], &rows);
-        out
-    }
-    #[cfg(not(feature = "tetration-cli"))]
-    {
-        let mut out = String::new();
-        let _ = writeln!(out, "{}", WizardSection::Axes.title());
-        let _ = writeln!(out, "Name each axis in rank order (all required).");
-        for (i, size) in ds.shape.iter().enumerate() {
-            let _ = writeln!(out, "  axis {i}  size {size}");
-        }
-        out
-    }
-}
-
-fn recommended_attr_keys(id: &str) -> Vec<&'static str> {
-    recommended_keys_for_profile(id)
+    let mut out = String::new();
+    let _ = writeln!(out, "{}", section_title(WizardSection::Axes.title()));
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line("Name each axis in rank order (all required).")
+    );
+    let rows: Vec<Vec<String>> = ds
+        .shape
         .iter()
-        .copied()
-        .filter(|k| *k != ATTR_SEMANTICS_PROFILE)
-        .collect()
+        .enumerate()
+        .map(|(i, size)| vec![i.to_string(), size.to_string()])
+        .collect();
+    out.push_str(&render_table(&["axis", "size"], &rows));
+    out
 }
 
 fn profile_includes_list(profile: WizardProfile) -> String {
@@ -742,80 +729,58 @@ fn profile_includes_list(profile: WizardProfile) -> String {
 }
 
 fn format_profile_menu() -> String {
-    #[cfg(feature = "tetration-cli")]
-    {
-        let mut out = section_open(WizardSection::Profile.title());
-        push_dim(
-            &mut out,
-            "Soft contract for callers — not a crate runtime mode.",
-        );
-        push_dim(
-            &mut out,
-            "Pick stamps semantics_profile; rate formulas go in the TOML only.",
-        );
-        let rows: Vec<Vec<String>> = WizardProfile::ALL
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                vec![
-                    (i + 1).to_string(),
-                    p.id().to_owned(),
-                    p.blurb().to_owned(),
-                    profile_includes_list(*p),
-                ]
-            })
-            .collect();
-        push_table(&mut out, &["#", "id", "about", "includes (attrs)"], &rows);
-        push_dim(&mut out, "↑↓ pick · Enter · Esc/(skip) = none");
-        out
-    }
-    #[cfg(not(feature = "tetration-cli"))]
-    {
-        let mut out = String::new();
-        let _ = writeln!(out, "{}", WizardSection::Profile.title());
-        let _ = writeln!(
-            out,
-            "Doc profile id — soft contract for callers (not a crate runtime mode)."
-        );
-        let _ = writeln!(
-            out,
-            "Picking one stamps semantics_profile; rate formulas stay in the TOML."
-        );
-        for (i, p) in WizardProfile::ALL.iter().enumerate() {
-            let _ = writeln!(out, "  {}. {}", i, p.id());
-            let _ = writeln!(out, "     {}", p.blurb());
-            let _ = writeln!(out, "     includes: {}", profile_includes_list(*p));
-        }
-        let _ = writeln!(out, "  (index · id · empty/skip = none)");
-        out
-    }
+    let mut out = String::new();
+    let _ = writeln!(out, "{}", section_title(WizardSection::Profile.title()));
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line("Soft contract for callers — not a crate runtime mode.")
+    );
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line("Pick stamps semantics_profile; rate formulas go in the TOML only.")
+    );
+    let rows: Vec<Vec<String>> = WizardProfile::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            vec![
+                (i + 1).to_string(),
+                p.id().to_owned(),
+                p.blurb().to_owned(),
+                profile_includes_list(*p),
+            ]
+        })
+        .collect();
+    out.push_str(&render_table(
+        &["#", "id", "about", "includes (attrs)"],
+        &rows,
+    ));
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line("↑↓ pick · Enter · Esc/(skip) = none")
+    );
+    out
 }
 
 fn format_recommended_header(profile: WizardProfile) -> String {
     let title = WizardSection::Recommended.titled(profile.id());
-    #[cfg(feature = "tetration-cli")]
-    {
-        let mut out = section_open(&title);
-        push_dim(&mut out, profile.attr_help());
-        push_dim(
-            &mut out,
-            &format!("walk keys: {}", profile_includes_list(profile)),
-        );
-        push_dim(
-            &mut out,
-            "Enter keeps last · - clears · hints are examples only",
-        );
-        out
-    }
-    #[cfg(not(feature = "tetration-cli"))]
-    {
-        let mut out = String::new();
-        let _ = writeln!(out, "{title}");
-        let _ = writeln!(out, "{}", profile.attr_help());
-        let _ = writeln!(out, "walk keys: {}", profile_includes_list(profile));
-        let _ = writeln!(out, "Enter keeps last · - clears · hints are examples only");
-        out
-    }
+    let mut out = String::new();
+    let _ = writeln!(out, "{}", section_title(&title));
+    let _ = writeln!(out, "{}", dim_line(profile.attr_help()));
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line(&format!("walk keys: {}", profile_includes_list(profile)))
+    );
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line("Enter keeps last · - clears · hints are examples only")
+    );
+    out
 }
 
 fn prompt_time_axis(
@@ -846,54 +811,32 @@ fn prompt_time_axis(
 }
 
 fn format_confirm(dataset: &str, ds: &DatasetRecordV1, draft: &DatasetDraft) -> String {
-    #[cfg(feature = "tetration-cli")]
-    {
-        use console::style;
-        let mut out = section_open(WizardSection::Confirm.title());
-        push_table(
-            &mut out,
-            &["field", "value"],
-            &[
-                vec!["dataset".into(), dataset.to_owned()],
-                vec!["dtype".into(), dtype_label(ds.dtype).to_owned()],
-                vec!["shape".into(), shape_label(&ds.shape)],
-                vec![
-                    "dim_names".into(),
-                    format!("[{}]", draft.dim_names.join(", ")),
-                ],
+    let mut out = String::new();
+    let _ = writeln!(out, "{}", section_title(WizardSection::Confirm.title()));
+    out.push_str(&render_table(
+        &["field", "value"],
+        &[
+            vec!["dataset".into(), dataset.to_owned()],
+            vec!["dtype".into(), dtype_label(ds.dtype).to_owned()],
+            vec!["shape".into(), shape_label(&ds.shape)],
+            vec![
+                "dim_names".into(),
+                format!("[{}]", draft.dim_names.join(", ")),
             ],
-        );
-        if draft.attrs.is_empty() {
-            let _ = writeln!(out, "{}", style("attrs  (none)").dim());
-        } else {
-            let rows: Vec<Vec<String>> = draft
-                .attrs
-                .iter()
-                .map(|(k, v)| vec![k.clone(), v.clone()])
-                .collect();
-            push_table(&mut out, &["attr", "value"], &rows);
-        }
-        append_included_policy(&mut out, draft);
-        out
+        ],
+    ));
+    if draft.attrs.is_empty() {
+        let _ = writeln!(out, "{}", dim_line("attrs  (none)"));
+    } else {
+        let rows: Vec<Vec<String>> = draft
+            .attrs
+            .iter()
+            .map(|(k, v)| vec![k.clone(), v.clone()])
+            .collect();
+        out.push_str(&render_table(&["attr", "value"], &rows));
     }
-    #[cfg(not(feature = "tetration-cli"))]
-    {
-        let mut out = String::new();
-        let _ = writeln!(out, "{}", WizardSection::Confirm.title());
-        let _ = writeln!(out, "dataset    {dataset}");
-        let _ = writeln!(out, "shape      {}", shape_label(&ds.shape));
-        let _ = writeln!(out, "dim_names  [{}]", draft.dim_names.join(", "));
-        if draft.attrs.is_empty() {
-            let _ = writeln!(out, "attrs      (none)");
-        } else {
-            let _ = writeln!(out, "attrs");
-            for (k, v) in &draft.attrs {
-                let _ = writeln!(out, "  {k} = {v}");
-            }
-        }
-        append_included_policy(&mut out, draft);
-        out
-    }
+    append_included_policy(&mut out, draft);
+    out
 }
 
 fn append_included_policy(out: &mut String, draft: &DatasetDraft) {
@@ -908,56 +851,39 @@ fn append_included_policy(out: &mut String, draft: &DatasetDraft) {
 
 fn format_included_policy(profile: WizardProfile) -> String {
     let id = profile.id();
-    #[cfg(feature = "tetration-cli")]
-    {
-        let mut out = section_open(&WizardSection::IncludedPolicy.titled(id));
-        push_dim(&mut out, "TOML only · not stamped · not editable here");
-        let formulas = profile_policy_formulas(id);
-        if formulas.is_empty() {
-            push_dim(
-                &mut out,
-                "(no rate formulas — profile table still recorded in the TOML)",
-            );
-        } else {
-            let rows: Vec<Vec<String>> = formulas
-                .into_iter()
-                .map(|(k, v)| vec![k.to_owned(), v])
-                .collect();
-            push_table(&mut out, &["formula", "expression"], &rows);
-        }
-        out
-    }
-    #[cfg(not(feature = "tetration-cli"))]
-    {
-        let mut out = String::new();
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "{}",
+        section_title(&WizardSection::IncludedPolicy.titled(id))
+    );
+    let _ = writeln!(
+        out,
+        "{}",
+        dim_line("TOML only · not stamped · not editable here")
+    );
+    let formulas = profile_policy_formulas(id);
+    if formulas.is_empty() {
         let _ = writeln!(
             out,
-            "{}  TOML only · not stamped · not editable here",
-            WizardSection::IncludedPolicy.titled(id)
+            "{}",
+            dim_line("(no rate formulas — profile table still recorded in the TOML)")
         );
-        let formulas = profile_policy_formulas(id);
-        if formulas.is_empty() {
-            let _ = writeln!(
-                out,
-                "  (no rate formulas for this profile — table still recorded in the TOML)"
-            );
-        } else {
-            for (k, v) in formulas {
-                let _ = writeln!(out, "  {k} = {v}");
-            }
-        }
-        out
+    } else {
+        let rows: Vec<Vec<String>> = formulas
+            .into_iter()
+            .map(|(k, v)| vec![k.to_owned(), v])
+            .collect();
+        out.push_str(&render_table(&["formula", "expression"], &rows));
     }
+    out
 }
 
 fn profile_policy_formulas(profile_id: &str) -> Vec<(&'static str, String)> {
     let Some(rate) = rate_attr_for_profile(profile_id) else {
         return Vec::new();
     };
-    vec![
-        ("index_to_seconds", format!("index / {rate}")),
-        ("seconds_to_index", format!("floor(seconds * {rate})")),
-    ]
+    default_rate_formula_pairs(rate).into_iter().collect()
 }
 
 fn render_wizard_toml(dataset: &str, draft: &DatasetDraft) -> String {
@@ -1005,11 +931,7 @@ fn render_wizard_toml(dataset: &str, draft: &DatasetDraft) -> String {
 }
 
 fn shape_label(shape: &[u64]) -> String {
-    shape
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("×")
+    fmt_shape_dims(shape, "")
 }
 
 fn find_select_index(items: &[String], needle: &str) -> Option<usize> {
@@ -1029,65 +951,6 @@ fn parse_select_index(raw: &str, len: usize) -> Result<Option<usize>, CatalogErr
             "select index {i} out of range"
         )))
     }
-}
-
-fn ensure_mutable_tet(path: &Path) -> Result<(), CatalogError> {
-    if path.is_dir() || path.join("PROTOCOL").is_file() || ancestor_is_package(path) {
-        return Err(CatalogError::InvalidSemantics(
-            "semantics wizard targets a mutable .tet file; a sealed .tet.d generation is immutable"
-                .to_owned(),
-        ));
-    }
-    Ok(())
-}
-
-fn ancestor_is_package(path: &Path) -> bool {
-    let mut cur = path.parent();
-    while let Some(dir) = cur {
-        if dir.join("PROTOCOL").is_file() {
-            return true;
-        }
-        cur = dir.parent();
-    }
-    false
-}
-
-fn read_summary_from_path(path: &Path) -> Result<TetFileSummaryV1, CatalogError> {
-    let data = fs::read(path)?;
-    read_tet_summary_v1(&data)
-}
-
-#[cfg(feature = "tetration-cli")]
-fn section_open(title: &str) -> String {
-    use console::style;
-    let mut out = String::new();
-    let _ = writeln!(out, "{}", style(title).bold());
-    out
-}
-
-#[cfg(feature = "tetration-cli")]
-fn push_dim(out: &mut String, msg: &str) {
-    use console::style;
-    let _ = writeln!(out, "{}", style(msg).dim());
-}
-
-#[cfg(feature = "tetration-cli")]
-fn push_table(out: &mut String, headers: &[&str], rows: &[Vec<String>]) {
-    use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_FULL};
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(
-            headers
-                .iter()
-                .map(|h| Cell::new(h).add_attribute(Attribute::Bold))
-                .collect::<Vec<_>>(),
-        );
-    for row in rows {
-        table.add_row(row.iter().map(Cell::new).collect::<Vec<_>>());
-    }
-    let _ = writeln!(out, "{table}");
 }
 
 #[cfg(not(feature = "tetration-cli"))]

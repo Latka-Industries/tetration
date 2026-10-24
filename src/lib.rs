@@ -31,6 +31,7 @@
 //! **Embedder walkthrough:** `cargo run --example session_write` (or `create_and_query`,
 //! `inspect_catalog`; file health: `tet verify` / [`verify`](verify)).
 
+pub(crate) mod cli_pretty;
 pub(crate) mod utils;
 
 pub mod catalog;

@@ -28,7 +28,7 @@ pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
             path,
             output,
             format,
-        } => run_scaffold(&path, output.as_deref(), &format),
+        } => run_scaffold(&path, output.as_deref(), format),
         SemanticsCmd::Set {
             path,
             dataset,
@@ -131,9 +131,8 @@ fn same_path(a: &Path, b: &Path) -> bool {
     matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
 }
 
-fn run_scaffold(path: &Path, output: Option<&Path>, format: &str) -> Result<(), String> {
-    let fmt = ScaffoldFormat::parse(format).map_err(cli_error)?;
-    let text = scaffold_policy_from_path(path, fmt).map_err(cli_error)?;
+fn run_scaffold(path: &Path, output: Option<&Path>, format: ScaffoldFormat) -> Result<(), String> {
+    let text = scaffold_policy_from_path(path, format).map_err(cli_error)?;
     if let Some(out) = output {
         if let Some(parent) = out.parent()
             && !parent.as_os_str().is_empty()
