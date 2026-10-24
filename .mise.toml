@@ -166,6 +166,21 @@ run = "cargo build --release && uv run --directory fixtures bench-large h5 --tie
 description = "Alias for bench:windows (THI-608)"
 depends = ["bench:windows"]
 
+[tasks."bench:align-group"]
+description = "Align + index/label group_by vs NumPy on large h5 (dual-dataset fixture); CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier large --ops align_group --tet-device cpu"
+
+[tasks."bench:align-group:small"]
+description = "Align + group_by on ~256 MiB h5 smoke; CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier small --ops align_group --tet-device cpu"
+
+[tasks."bench:align-group:extra"]
+description = "Align + group_by on 20 GiB h5; CPU"
+depends = ["fixtures:sync"]
+run = "cargo build --release && uv run --directory fixtures bench-large h5 --tier extra --ops align_group --tet-device cpu"
+
 [tasks."bench:index"]
 description = "THI-613: tet range sum vs HDF5+NumPy — small (≈16 MiB select) + large (≈0.4 GiB)"
 depends = ["fixtures:sync"]

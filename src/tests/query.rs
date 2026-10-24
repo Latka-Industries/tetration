@@ -859,6 +859,63 @@ fn group_by_tier_c_materializes() {
 }
 
 #[test]
+fn group_by_chunk_aligned_row_sum_matches_manual() {
+    // shape (4, 8) / chunks (1, 8): each chunk is one group under group_by axis 0.
+    use crate::catalog::{TetDatasetWrite, TetWriterSession};
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("group_by_aligned.tet");
+    let shape = [4_u64, 8];
+    let chunk = [1_u64, 8];
+    let mut vals = Vec::with_capacity(32);
+    for row in 0..4u8 {
+        for col in 0..8u8 {
+            vals.push(f32::from(row * 10 + col));
+        }
+    }
+    let mut data = vec![0u8; vals.len() * 4];
+    for (slot, &v) in data.chunks_exact_mut(4).zip(vals.iter()) {
+        slot.copy_from_slice(&v.to_le_bytes());
+    }
+    let mut session = TetWriterSession::create(&path);
+    session
+        .push_dataset(TetDatasetWrite::f32_row_major("a", &shape, &chunk, data).unwrap())
+        .unwrap();
+    session.commit().unwrap();
+
+    let doc = parse_query_json(r#"{"dataset":"a","group_by":["0"],"sum":[]}"#).unwrap();
+    validate_query(&doc).unwrap();
+    let mmap = mmap_file_read(&path).unwrap();
+    let plan = plan_query_with_tet_mmap(&doc, None, &mmap, Some(0)).unwrap();
+    let ex = plan.execution.as_ref().unwrap();
+    assert_eq!(ex.memory_strategy, Some("streaming_fold"));
+    assert_eq!(ex.group_count, Some(4));
+    let sums = ex.operation_reduced_sum.as_ref().unwrap();
+    assert_eq!(sums.len(), 4);
+    // Row r = [10r .. 10r+7] → sum = 8*(10r) + (0+…+7) = 80r + 28.
+    for (r, &got) in sums.iter().enumerate() {
+        let expect = 80.0 * r as f64 + 28.0;
+        assert!(
+            (got - expect).abs() < 1e-4,
+            "row {r}: got {got}, expect {expect}"
+        );
+    }
+
+    // Parallel path must match (chunk-aligned fast path in both).
+    let doc_par = parse_query_json(
+        r#"{"dataset":"a","group_by":["0"],"sum":[],"execution":{"fold_parallel":true}}"#,
+    )
+    .unwrap();
+    let plan_par = plan_query_with_tet_mmap(&doc_par, None, &mmap, Some(0)).unwrap();
+    let ex_par = plan_par.execution.as_ref().unwrap();
+    assert_eq!(ex_par.fold_parallel, Some(true));
+    assert_eq!(
+        ex_par.operation_reduced_sum.as_ref(),
+        ex.operation_reduced_sum.as_ref()
+    );
+}
+
+#[test]
 fn group_by_labels_collapses_repeated_coords() {
     use crate::catalog::{
         CoordAxisV1, DatasetMetadataV1, FooterBlobV1, TetMetadataV1, write_footer_blob,

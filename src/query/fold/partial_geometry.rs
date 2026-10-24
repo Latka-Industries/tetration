@@ -2,9 +2,11 @@
 
 use std::collections::BTreeSet;
 
+use crate::catalog::{MAX_NDIM, tile::tile_extent};
+use crate::query::decode::dense_visit::{logical_index_unit_step, selection_is_unit_step};
 use crate::query::decode::indexing::{coords_from_linear_row_major, linear_rm_index};
 use crate::query::plan::read_plan::shape_product_usize;
-use crate::query::types::{ReadPlan, TetError};
+use crate::query::types::{PlannedChunkIo, ReadPlan, TetError};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PartialAxisLayout {
@@ -155,6 +157,51 @@ pub(crate) fn reduced_cell_index(
     let oi = layout.reduced_index(&coords)?;
     let fi = fiber_linear_index(&coords, &layout.axis_indices, shape)? as u64;
     Ok((oi, fi))
+}
+
+/// When every selected element in `c` maps to the same reduced output cell, return that index.
+///
+/// True for the common `group_by` layout where kept axes have tile extent 1 (e.g. shape
+/// `(T, W)` with chunks `(1, W)` and `group_by: ["0"]`). Callers can then run a scalar
+/// chunk fold into that single cell instead of per-element `reduced_index`.
+///
+/// Returns `Ok(None)` when the chunk is not aligned (fall back to the general partial path).
+pub(crate) fn chunk_single_reduced_index(
+    plan: &ReadPlan,
+    layout: &PartialAxisLayout,
+    c: &PlannedChunkIo,
+) -> Result<Option<usize>, TetError> {
+    if !selection_is_unit_step(plan) {
+        return Ok(None);
+    }
+    let ndim = plan.dataset_shape.len();
+    if c.chunk_index.len() < ndim || plan.chunk_shape.len() < ndim {
+        return Ok(None);
+    }
+    let tile = tile_extent(
+        &plan.dataset_shape,
+        &plan.chunk_shape,
+        &c.chunk_index[..ndim],
+        ndim,
+    );
+    for (d, &tile_d) in tile.iter().enumerate().take(ndim) {
+        let g0 = c.chunk_index[d].saturating_mul(plan.chunk_shape[d]);
+        let g1 = g0.saturating_add(tile_d);
+        if g0 < plan.selection_box_start[d] || g1 > plan.selection_box_stop_exclusive[d] {
+            return Ok(None);
+        }
+        // Kept axes must be a singleton in this tile so all cells share one output index.
+        if !layout.axis_set.contains(&d) && tile_d != 1 {
+            return Ok(None);
+        }
+    }
+    let mut g0 = [0u64; MAX_NDIM];
+    for (d, slot) in g0.iter_mut().enumerate().take(ndim) {
+        *slot = c.chunk_index[d] * plan.chunk_shape[d];
+    }
+    let li = logical_index_unit_step(plan, &g0[..ndim], ndim)?;
+    let coords = coords_from_linear_row_major(li, &plan.logical_selection_shape)?;
+    Ok(Some(layout.reduced_index(&coords)?))
 }
 
 /// Reduced output cell index for partial-axis transforms, or `0` when `layout` is `None` (global stats).

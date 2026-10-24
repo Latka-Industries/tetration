@@ -104,13 +104,15 @@ def _build_markdown_lines(
         *report_metadata_lines(convert_jobs_requested=jobs),
         f"- **Ops:** {', '.join(ops)}",
         "- **Default ops:** "
-        f"{', '.join(DEFAULT_OPS)} (scalar + QC); add `transforms` or `all` via `--ops`",
+        f"{', '.join(DEFAULT_OPS)} (scalar + QC); add `transforms`, `align_group`, or `all` via `--ops`",
         "- **Scalar / QC:** tier-A/B streaming fold; population var/std ddof=0",
         "- **Transforms:** two-pass `transform` + `write: switch` (RAM or spill); "
         "values compare pass-1 stats unless noted",
+        "- **Align / group_by:** dual-dataset 2-D h5 fixture (`align_check`, `group_by_sum`, "
+        "`group_by_labels_sum`); other formats skip; group_by reports ST + parallel",
         f"- **Source:** Python {slab_mib} MiB slabs, warm 2nd pass (skipped when not comparable)",
         f"- **`.tet`:** `tet query --execute --device {tet_device or DEFAULT_TET_DEVICE}` "
-        "(stats JSON), warm 2nd pass",
+        "(stats JSON); align/group_by uses two page-cache warms then ST + parallel timed runs",
         f"- **Ops skipped:** {skip_ops}",
         "",
         "## Notes",
@@ -119,6 +121,8 @@ def _build_markdown_lines(
         "- Rows with `n/a` source skipped ops that do not line up for that format.",
         "- `⚠` = source vs `.tet` value mismatch beyond tolerance.",
         "- Workload verified against committed `benchmark/spec.json` after each generate.",
+        "- **align/group_by** use a separate dual-dataset fixture (not the 1-D `data` matrix).",
+        "- **group_by** chunk-aligned path: per-chunk scalar fold when kept axes have tile extent 1.",
         "",
         "## convert",
         "",
@@ -145,21 +149,59 @@ def _build_markdown_lines(
     )
     lines.append("")
 
-    op_headers = [
-        "format",
-        "tier",
-        "GiB",
-        "source (s)",
-        ".tet (s)",
-        "source",
-        ".tet",
-        "device",
-        "note",
-    ]
-    op_aligns = ["left", "left", "right", "right", "right", "right", "right", "left", "left"]
-
     for op in ops:
         lines.extend([f"## {op}", ""])
+        has_st_par = any(
+            (row.ops.get(op) is not None and row.ops[op].tet_s_st is not None) for row in rows
+        )
+        if has_st_par:
+            op_headers = [
+                "format",
+                "tier",
+                "GiB",
+                "source (s)",
+                ".tet ST (s)",
+                ".tet par (s)",
+                "source",
+                ".tet",
+                "device",
+                "note",
+            ]
+            op_aligns = [
+                "left",
+                "left",
+                "right",
+                "right",
+                "right",
+                "right",
+                "right",
+                "right",
+                "left",
+                "left",
+            ]
+        else:
+            op_headers = [
+                "format",
+                "tier",
+                "GiB",
+                "source (s)",
+                ".tet (s)",
+                "source",
+                ".tet",
+                "device",
+                "note",
+            ]
+            op_aligns = [
+                "left",
+                "left",
+                "right",
+                "right",
+                "right",
+                "right",
+                "right",
+                "left",
+                "left",
+            ]
         op_rows: list[list[str]] = []
         for row in rows:
             r = row.ops.get(op)
@@ -174,19 +216,35 @@ def _build_markdown_lines(
                 src_v = _val(r.source_value)
             flag = " ⚠" if r.mismatch else ""
             tet_v = _val(r.tet_value) + flag
-            op_rows.append(
-                [
-                    row.case.format,
-                    row.case.tier,
-                    row.case.logical_gib,
-                    src_s,
-                    _cell(r.tet_s),
-                    src_v,
-                    tet_v,
-                    r.tet_device or "-",
-                    note,
-                ]
-            )
+            if has_st_par:
+                op_rows.append(
+                    [
+                        row.case.format,
+                        row.case.tier,
+                        row.case.logical_gib,
+                        src_s,
+                        _cell(r.tet_s_st),
+                        _cell(r.tet_s_par if r.tet_s_par is not None else r.tet_s),
+                        src_v,
+                        tet_v,
+                        r.tet_device or "-",
+                        note,
+                    ]
+                )
+            else:
+                op_rows.append(
+                    [
+                        row.case.format,
+                        row.case.tier,
+                        row.case.logical_gib,
+                        src_s,
+                        _cell(r.tet_s),
+                        src_v,
+                        tet_v,
+                        r.tet_device or "-",
+                        note,
+                    ]
+                )
         lines.extend(format_md_table(op_headers, op_rows, aligns=op_aligns))
         lines.append("")
     return lines
@@ -227,9 +285,14 @@ def _build_json_payload(
                     "gib": row.case.logical_gib,
                     "source_s": r.source_s,
                     "tet_s": r.tet_s,
+                    "tet_s_st": r.tet_s_st,
+                    "tet_s_par": r.tet_s_par,
                     "source_value": r.source_value,
                     "tet_value": r.tet_value,
                     "tet_device": r.tet_device,
+                    "fold_parallel": r.fold_parallel,
+                    "io_regime": r.io_regime,
+                    "fold_workers": r.fold_workers,
                     "mismatch": r.mismatch,
                     "note": r.note,
                 }

@@ -63,6 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "examples:\n"
             "  bench-large h5 --tier small --ops windows --tet-device cpu\n"
             "  bench-large h5 --tier large --ops windows --tet-device cpu\n"
+            "  bench-large h5 --tier large --ops align_group --tet-device cpu\n"
             "  bench-large --tier large --ops mean,sum\n"
             "  bench-large --tier all --ops all\n"
             "  bench-large h5 netcdf --tier extra --ops default\n"

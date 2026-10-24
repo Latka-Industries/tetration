@@ -125,6 +125,13 @@ fn push_execution_io_stats(map: &mut Map<String, Value>, ex: &QueryExecutionPrev
     );
     opt_str(map, "memory_strategy", ex.memory_strategy);
     opt_usize(map, "group_count", ex.group_count);
+    opt_usize(map, "window_count", ex.window_count);
+    if let Some(alignment) = &ex.alignment {
+        map.insert(
+            "alignment".into(),
+            serde_json::to_value(alignment).unwrap_or(Value::Null),
+        );
+    }
     opt_str(map, "spill_f32_path", ex.spill_f32_path.as_deref());
     opt_u64(map, "spill_f32_bytes", ex.spill_f32_bytes);
     opt_u64(map, "memory_budget_bytes", ex.memory_budget_bytes);

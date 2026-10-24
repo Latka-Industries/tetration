@@ -15,7 +15,7 @@ RESULTS_FILE = RESULTS_DIR / "latest.md"
 FormatName = Literal["h5", "netcdf", "zarr"]
 TierName = Literal["small", "large", "extra"]
 OpName = str
-ValueMode = Literal["scalar", "reduced_sum_total", "window_count"]
+ValueMode = Literal["scalar", "reduced_sum_total", "window_count", "aligned", "group_count"]
 
 DEFAULT_FORMATS: tuple[FormatName, ...] = ("h5", "netcdf", "zarr")
 
@@ -90,6 +90,43 @@ def _window(mode: str, *, size: int = WINDOW_BENCH_SIZE, step: int | None = None
         query_fields={"window": window, "sum": []},
         value_mode="reduced_sum_total",
         note=note,
+    )
+
+
+def _group_by(*, by_labels: bool) -> OpMeta:
+    """Register a 2-D group_by sum along axis 0 (index or label collapse)."""
+    if by_labels:
+        group_by: dict[str, Any] | list[str] = {"by": "labels", "axes": ["0"]}
+        note = (
+            "0.6.2 label group_by on axis 0 (repeated time coords); "
+            "source = NumPy sum collapsing identical labels; h5 dual-dataset fixture"
+        )
+    else:
+        group_by = ["0"]
+        note = (
+            "0.4.2 index group_by on axis 0 (one group per time index); "
+            "source = NumPy sum along width; h5 dual-dataset fixture"
+        )
+    return OpMeta(
+        result_key="operation_reduced_sum",
+        tolerance=1e-2,
+        bench_source=True,
+        query_fields={"group_by": group_by, "sum": []},
+        value_mode="reduced_sum_total",
+        note=note,
+    )
+
+
+def _align_check() -> OpMeta:
+    """Register a multi-dataset align check (`data` vs `ref`)."""
+    return OpMeta(
+        result_key="alignment",
+        tolerance=0.0,
+        bench_source=True,
+        is_bool=True,
+        query_fields={"align": {"with": "ref", "axes": ["0", "1"]}},
+        value_mode="aligned",
+        note="0.6.1 align check (metadata only); source = h5 shape/coord agreement; h5 dual-dataset fixture",
     )
 
 
@@ -177,10 +214,13 @@ OP_REGISTRY: dict[OpName, OpMeta] = {
         1e-5,
         note="two-pass+write; value = pass-1 max (stabilization)",
     ),
-    # 0.6.x query surfaces (THI-608). Large fixtures are 1-D `data` without coords /
-    # second datasets, so align + label group_by stay registered but need richer fixtures.
+    # 0.6.x query surfaces (THI-608). Windows reuse 1-D `data`; align + group_by use the
+    # dual-dataset 2-D fixture under fixtures/*/align_group* (h5 only).
     "window_bins_sum": _window("bins"),
     "window_rolling_sum": _window("rolling", step=WINDOW_BENCH_SIZE),
+    "align_check": _align_check(),
+    "group_by_sum": _group_by(by_labels=False),
+    "group_by_labels_sum": _group_by(by_labels=True),
 }
 
 SCALAR_OPS: tuple[OpName, ...] = (
@@ -203,9 +243,15 @@ WINDOW_OPS: tuple[OpName, ...] = ("window_bins_sum", "window_rolling_sum")
 # Alias kept for THI-608 / docs that say query06.
 QUERY06_OPS: tuple[OpName, ...] = WINDOW_OPS
 
+ALIGN_GROUP_OPS: tuple[OpName, ...] = (
+    "align_check",
+    "group_by_sum",
+    "group_by_labels_sum",
+)
+
 DEFAULT_OPS: tuple[OpName, ...] = SCALAR_OPS + QC_OPS
 
-ALL_OPS: tuple[OpName, ...] = DEFAULT_OPS + TRANSFORM_OPS + WINDOW_OPS
+ALL_OPS: tuple[OpName, ...] = DEFAULT_OPS + TRANSFORM_OPS + WINDOW_OPS + ALIGN_GROUP_OPS
 
 OP_GROUPS: dict[str, tuple[OpName, ...]] = {
     "default": DEFAULT_OPS,
@@ -214,6 +260,7 @@ OP_GROUPS: dict[str, tuple[OpName, ...]] = {
     "transforms": TRANSFORM_OPS,
     "windows": WINDOW_OPS,
     "query06": QUERY06_OPS,
+    "align_group": ALIGN_GROUP_OPS,
     "all": ALL_OPS,
 }
 
@@ -245,11 +292,21 @@ def op_meta(op: OpName) -> OpMeta:
         raise ValueError(f"unknown op {op!r}; choose from {known}") from exc
 
 
+def is_align_group_op(op: OpName) -> bool:
+    """True when `op` needs the dual-dataset 2-D align/group_by fixture (not 1-D `data`)."""
+    return op in ALIGN_GROUP_OPS
+
+
 def op_compat(format: FormatName, op: OpName) -> OpCompat:
     meta = op_meta(op)
     notes: list[str] = []
     if meta.note:
         notes.append(meta.note)
+    if is_align_group_op(op) and format != "h5":
+        return OpCompat(
+            bench_source=False,
+            note="align/group_by bench fixtures are h5-only (dual-dataset 2-D)",
+        )
     if format == "zarr":
         notes.append(
             "zarr: Python dir-store raw f32 chunks (still slower than h5/netcdf C libs)"

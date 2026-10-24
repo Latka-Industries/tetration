@@ -6,7 +6,9 @@ use super::merge::{
     PartialChunkArg, PartialChunkValue, merge_partial_arg_cells, merge_partial_value_cells,
     reduced_cell_index,
 };
-use super::preview::{write_disjoint_preview_f32, write_disjoint_preview_f64};
+use super::preview::{
+    disjoint_preview_mut, write_disjoint_preview_f32, write_disjoint_preview_f64,
+};
 use super::workers::with_fold_workers;
 use crate::query::decode;
 use crate::query::fold::{partial, partial_geometry, reduction, shared};
@@ -157,6 +159,46 @@ fn parallel_partial_value(
             .map(|c| {
                 let mut cells = vec![reduction::ValueAccum::default(); out_len];
                 let mut saw_any = false;
+                if let Some(oi) =
+                    partial_geometry::chunk_single_reduced_index(ctx.plan, ctx.layout, c)?
+                {
+                    // Chunk-aligned group_by: scalar slab fold into one output cell.
+                    let mut dummy_arg = reduction::ArgIndexAccum::default();
+                    let bytes = match ctx.visit {
+                        PartialFoldVisit::F32 => {
+                            let preview: &mut [f32] =
+                                disjoint_preview_mut(ctx.preview_addr, ctx.preview_len);
+                            decode::chunk_decode::fold_planned_chunk_f32(
+                                ctx.mmap,
+                                ctx.plan,
+                                c,
+                                ctx.kind,
+                                &mut cells[oi],
+                                &mut dummy_arg,
+                                preview,
+                            )?
+                        }
+                        PartialFoldVisit::F64 => {
+                            let preview: &mut [f64] =
+                                disjoint_preview_mut(ctx.preview_addr, ctx.preview_len);
+                            decode::chunk_decode::fold_planned_chunk_f64(
+                                ctx.mmap,
+                                ctx.plan,
+                                c,
+                                ctx.kind,
+                                &mut cells[oi],
+                                &mut dummy_arg,
+                                preview,
+                            )?
+                        }
+                    };
+                    saw_any = true;
+                    return Ok(PartialChunkValue {
+                        bytes,
+                        cells,
+                        saw_any,
+                    });
+                }
                 let bytes = ctx.visit.visit_chunk(ctx.mmap, ctx.plan, c, |li, v| {
                     saw_any = true;
                     ctx.visit
