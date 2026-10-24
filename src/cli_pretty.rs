@@ -78,7 +78,12 @@ pub(crate) fn render_kv_section(title: &str, rows: &[(String, String)]) -> Strin
     out
 }
 
-/// Join shape dims with `×`; `empty` when `shape` is empty.
+/// Join shape dims with `×`; use `empty` when `shape` is empty.
+///
+/// Callers pick the empty token intentionally (do not unify):
+/// - wizard banners: `""`
+/// - `tet info` tables: `"-"`
+/// - query quiet / stats: `"0"`
 pub(crate) fn fmt_shape_dims(shape: &[u64], empty: &str) -> String {
     if shape.is_empty() {
         return empty.to_owned();

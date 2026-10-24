@@ -20,7 +20,7 @@ pub use apply::{
     format_apply_report, parse_semantics_toml,
 };
 pub use declare::{
-    ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, DECLARED_ATTR_KEYS, SEMANTICS_GUIDE_URL,
+    ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, DECLARED_ATTR_KEYS, DeclareFacts, SEMANTICS_GUIDE_URL,
     ScaffoldFormat, ScaffoldPolicy, declared_attrs, declared_attrs_for_dataset, get_dataset_attr,
     is_declared_key, metadata_has_declared_attrs, scaffold_annotated_toml, scaffold_policy,
     scaffold_policy_from_path, set_dataset_attrs, write_recording_fixture,
@@ -37,6 +37,8 @@ pub use profiles::{
     infer_profile_id, is_documented_profile, normalize_profile_id, profile_contract,
     rate_attr_for_profile, recommended_keys_for_profile,
 };
+#[cfg(test)]
+pub(crate) use wizard::ScriptedWizardIo;
 pub use wizard::{
-    ScriptedWizardIo, StdWizardIo, WizardIo, WizardOptions, WizardResult, run_semantics_wizard,
+    StdWizardIo, WizardChoice, WizardIo, WizardOptions, WizardResult, run_semantics_wizard,
 };

@@ -14,7 +14,8 @@ use super::apply::{
     SemanticsApplyReport, apply_semantics_toml, format_apply_report, parse_semantics_toml,
 };
 use super::declare::{
-    ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, bare_or_quoted, dotted_table, dtype_label, toml_string,
+    ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, DeclareFacts, dotted_table, dtype_label,
+    render_dataset_declare_toml, toml_string,
 };
 use super::path_io::{ensure_mutable_tet, read_summary_from_path};
 use super::profiles::{
@@ -199,6 +200,25 @@ pub struct WizardResult {
     pub apply: Option<SemanticsApplyReport>,
 }
 
+/// One selectable row: stable `id` for soft-defaults / scripts, `label` for display.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WizardChoice {
+    /// Stable key (profile id, axis index, dataset name).
+    pub id: String,
+    /// Human-facing label shown in the menu.
+    pub label: String,
+}
+
+impl WizardChoice {
+    #[must_use]
+    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+        }
+    }
+}
+
 /// Line-oriented IO for the prompt loop (stdin in CLI; scripted in tests).
 pub trait WizardIo {
     /// Print a line to the user (no trailing newline required in `msg`).
@@ -217,9 +237,9 @@ pub trait WizardIo {
     /// Returns [`CatalogError`] on I/O failure or exhausted scripted answers.
     fn prompt(&mut self, label: &str, last: Option<&str>) -> Result<Option<String>, CatalogError>;
 
-    /// Arrow-key (or scripted) pick among `items`. `None` = skip.
+    /// Arrow-key (or scripted) pick among `choices`. `None` = skip.
     ///
-    /// `last` is matched against `items` to set the initial cursor when possible.
+    /// `last_id` is matched against [`WizardChoice::id`] (then label) for the initial cursor.
     ///
     /// # Errors
     ///
@@ -227,8 +247,8 @@ pub trait WizardIo {
     fn select(
         &mut self,
         label: &str,
-        items: &[String],
-        last: Option<&str>,
+        choices: &[WizardChoice],
+        last_id: Option<&str>,
     ) -> Result<Option<usize>, CatalogError>;
 }
 
@@ -288,19 +308,21 @@ impl WizardIo for StdWizardIo {
     fn select(
         &mut self,
         label: &str,
-        items: &[String],
-        last: Option<&str>,
+        choices: &[WizardChoice],
+        last_id: Option<&str>,
     ) -> Result<Option<usize>, CatalogError> {
-        if items.is_empty() {
+        if choices.is_empty() {
             return Ok(None);
         }
         #[cfg(feature = "tetration-cli")]
         {
             use dialoguer::{Select, theme::ColorfulTheme};
-            let mut opts = items.to_vec();
+            let mut opts: Vec<String> = choices.iter().map(|c| c.label.clone()).collect();
             let skip_idx = opts.len();
             opts.push("(skip)".to_owned());
-            let default = last.and_then(|v| find_select_index(items, v)).unwrap_or(0);
+            let default = last_id
+                .and_then(|v| find_choice_index(choices, v))
+                .unwrap_or(0);
             match Select::with_theme(&ColorfulTheme::default())
                 .with_prompt(label)
                 .items(&opts)
@@ -316,29 +338,31 @@ impl WizardIo for StdWizardIo {
         #[cfg(not(feature = "tetration-cli"))]
         {
             self.println(label)?;
-            for (i, it) in items.iter().enumerate() {
-                self.println(&format!("  {i}. {it}"))?;
+            for (i, c) in choices.iter().enumerate() {
+                self.println(&format!("  {i}. {}", c.label))?;
             }
-            match self.prompt("  pick index", last)?.as_deref() {
-                None => Ok(last.and_then(|v| find_select_index(items, v))),
+            match self.prompt("  pick index", last_id)?.as_deref() {
+                None => Ok(last_id.and_then(|v| find_choice_index(choices, v))),
                 Some("-" | "skip") => Ok(None),
-                Some(s) => parse_select_index(s, items.len()),
+                Some(s) => parse_select_index(s, choices.len()),
             }
         }
     }
 }
 
 /// Queued answers for unit tests (`None` in the queue = empty line).
+#[cfg(test)]
 #[derive(Debug, Default)]
-pub struct ScriptedWizardIo {
+pub(crate) struct ScriptedWizardIo {
     answers: Vec<Option<String>>,
     cursor: usize,
     pub log: Vec<String>,
 }
 
+#[cfg(test)]
 impl ScriptedWizardIo {
     #[must_use]
-    pub fn new(answers: Vec<Option<String>>) -> Self {
+    pub(crate) fn new(answers: Vec<Option<String>>) -> Self {
         Self {
             answers,
             cursor: 0,
@@ -355,6 +379,7 @@ impl ScriptedWizardIo {
     }
 }
 
+#[cfg(test)]
 impl WizardIo for ScriptedWizardIo {
     fn println(&mut self, msg: &str) -> Result<(), CatalogError> {
         self.log.push(msg.to_owned());
@@ -373,19 +398,25 @@ impl WizardIo for ScriptedWizardIo {
     fn select(
         &mut self,
         label: &str,
-        items: &[String],
-        last: Option<&str>,
+        choices: &[WizardChoice],
+        last_id: Option<&str>,
     ) -> Result<Option<usize>, CatalogError> {
-        self.log
-            .push(format!("SELECT {label} :: {}", items.join(" | ")));
+        self.log.push(format!(
+            "SELECT {label} :: {}",
+            choices
+                .iter()
+                .map(|c| c.label.as_str())
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
         match self.next_answer(label)?.as_deref() {
-            None => Ok(last.and_then(|v| find_select_index(items, v))),
+            None => Ok(last_id.and_then(|v| find_choice_index(choices, v))),
             Some("-" | "skip") => Ok(None),
             Some(s) => {
                 if s.parse::<usize>().is_ok() {
-                    return parse_select_index(s, items.len());
+                    return parse_select_index(s, choices.len());
                 }
-                find_select_index(items, s).map(Some).ok_or_else(|| {
+                find_choice_index(choices, s).map(Some).ok_or_else(|| {
                     CatalogError::InvalidSemantics(format!("scripted select miss {s:?}"))
                 })
             }
@@ -517,13 +548,18 @@ fn resolve_dataset(
     if summary.datasets.len() == 1 {
         return Ok(summary.datasets[0].name.clone());
     }
-    let items: Vec<String> = summary
+    let choices: Vec<WizardChoice> = summary
         .datasets
         .iter()
-        .map(|d| format!("{}  shape={}", d.name, shape_label(&d.shape)))
+        .map(|d| {
+            WizardChoice::new(
+                d.name.clone(),
+                format!("{}  shape={}", d.name, shape_label(&d.shape)),
+            )
+        })
         .collect();
     let i = io
-        .select("dataset", &items, Some(&summary.datasets[0].name))?
+        .select("dataset", &choices, Some(&summary.datasets[0].name))?
         .unwrap_or(0);
     Ok(summary.datasets[i].name.clone())
 }
@@ -600,16 +636,16 @@ fn prompt_profile_and_attrs(
     io.println("")?;
     print_block(io, &format_profile_menu())?;
 
-    let profile_items: Vec<String> = WizardProfile::ALL
+    let profile_choices: Vec<WizardChoice> = WizardProfile::ALL
         .iter()
-        .map(|p| p.select_label())
+        .map(|p| WizardChoice::new(p.id(), p.select_label()))
         .collect();
     let profile_last = previous
         .attrs
         .get(ATTR_SEMANTICS_PROFILE)
         .map(String::as_str);
     let profile =
-        if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_items, profile_last)? {
+        if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_choices, profile_last)? {
             let p = WizardProfile::ALL[i];
             attrs.insert(ATTR_SEMANTICS_PROFILE.to_owned(), p.id().to_owned());
             Some(p)
@@ -790,17 +826,17 @@ fn prompt_time_axis(
     if rank == 0 {
         return Ok(());
     }
-    let items: Vec<String> = (0..rank)
+    let choices: Vec<WizardChoice> = (0..rank)
         .map(|i| {
             let name = dim_names
                 .get(i)
                 .filter(|s| !s.is_empty())
                 .map_or("?", String::as_str);
-            format!("{i}  {name}  size {}", ds.shape[i])
+            WizardChoice::new(i.to_string(), format!("{i}  {name}  size {}", ds.shape[i]))
         })
         .collect();
     let last = previous.attrs.get(ATTR_TIME_AXIS).map(String::as_str);
-    if let Some(i) = io.select(ATTR_TIME_AXIS, &items, last)? {
+    if let Some(i) = io.select(ATTR_TIME_AXIS, &choices, last)? {
         attrs.insert(ATTR_TIME_AXIS.to_owned(), i.to_string());
     }
     Ok(())
@@ -889,25 +925,11 @@ fn render_wizard_toml(dataset: &str, draft: &DatasetDraft) -> String {
         "# `tet semantics apply` stamps dim_names and attrs. Profiles and units stay here.\n\n",
     );
     out.push_str("schema_version = 1\n\n");
-    let _ = writeln!(out, "[datasets.{}]", bare_or_quoted(dataset));
-    out.push_str("dim_names = [");
-    for (i, name) in draft.dim_names.iter().enumerate() {
-        if i > 0 {
-            out.push_str(", ");
-        }
-        out.push_str(&toml_string(name));
-    }
-    out.push_str("]\n");
-    if !draft.attrs.is_empty() {
-        let _ = writeln!(out, "[datasets.{}.attrs]", bare_or_quoted(dataset));
-        for (k, v) in &draft.attrs {
-            out.push_str(&bare_or_quoted(k));
-            out.push_str(" = ");
-            out.push_str(&toml_string(v));
-            out.push('\n');
-        }
-    }
-    out.push('\n');
+    let facts = DeclareFacts {
+        dim_names: Some(draft.dim_names.clone()),
+        attrs: draft.attrs.clone(),
+    };
+    render_dataset_declare_toml(&mut out, dataset, &facts, &[]);
 
     if let Some(id) = draft.attrs.get(ATTR_SEMANTICS_PROFILE) {
         let canonical = normalize_profile_id(id);
@@ -930,12 +952,14 @@ fn shape_label(shape: &[u64]) -> String {
     fmt_shape_dims(shape, "")
 }
 
-fn find_select_index(items: &[String], needle: &str) -> Option<usize> {
-    items
+fn find_choice_index(choices: &[WizardChoice], needle: &str) -> Option<usize> {
+    choices
         .iter()
-        .position(|it| it == needle || it.starts_with(&format!("{needle} ")))
+        .position(|c| c.id == needle)
+        .or_else(|| choices.iter().position(|c| c.label == needle))
 }
 
+#[cfg(any(test, not(feature = "tetration-cli")))]
 fn parse_select_index(raw: &str, len: usize) -> Result<Option<usize>, CatalogError> {
     let i: usize = raw
         .parse()
