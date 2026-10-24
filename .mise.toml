@@ -256,3 +256,35 @@ run = "bash fuzz/scripts/fuzz-clean.sh"
 [tasks.fuzz-reseed]
 description = "Refresh fuzz corpus seeds from fixtures (+ INDEX.json / label-range stubs)"
 run = "bash fuzz/scripts/fuzz-reseed.sh"
+
+# --- Semantics / metadata wizard (THI-638) ---
+# Scratch lives under fixtures/scratch/ (gitignored). Prefer these over mutating recording.tet.
+
+[tasks."semantics:scratch"]
+description = "Reset bare wizard scratch: frames [6×2×2], no dims/attrs (THI-638)"
+run = "cargo run --example gen_wizard_scratch"
+
+[tasks."semantics:scratch:prefill"]
+description = "Reset wizard scratch from tracked recording.tet (dims+attrs already set)"
+run = '''
+mkdir -p fixtures/scratch
+cp fixtures/small/tet/recording.tet fixtures/scratch/wizard.tet
+rm -f fixtures/scratch/tet-semantics.toml
+echo "wrote fixtures/scratch/wizard.tet (prefilled from recording.tet)"
+'''
+
+[tasks."semantics:info"]
+description = "tet info on fixtures/scratch/wizard.tet"
+run = "cargo run -- info fixtures/scratch/wizard.tet"
+
+[tasks."semantics:scaffold"]
+description = "scaffold scratch → fixtures/scratch/tet-semantics.toml"
+run = "cargo run -- semantics scaffold fixtures/scratch/wizard.tet -o fixtures/scratch/tet-semantics.toml"
+
+[tasks."semantics:apply"]
+description = "apply fixtures/scratch/tet-semantics.toml onto the scratch .tet"
+run = "cargo run -- semantics apply fixtures/scratch/wizard.tet --from fixtures/scratch/tet-semantics.toml"
+
+[tasks."semantics:wizard"]
+description = "Interactive metadata wizard on scratch (THI-638; cargo run loop)"
+run = "cargo run -- semantics wizard fixtures/scratch/wizard.tet"

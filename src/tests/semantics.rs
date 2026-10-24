@@ -2,10 +2,12 @@
 
 use crate::catalog::{
     DatasetSemanticsDecl, FooterBlobV1, HistoryEvent, PackageSemanticsV1, SEMANTICS_FILE,
-    SEMANTICS_PRESENT, ScaffoldFormat, TetDatasetWrite, TetPackage, TetShardWriter,
-    apply_semantics_toml, declared_attrs, format_apply_report, get_dataset_attr, is_declared_key,
-    metadata_has_declared_attrs, read_package_semantics, read_tet_summary_v1, scaffold_policy,
-    set_dataset_attrs, write_footer_blob, write_package_semantics, write_recording_fixture,
+    SEMANTICS_PRESENT, ScaffoldFormat, ScriptedWizardIo, TetDatasetWrite, TetPackage,
+    TetShardWriter, WizardOptions, apply_semantics_toml, declared_attrs, format_apply_report,
+    get_dataset_attr, is_declared_key, metadata_has_declared_attrs, read_package_semantics,
+    read_tet_summary_v1, run_semantics_wizard, scaffold_policy, set_dataset_attrs,
+    write_footer_blob, write_package_semantics, write_recording_fixture,
+    write_wizard_scratch_fixture,
 };
 use crate::layout::mmap_file_read;
 use crate::query::{QueryDocument, plan_query_with_tet_mmap};
@@ -468,4 +470,87 @@ fn apply_rejects_missing_dataset_rank_mismatch_coords_and_sealed_package() {
         .unwrap_err()
         .to_string();
     assert!(err.contains("sealed"), "{err}");
+}
+
+#[test]
+fn wizard_scripted_stamps_dims_and_media_attrs() {
+    let dir = tempfile::tempdir().unwrap();
+    let tet = dir.path().join("wizard.tet");
+    write_wizard_scratch_fixture(&tet).unwrap();
+    let toml_out = dir.path().join("tet-semantics.toml");
+
+    // dims t/y/x; profile index 0 = media.v1; recommended attrs; time_axis 0; no extras; confirm
+    let mut io = ScriptedWizardIo::new(vec![
+        Some("t".into()),
+        Some("y".into()),
+        Some("x".into()),
+        Some("0".into()), // select media.v1
+        Some("video".into()),
+        Some("30".into()),
+        Some("Hz".into()),
+        Some("0".into()), // select time_axis 0
+        None,             // end extras
+        None,             // confirm Y
+    ]);
+    let opts = WizardOptions {
+        dataset: None,
+        toml_out: toml_out.clone(),
+        apply: true,
+    };
+    let result = run_semantics_wizard(&tet, &opts, &mut io).unwrap();
+    assert_eq!(result.dataset, "frames");
+    assert!(toml_out.is_file());
+    let text = std::fs::read_to_string(&toml_out).unwrap();
+    assert!(text.contains("dim_names = [\"t\", \"y\", \"x\"]"), "{text}");
+    assert!(text.contains("semantics_profile = \"media.v1\""), "{text}");
+    assert!(text.contains("[profiles.media.v1]"), "{text}");
+
+    let mmap = mmap_file_read(&tet).unwrap();
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    let meta = summary.metadata.datasets.get("frames").unwrap();
+    assert_eq!(
+        meta.dim_names.as_deref(),
+        Some(["t".into(), "y".into(), "x".into()].as_slice())
+    );
+    assert_eq!(
+        meta.attrs.get("semantics_profile").map(String::as_str),
+        Some("media.v1")
+    );
+    assert_eq!(meta.attrs.get("frame_rate").map(String::as_str), Some("30"));
+}
+
+#[test]
+fn wizard_empty_skips_attrs_without_prior() {
+    let dir = tempfile::tempdir().unwrap();
+    let tet = dir.path().join("wizard.tet");
+    write_wizard_scratch_fixture(&tet).unwrap();
+    let toml_out = dir.path().join("out.toml");
+    // dims; profile 0; empty×4 recommended (skip — hints are not defaults); no extras; confirm
+    let mut io = ScriptedWizardIo::new(vec![
+        Some("t".into()),
+        Some("y".into()),
+        Some("x".into()),
+        Some("0".into()),    // select media.v1
+        None,                // media_kind skip
+        None,                // frame_rate skip
+        None,                // frame_rate_unit skip
+        Some("skip".into()), // time_axis skip (select)
+        None,                // end extras
+        None,                // confirm Y
+    ]);
+    let opts = WizardOptions {
+        dataset: None,
+        toml_out,
+        apply: true,
+    };
+    run_semantics_wizard(&tet, &opts, &mut io).unwrap();
+    let mmap = mmap_file_read(&tet).unwrap();
+    let summary = read_tet_summary_v1(&mmap).unwrap();
+    let attrs = &summary.metadata.datasets.get("frames").unwrap().attrs;
+    assert_eq!(
+        attrs.get("semantics_profile").map(String::as_str),
+        Some("media.v1")
+    );
+    assert!(!attrs.contains_key("media_kind"));
+    assert!(!attrs.contains_key("frame_rate"));
 }

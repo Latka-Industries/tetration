@@ -369,6 +369,23 @@ pub enum SemanticsCmd {
         #[arg(long)]
         generation: Option<u64>,
     },
+    /// Interactive prompts: name dims, pick profile / attrs, confirm, write TOML + apply.
+    ///
+    /// Empty keeps the last selection (shown in brackets); `-` clears/skips.
+    /// `n` on confirm redoes the prompts with that last selection. Sealed `.tet.d` is refused.
+    Wizard {
+        /// Path to a mutable `.tet` file.
+        path: PathBuf,
+        /// Dataset catalog name (default: sole dataset, or prompt).
+        #[arg(long)]
+        dataset: Option<String>,
+        /// Write the combined TOML here (default: `tet-semantics.toml` beside the `.tet`).
+        #[arg(short = 'o', long, value_name = "FILE")]
+        output: Option<PathBuf>,
+        /// Write TOML only; do not stamp the `.tet`.
+        #[arg(long)]
+        no_apply: bool,
+    },
 }
 
 /// `tet qhist` — platform query history (not `tet info --history` footer).

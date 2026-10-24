@@ -4,10 +4,11 @@ use std::fs;
 use std::path::Path;
 
 use tetration::catalog::{
-    ScaffoldFormat, ScaffoldPolicy, TetPackage, apply_semantics_toml, encode_package_semantics,
-    format_apply_report, format_lint_report, lint_package_semantics, lint_tet_path,
-    parse_semantics_toml, read_package_semantics, read_tet_summary_v1, scaffold_annotated_toml,
-    scaffold_policy_from_path, set_dataset_attrs, write_package_semantics_from_packed,
+    ScaffoldFormat, ScaffoldPolicy, StdWizardIo, TetPackage, WizardOptions, apply_semantics_toml,
+    encode_package_semantics, format_apply_report, format_lint_report, lint_package_semantics,
+    lint_tet_path, parse_semantics_toml, read_package_semantics, read_tet_summary_v1,
+    run_semantics_wizard, scaffold_annotated_toml, scaffold_policy_from_path, set_dataset_attrs,
+    write_package_semantics_from_packed,
 };
 use tetration::layout::mmap_file_read;
 use tetration::verify::looks_like_tet_package;
@@ -41,7 +42,35 @@ pub(crate) fn run_semantics(cmd: SemanticsCmd) -> Result<(), String> {
         } => run_package_write(&path, generation, !no_manifest),
         SemanticsCmd::PackageShow { path, generation } => run_package_show(&path, generation),
         SemanticsCmd::Lint { path, generation } => run_lint(&path, generation),
+        SemanticsCmd::Wizard {
+            path,
+            dataset,
+            output,
+            no_apply,
+        } => run_wizard(&path, dataset, output, !no_apply),
     }
+}
+
+fn run_wizard(
+    path: &Path,
+    dataset: Option<String>,
+    output: Option<std::path::PathBuf>,
+    apply: bool,
+) -> Result<(), String> {
+    let mut opts = WizardOptions::beside_tet(path);
+    opts.dataset = dataset;
+    opts.apply = apply;
+    if let Some(out) = output {
+        opts.toml_out = out;
+    }
+    let mut io = StdWizardIo::new();
+    let result = run_semantics_wizard(path, &opts, &mut io).map_err(cli_error)?;
+    eprintln!(
+        "wizard: done dataset {:?} → {}",
+        result.dataset,
+        result.toml_path.display()
+    );
+    Ok(())
 }
 
 fn run_apply(
