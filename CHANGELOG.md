@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-24
+
+### Added
+
+- Interactive semantics metadata wizard: `tet semantics wizard` (dialoguer selects, comfy-table UI, scratch mise loop) — empty keeps last selection without inventing defaults (THI-638 / #184).
+- Align + label `group_by` bench harness (dual-dataset H5; fair ST/parallel timing) and chunk-aligned `group_by` fast path: kept-axis tile-extent-1 folds reuse scalar slab SIMD so large `group_by` matches scalar sum (#189).
+- Human `tet info` / `tet query` tables via `comfy-table` (#185).
+
+### Changed
+
+- Query wire polish: shared op keys / device tokens, `ChunkTouchPolicy` enum, `SimpleOp`, spill/write helpers, serialize DRY (#188).
+- Semantics / CLI design tighten: shared helpers, typed lint codes, `DeclareFacts`, id-based wizard select (#186 / #187).
+
+### Notes
+
+- Semver patch on the 0.8 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). No new Python API — pin **tet-py** and docs site after crates.io publish. Docs-site pins (THI-637) stay a follow-up.
+
 ## [0.8.0] - 2026-10-23
 
 ### Added
