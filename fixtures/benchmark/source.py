@@ -157,6 +157,17 @@ def reduce_source_op(case: BenchCase, op: OpName) -> tuple[float, float]:
     if not meta.bench_source:
         raise ValueError(meta.note or "source not supported")
 
+    if meta.value_mode == "aligned":
+        return time_warm_logged(f"source {op} (h5 metadata)", lambda: _align_check_source(case))
+
+    if meta.query_fields and "group_by" in meta.query_fields:
+        by_labels = isinstance(meta.query_fields["group_by"], dict)
+
+        def compute_group_by() -> float:
+            return _group_by_sum_total(case, by_labels=by_labels)
+
+        return time_warm_logged(f"source {op} (h5py+numpy group_by)", compute_group_by)
+
     _, slab_label = _iter_source_slabs(case)
 
     if meta.query_fields and "window" in meta.query_fields:
@@ -210,6 +221,58 @@ def _source_length(case: BenchCase) -> int:
 
             root = zarr.open_group(str(case.src), mode="r")
             return int(root["data"].shape[0])
+
+
+def _align_check_source(case: BenchCase) -> float:
+    """1.0 when `data` and `ref` agree on shape (align peer; metadata only)."""
+    if case.format != "h5":
+        raise ValueError("align source peer is h5-only")
+    import h5py
+
+    with h5py.File(case.src, "r") as f:
+        if "data" not in f or "ref" not in f:
+            raise ValueError("align fixture missing data/ref datasets")
+        left = tuple(int(x) for x in f["data"].shape)
+        right = tuple(int(x) for x in f["ref"].shape)
+    return 1.0 if left == right else 0.0
+
+
+def _group_by_sum_total(case: BenchCase, *, by_labels: bool) -> float:
+    """Sum of per-group totals along axis 0 (index or collapsed labels)."""
+    if case.format != "h5":
+        raise ValueError("group_by source peer is h5-only")
+    import h5py
+
+    with h5py.File(case.src, "r") as f:
+        data = f["data"]
+        time_len, width = (int(data.shape[0]), int(data.shape[1]))
+        if by_labels:
+            labels = np.asarray(f["coordinates/time"][:], dtype=np.int64)
+            if labels.shape != (time_len,):
+                raise ValueError("time coords length mismatch")
+            # First-seen order matches tetration label_group index_to_group.
+            order: list[int] = []
+            first: dict[int, int] = {}
+            for lab in labels.tolist():
+                if lab not in first:
+                    first[lab] = len(order)
+                    order.append(lab)
+            totals = np.zeros(len(order), dtype=np.float64)
+            slab = min(width, 16 * 1024 * 1024)
+            for t, lab in enumerate(labels.tolist()):
+                gid = first[int(lab)]
+                for x0 in range(0, width, slab):
+                    x1 = min(x0 + slab, width)
+                    totals[gid] += float(np.asarray(data[t, x0:x1], dtype=np.float64).sum())
+            return float(totals.sum())
+
+        totals = np.zeros(time_len, dtype=np.float64)
+        slab = min(width, 16 * 1024 * 1024)
+        for t in range(time_len):
+            for x0 in range(0, width, slab):
+                x1 = min(x0 + slab, width)
+                totals[t] += float(np.asarray(data[t, x0:x1], dtype=np.float64).sum())
+        return float(totals.sum())
 
 
 def _window_sum_total(

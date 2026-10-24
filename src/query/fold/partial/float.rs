@@ -178,8 +178,26 @@ fn run_partial_f32(
         }
         _ => {
             let mut cells = vec![reduction::ValueAccum::default(); ctx.layout.out_len];
+            let mut dummy_arg = reduction::ArgIndexAccum::default();
             for i in chunk_order {
                 let c = &ctx.plan.chunks[i];
+                if let Some(oi) =
+                    partial_geometry::chunk_single_reduced_index(ctx.plan, ctx.layout, c)?
+                {
+                    // Chunk-aligned group_by: scalar slab fold into one output cell.
+                    let chunk_bytes = chunk_decode::fold_planned_chunk_f32(
+                        ctx.mmap,
+                        ctx.plan,
+                        c,
+                        ctx.kind,
+                        &mut cells[oi],
+                        &mut dummy_arg,
+                        preview,
+                    )?;
+                    *ctx.saw_any = true;
+                    dispatch::accumulate_chunk_read_bytes(ctx.total_bytes, chunk_bytes)?;
+                    continue;
+                }
                 let chunk_bytes =
                     chunk_decode::visit_planned_chunk(ctx.mmap, ctx.plan, c, |li, v| {
                         *ctx.saw_any = true;
@@ -248,8 +266,25 @@ fn run_partial_f64(
         }
         _ => {
             let mut cells = vec![reduction::ValueAccum::default(); ctx.layout.out_len];
+            let mut dummy_arg = reduction::ArgIndexAccum::default();
             for i in chunk_order {
                 let c = &ctx.plan.chunks[i];
+                if let Some(oi) =
+                    partial_geometry::chunk_single_reduced_index(ctx.plan, ctx.layout, c)?
+                {
+                    let chunk_bytes = chunk_decode::fold_planned_chunk_f64(
+                        ctx.mmap,
+                        ctx.plan,
+                        c,
+                        ctx.kind,
+                        &mut cells[oi],
+                        &mut dummy_arg,
+                        preview,
+                    )?;
+                    *ctx.saw_any = true;
+                    dispatch::accumulate_chunk_read_bytes(ctx.total_bytes, chunk_bytes)?;
+                    continue;
+                }
                 let chunk_bytes =
                     chunk_decode::visit_planned_chunk_f64(ctx.mmap, ctx.plan, c, |li, v| {
                         *ctx.saw_any = true;

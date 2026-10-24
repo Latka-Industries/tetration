@@ -45,11 +45,6 @@ pub(crate) fn build_label_group_remap(
                 "group_by axis {d} out of range for rank {ndim}"
             )));
         }
-        let coord = coord_axis_for_dimension(meta, d).ok_or_else(|| {
-            TetError::Validation(format!(
-                "`group_by` with `by: labels` requires coordinate labels on axis {d}"
-            ))
-        })?;
         let full_extent = plan
             .dataset_shape
             .get(d)
@@ -57,6 +52,11 @@ pub(crate) fn build_label_group_remap(
             .ok_or_else(|| TetError::Validation(format!("dataset shape missing axis {d}")))?;
         let full_extent_usize = usize::try_from(full_extent)
             .map_err(|_| TetError::Validation("dataset axis extent does not fit usize".into()))?;
+        let coord = coord_axis_for_dimension(meta, d, full_extent_usize).ok_or_else(|| {
+            TetError::Validation(format!(
+                "`group_by` with `by: labels` requires coordinate labels on axis {d}"
+            ))
+        })?;
         if coord.labels.len() != full_extent_usize {
             return Err(TetError::Validation(format!(
                 "coordinate labels on axis {d} have length {}, expected {full_extent_usize}",
@@ -126,7 +126,11 @@ fn index_to_group(labels: &[String]) -> (Vec<usize>, usize) {
     (map, first_seen.len())
 }
 
-fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&CoordAxisV1> {
+fn coord_axis_for_dimension(
+    meta: &DatasetMetadataV1,
+    d: usize,
+    extent: usize,
+) -> Option<&CoordAxisV1> {
     let coords = meta.coords.as_ref()?;
     if let Some(names) = &meta.dim_names
         && let Some(name) = names.get(d)
@@ -134,5 +138,12 @@ fn coord_axis_for_dimension(meta: &DatasetMetadataV1, d: usize) -> Option<&Coord
     {
         return Some(c);
     }
-    coords.get(d.to_string().as_str())
+    if let Some(c) = coords.get(d.to_string().as_str()) {
+        return Some(c);
+    }
+    // Same unique-extent fallback as label_filter: CF HDF5 often keys coords by
+    // axis name (`time`) without footer `dim_names`.
+    let mut matches = coords.values().filter(|c| c.labels.len() == extent);
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }

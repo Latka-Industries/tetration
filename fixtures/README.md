@@ -103,7 +103,7 @@ Sequential per **tier**, then wipe the whole **format** tree before the next for
 6. **Delete `.tet`**
 7. After all selected tiers: **delete `bench_small/{format}/`, `large/{format}/`, and `extra_large/{format}/`**
 
-**Primary comparison:** full-tensor ops on the native file vs **`.tet`** query — see `fixtures/benchmark/constants.py` (`OP_REGISTRY`). Slice the matrix with **`--tier small|large|extra|all`** and **`--ops`** groups (`default`, `scalar`, `qc`, `transforms`, `windows` / `query06`, `all`) or named ops. **Default** ops: scalar + QC. **Windows** (`window_bins_sum`, `window_rolling_sum`) compare NumPy slab folds vs `.tet` (same axis/size/mode). `align` + label `group_by` need richer fixtures before they join this matrix.  
+**Primary comparison:** full-tensor ops on the native file vs **`.tet`** query — see `fixtures/benchmark/constants.py` (`OP_REGISTRY`). Slice the matrix with **`--tier small|large|extra|all`** and **`--ops`** groups (`default`, `scalar`, `qc`, `transforms`, `windows` / `query06`, `align_group`, `all`) or named ops. **Default** ops: scalar + QC. **Windows** (`window_bins_sum`, `window_rolling_sum`) compare NumPy slab folds vs `.tet` (same axis/size/mode). **Align / group_by** (`align_check`, `group_by_sum`, `group_by_labels_sum`) use a dual-dataset 2-D HDF5 fixture (h5 only; other formats skip). Group_by reports **ST + parallel** (two page-cache warms, like `bench:index`) and uses a **chunk-aligned** fold when kept axes have tile extent 1 (per-chunk scalar slab sum).  
 **Secondary:** **convert** time (one-time import).
 
 `.tet` query timing uses **`execution.device: auto`** by default (`tet query --device auto`); override with `--tet-device cpu` or `TET_BENCH_DEVICE`. Reports include a **device** column (`device_used` and fallback reason when CPU wins).
@@ -127,6 +127,9 @@ mise run bench:transforms   # zscore…softmax vs fair NumPy peers — large, al
 mise run bench:windows      # h5 large only: window bins/rolling vs NumPy (CPU)
 mise run bench:windows:small  # h5 ~512 MiB windows smoke
 mise run bench:windows:extra  # h5 20 GiB windows (OOC path)
+mise run bench:align-group  # h5 large: align + index/label group_by vs NumPy (CPU)
+mise run bench:align-group:small  # h5 ~256 MiB align/group_by smoke
+mise run bench:align-group:extra  # h5 20 GiB align/group_by
 mise run bench:index        # THI-613: small (≈16 MiB select) + large (≈0.4 GiB) vs HDF5+NumPy
 mise run bench:index:small  # microbench only (~16 MiB select)
 mise run bench:index:extra  # 20 GiB (select ≈1.25 GiB; long generate)
@@ -139,6 +142,7 @@ uv run --directory fixtures bench-large --skip-mean   # convert timing only
 uv run --directory fixtures bench-large --ops transforms   # + transform_zscore, …, transform_softmax
 uv run --directory fixtures bench-large h5 --tier small --ops windows --tet-device cpu
 uv run --directory fixtures bench-large h5 --tier large --ops windows --tet-device cpu
+uv run --directory fixtures bench-large h5 --tier large --ops align_group --tet-device cpu
 uv run --directory fixtures bench-large --tier large --ops mean,sum
 uv run --directory fixtures bench-large --tier all --ops all
 uv run --directory fixtures bench-large --ops all h5     # every registered op, HDF5 only
