@@ -272,10 +272,7 @@ fn scalar_reduction_kind(op: &types::Operation) -> Option<fold::reduction::Reduc
 }
 
 fn spill_requested(output: Option<&types::OutputHints>) -> Option<&str> {
-    match output.and_then(|o| o.preferred.as_ref()) {
-        Some(types::OutputHint::SpillArray { handle }) => Some(handle.as_str()),
-        _ => None,
-    }
+    output.and_then(types::OutputHints::spill_handle)
 }
 
 pub(super) struct ExecutionPreviewInput<'a> {

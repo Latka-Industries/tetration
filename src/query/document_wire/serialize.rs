@@ -97,47 +97,44 @@ where
 }
 
 fn pipeline_step_value(step: &PipelineStep) -> Result<Value, serde_json::Error> {
-    let mut scratch = QueryDocument {
-        layout_version: None,
-        dataset: String::new(),
-        selection: None,
-        filter: None,
-        label_filter: None,
-        group_by: None,
-        window: None,
-        align: None,
-        operation: None,
-        output: None,
-        write: None,
-        execution: None,
-        pipeline: None,
-    };
     match step {
-        PipelineStep::Select(selection) => {
-            return Ok(serde_json::json!({ "select": selection }));
+        PipelineStep::Select(selection) => Ok(serde_json::json!({ "select": selection })),
+        step => {
+            let mut scratch = QueryDocument::analytics_scratch();
+            match step {
+                PipelineStep::Select(_) => unreachable!("handled above"),
+                PipelineStep::Filter(filter) => scratch.filter = Some(filter.clone()),
+                PipelineStep::Reduce {
+                    group_by,
+                    window,
+                    operation,
+                } => {
+                    scratch.group_by.clone_from(group_by);
+                    scratch.window.clone_from(window);
+                    scratch.operation = Some(operation.clone());
+                }
+                PipelineStep::Spill(path) => {
+                    scratch.output = Some(OutputHints {
+                        preferred: Some(OutputHint::SpillArray {
+                            handle: path.clone(),
+                        }),
+                    });
+                }
+                PipelineStep::Write(write) => scratch.write = Some(write.clone()),
+            }
+            analytics_fragment_json(&scratch)
         }
-        PipelineStep::Filter(filter) => scratch.filter = Some(filter.clone()),
-        PipelineStep::Reduce {
-            group_by,
-            window,
-            operation,
-        } => {
-            scratch.group_by.clone_from(group_by);
-            scratch.window.clone_from(window);
-            scratch.operation = Some(operation.clone());
-        }
-        PipelineStep::Spill(path) => {
-            scratch.output = Some(OutputHints {
-                preferred: Some(OutputHint::SpillArray {
-                    handle: path.clone(),
-                }),
-            });
-        }
-        PipelineStep::Write(write) => scratch.write = Some(write.clone()),
     }
-    match serde_json::to_value(&scratch)? {
+}
+
+/// Serialize selection / filter / op / spill / write without dataset / execution / pipeline.
+fn analytics_fragment_json(doc: &QueryDocument) -> Result<Value, serde_json::Error> {
+    match serde_json::to_value(doc)? {
         Value::Object(mut obj) => {
             obj.remove("dataset");
+            obj.remove("layout_version");
+            obj.remove("execution");
+            obj.remove("pipeline");
             Ok(Value::Object(obj))
         }
         other => Ok(other),

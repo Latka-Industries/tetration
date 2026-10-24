@@ -15,15 +15,12 @@ use crate::layout::{SUPERBLOCK_FLAG_HISTORY_FOOTER, SUPERBLOCK_V1_LEN, Superbloc
 use crate::query::resolve_axes::resolve_query_document_axes;
 use crate::query::resolve_selection::resolve_query_document_selection;
 use crate::query::types::{
-    ChunkTouchPolicy, DatasetResolution, OutputHint, QueryDocument, QueryExecutionPreview,
-    QueryResponse, ReadPlan, TetError,
+    ChunkTouchPolicy, DatasetResolution, QueryDocument, QueryExecutionPreview, QueryResponse,
+    ReadPlan, TetError,
 };
 
 fn query_requests_spill(doc: &QueryDocument) -> bool {
-    matches!(
-        doc.output.as_ref().and_then(|o| o.preferred.as_ref()),
-        Some(OutputHint::SpillArray { .. })
-    )
+    doc.requests_export_spill()
 }
 
 use crate::query::engine::budget::ExecutionBudget;

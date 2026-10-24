@@ -6,8 +6,14 @@
 use serde::{Deserialize, Serialize};
 
 use super::error::TetError;
+use super::simple_op::SimpleOp;
 
 // `QueryDocument` JSON wire format: see `document_wire.rs` (flat op keys, `mean: 0`, `spill: "…"`, …).
+
+/// Pre-resolve axis token: decimal index (`"0"`) or footer dimension name (`"time"`).
+///
+/// Kept as [`String`] on the wire/document for now; plan-time resolve rewrites names to indices.
+pub type AxisToken = String;
 
 /// Per-axis slice: `start` inclusive, `stop` exclusive, `step` ≥ 1 when present.
 ///
@@ -168,7 +174,8 @@ macro_rules! operation_axes_match {
 impl Operation {
     /// Every accepted top-level reduction / transform wire key (parse + serialize).
     ///
-    /// Single source shared with [`Self::wire_key`] / [`Self::from_axes_key`] via tests.
+    /// [`SimpleOp::WIRE_KEYS`] plus parametric keys (`quantile` / `histogram` / `null_count` /
+    /// `transform`).
     pub const WIRE_KEYS: &'static [&'static str] = &[
         "sum",
         "mean",
@@ -200,77 +207,67 @@ impl Operation {
 
     /// Per-axis decimal dimension indices for this operation.
     #[must_use]
-    pub fn axes(&self) -> &[String] {
+    pub fn axes(&self) -> &[AxisToken] {
         operation_axes_match!(self)
     }
 
     /// Mutable axis list for plan-time name → index resolution.
-    pub(crate) fn axes_mut(&mut self) -> &mut Vec<String> {
+    pub(crate) fn axes_mut(&mut self) -> &mut Vec<AxisToken> {
         operation_axes_match!(self)
     }
 
     /// Top-level JSON wire key (`"mean"`, `"arg_min"`, …).
     #[must_use]
     pub fn wire_key(&self) -> &'static str {
+        if let Some(simple) = self.simple_op() {
+            return simple.as_str();
+        }
         match self {
-            Self::Sum { .. } => "sum",
-            Self::Mean { .. } => "mean",
-            Self::Min { .. } => "min",
-            Self::Max { .. } => "max",
-            Self::Count { .. } => "count",
-            Self::Var { .. } => "var",
-            Self::Std { .. } => "std",
-            Self::Product { .. } => "product",
-            Self::NormL1 { .. } => "norm_l1",
-            Self::NormL2 { .. } => "norm_l2",
-            Self::AllFinite { .. } => "all_finite",
-            Self::AnyNan { .. } => "any_nan",
-            Self::AnyInf { .. } => "any_inf",
-            Self::NanCount { .. } => "nan_count",
-            Self::InfCount { .. } => "inf_count",
             Self::NullCount { .. } => "null_count",
-            Self::ArgMin { .. } => "arg_min",
-            Self::ArgMax { .. } => "arg_max",
-            Self::Median { .. } => "median",
             Self::Quantile { .. } => "quantile",
             Self::Histogram { .. } => "histogram",
-            Self::Covariance { .. } => "covariance",
-            Self::Correlation { .. } => "correlation",
-            Self::NanMean { .. } => "nan_mean",
-            Self::NanStd { .. } => "nan_std",
             Self::Transform { .. } => "transform",
+            _ => unreachable!("simple_op covers axes-only variants"),
         }
     }
 
-    /// Axes-only ops from a flat wire key. Parametric keys (`quantile`, `histogram`,
-    /// `null_count`, `transform`) return [`None`] and are parsed separately.
+    /// Axes-only kind when this is not a parametric op.
     #[must_use]
-    pub(crate) fn from_axes_key(name: &str, axes: Vec<String>) -> Option<Self> {
-        Some(match name {
-            "sum" => Self::Sum { axes },
-            "mean" => Self::Mean { axes },
-            "min" => Self::Min { axes },
-            "max" => Self::Max { axes },
-            "count" => Self::Count { axes },
-            "var" => Self::Var { axes },
-            "std" => Self::Std { axes },
-            "product" => Self::Product { axes },
-            "norm_l1" => Self::NormL1 { axes },
-            "norm_l2" => Self::NormL2 { axes },
-            "all_finite" => Self::AllFinite { axes },
-            "any_nan" => Self::AnyNan { axes },
-            "any_inf" => Self::AnyInf { axes },
-            "arg_min" => Self::ArgMin { axes },
-            "arg_max" => Self::ArgMax { axes },
-            "median" => Self::Median { axes },
-            "nan_count" => Self::NanCount { axes },
-            "inf_count" => Self::InfCount { axes },
-            "covariance" => Self::Covariance { axes },
-            "correlation" => Self::Correlation { axes },
-            "nan_mean" => Self::NanMean { axes },
-            "nan_std" => Self::NanStd { axes },
-            _ => return None,
+    pub fn simple_op(&self) -> Option<SimpleOp> {
+        Some(match self {
+            Self::Sum { .. } => SimpleOp::Sum,
+            Self::Mean { .. } => SimpleOp::Mean,
+            Self::Min { .. } => SimpleOp::Min,
+            Self::Max { .. } => SimpleOp::Max,
+            Self::Count { .. } => SimpleOp::Count,
+            Self::Var { .. } => SimpleOp::Var,
+            Self::Std { .. } => SimpleOp::Std,
+            Self::Product { .. } => SimpleOp::Product,
+            Self::NormL1 { .. } => SimpleOp::NormL1,
+            Self::NormL2 { .. } => SimpleOp::NormL2,
+            Self::AllFinite { .. } => SimpleOp::AllFinite,
+            Self::AnyNan { .. } => SimpleOp::AnyNan,
+            Self::AnyInf { .. } => SimpleOp::AnyInf,
+            Self::ArgMin { .. } => SimpleOp::ArgMin,
+            Self::ArgMax { .. } => SimpleOp::ArgMax,
+            Self::Median { .. } => SimpleOp::Median,
+            Self::NanCount { .. } => SimpleOp::NanCount,
+            Self::InfCount { .. } => SimpleOp::InfCount,
+            Self::Covariance { .. } => SimpleOp::Covariance,
+            Self::Correlation { .. } => SimpleOp::Correlation,
+            Self::NanMean { .. } => SimpleOp::NanMean,
+            Self::NanStd { .. } => SimpleOp::NanStd,
+            Self::Quantile { .. }
+            | Self::Histogram { .. }
+            | Self::NullCount { .. }
+            | Self::Transform { .. } => return None,
         })
+    }
+
+    /// Axes-only ops from a flat wire key. Parametric keys return [`None`].
+    #[must_use]
+    pub(crate) fn from_axes_key(name: &str, axes: Vec<AxisToken>) -> Option<Self> {
+        SimpleOp::parse(name).map(|op| op.with_axes(axes))
     }
 
     /// Tier-C ops that require a full logical materialize (not streaming fold).
@@ -350,11 +347,24 @@ pub enum OutputHint {
 }
 
 /// Optional output routing hints on a query document.
+///
+/// Wire key is top-level `"spill": "path"` (export), not transform [`WriteHints`] (`"write"`).
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct OutputHints {
     #[serde(default)]
     pub preferred: Option<OutputHint>,
+}
+
+impl OutputHints {
+    /// Path from `"spill": "…"` when preferred is [`OutputHint::SpillArray`].
+    #[must_use]
+    pub fn spill_handle(&self) -> Option<&str> {
+        match self.preferred.as_ref() {
+            Some(OutputHint::SpillArray { handle }) => Some(handle.as_str()),
+            _ => None,
+        }
+    }
 }
 
 /// Comparison operator for a numeric cell-value predicate (`filter` wire key).
@@ -725,6 +735,57 @@ pub struct QueryDocument {
     pub pipeline: Option<Vec<PipelineStep>>,
 }
 
+impl QueryDocument {
+    /// True when top-level `spill` requests an export array file.
+    ///
+    /// Distinct from transform [`Self::write`] routing — the two must not both be set.
+    #[must_use]
+    pub fn requests_export_spill(&self) -> bool {
+        matches!(
+            self.output.as_ref().and_then(|o| o.preferred.as_ref()),
+            Some(OutputHint::SpillArray { .. })
+        )
+    }
+
+    /// Export spill path from top-level `spill`, when present.
+    #[must_use]
+    pub fn export_spill_handle(&self) -> Option<&str> {
+        self.output.as_ref().and_then(OutputHints::spill_handle)
+    }
+
+    /// Empty document used when serializing an analytics fragment (pipeline step / tests).
+    #[must_use]
+    pub(crate) fn analytics_scratch() -> Self {
+        Self {
+            layout_version: None,
+            dataset: String::new(),
+            selection: None,
+            filter: None,
+            label_filter: None,
+            group_by: None,
+            window: None,
+            align: None,
+            operation: None,
+            output: None,
+            write: None,
+            execution: None,
+            pipeline: None,
+        }
+    }
+
+    /// Transform output routing (`write` wire key).
+    #[must_use]
+    pub fn write_hints(&self) -> Option<&WriteHints> {
+        self.write.as_ref()
+    }
+
+    /// Transform [`WriteTarget`], when `write` is set.
+    #[must_use]
+    pub fn write_target(&self) -> Option<WriteTarget> {
+        self.write.as_ref().map(|w| w.target)
+    }
+}
+
 /// One closed stage in a query `pipeline`.
 ///
 /// Order is fixed: `select`, then `filter`, then one reduction (`group_by` or `window` optional),
@@ -868,6 +929,7 @@ impl ExecutionDeviceHint {
 
 #[cfg(test)]
 mod operation_wire_tests {
+    use super::super::SimpleOp;
     use super::{Operation, TransformMethod};
 
     #[test]
@@ -915,23 +977,24 @@ mod operation_wire_tests {
             },
         ];
         assert_eq!(samples.len(), Operation::WIRE_KEYS.len());
+        assert_eq!(
+            SimpleOp::WIRE_KEYS.len() + SimpleOp::PARAMETRIC_WIRE_KEYS.len(),
+            Operation::WIRE_KEYS.len()
+        );
         for op in samples {
             let key = op.wire_key();
             assert!(
                 Operation::WIRE_KEYS.contains(&key),
                 "wire_key {key:?} missing from WIRE_KEYS"
             );
-            if matches!(
-                op,
-                Operation::Quantile { .. }
-                    | Operation::Histogram { .. }
-                    | Operation::NullCount { .. }
-                    | Operation::Transform { .. }
-            ) {
-                assert!(Operation::from_axes_key(key, vec![]).is_none());
-            } else {
+            if let Some(simple) = op.simple_op() {
+                assert_eq!(simple.as_str(), key);
                 let rebuilt = Operation::from_axes_key(key, vec![]).expect(key);
                 assert_eq!(rebuilt.wire_key(), key);
+                assert_eq!(rebuilt.simple_op(), Some(simple));
+            } else {
+                assert!(Operation::from_axes_key(key, vec![]).is_none());
+                assert!(SimpleOp::PARAMETRIC_WIRE_KEYS.contains(&key));
             }
         }
     }

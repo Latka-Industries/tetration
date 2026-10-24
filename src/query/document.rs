@@ -230,25 +230,25 @@ pub fn validate_query(doc: &QueryDocument) -> Result<(), TetError> {
         validate_operation_axes_v1(op)?;
         validate_operation_params(op)?;
         if op.requires_transform() {
-            if doc.output.is_some() {
+            if doc.requests_export_spill() || doc.output.is_some() {
                 return Err(TetError::Validation(
                     "transform operations use top-level `write`, not `spill`".into(),
                 ));
             }
-            if let Some(w) = &doc.write {
+            if let Some(w) = doc.write_hints() {
                 validate_write_hints(w)?;
             }
-        } else if doc.write.is_some() {
+        } else if doc.write_hints().is_some() {
             return Err(TetError::Validation(
                 "`write` is only valid with `transform`".into(),
             ));
         }
-    } else if doc.write.is_some() {
+    } else if doc.write_hints().is_some() {
         return Err(TetError::Validation(
             "`write` requires a transform operation".into(),
         ));
     }
-    if doc.output.is_some() && doc.write.is_some() {
+    if doc.output.is_some() && doc.write_hints().is_some() {
         return Err(TetError::Validation(
             "query document must not set both `spill` and `write`".into(),
         ));
