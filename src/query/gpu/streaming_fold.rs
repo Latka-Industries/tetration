@@ -236,7 +236,7 @@ struct ReadPlanGeom {
     selection_step: Vec<u64>,
     logical_selection_shape: Vec<u64>,
     logical_element_count: usize,
-    chunk_touch_policy: &'static str,
+    chunk_touch_policy: crate::query::types::ChunkTouchPolicy,
 }
 
 impl ReadPlanGeom {

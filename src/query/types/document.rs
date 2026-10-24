@@ -166,6 +166,38 @@ macro_rules! operation_axes_match {
 }
 
 impl Operation {
+    /// Every accepted top-level reduction / transform wire key (parse + serialize).
+    ///
+    /// Single source shared with [`Self::wire_key`] / [`Self::from_axes_key`] via tests.
+    pub const WIRE_KEYS: &'static [&'static str] = &[
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "count",
+        "var",
+        "std",
+        "product",
+        "norm_l1",
+        "norm_l2",
+        "all_finite",
+        "any_nan",
+        "any_inf",
+        "arg_min",
+        "arg_max",
+        "median",
+        "quantile",
+        "histogram",
+        "nan_count",
+        "inf_count",
+        "null_count",
+        "covariance",
+        "correlation",
+        "nan_mean",
+        "nan_std",
+        "transform",
+    ];
+
     /// Per-axis decimal dimension indices for this operation.
     #[must_use]
     pub fn axes(&self) -> &[String] {
@@ -208,6 +240,37 @@ impl Operation {
             Self::NanStd { .. } => "nan_std",
             Self::Transform { .. } => "transform",
         }
+    }
+
+    /// Axes-only ops from a flat wire key. Parametric keys (`quantile`, `histogram`,
+    /// `null_count`, `transform`) return [`None`] and are parsed separately.
+    #[must_use]
+    pub(crate) fn from_axes_key(name: &str, axes: Vec<String>) -> Option<Self> {
+        Some(match name {
+            "sum" => Self::Sum { axes },
+            "mean" => Self::Mean { axes },
+            "min" => Self::Min { axes },
+            "max" => Self::Max { axes },
+            "count" => Self::Count { axes },
+            "var" => Self::Var { axes },
+            "std" => Self::Std { axes },
+            "product" => Self::Product { axes },
+            "norm_l1" => Self::NormL1 { axes },
+            "norm_l2" => Self::NormL2 { axes },
+            "all_finite" => Self::AllFinite { axes },
+            "any_nan" => Self::AnyNan { axes },
+            "any_inf" => Self::AnyInf { axes },
+            "arg_min" => Self::ArgMin { axes },
+            "arg_max" => Self::ArgMax { axes },
+            "median" => Self::Median { axes },
+            "nan_count" => Self::NanCount { axes },
+            "inf_count" => Self::InfCount { axes },
+            "covariance" => Self::Covariance { axes },
+            "correlation" => Self::Correlation { axes },
+            "nan_mean" => Self::NanMean { axes },
+            "nan_std" => Self::NanStd { axes },
+            _ => return None,
+        })
     }
 
     /// Tier-C ops that require a full logical materialize (not streaming fold).
@@ -769,40 +832,107 @@ impl ExecutionDeviceHint {
         )))
     }
 
+    /// `&'static str` wire token when no ordinal index must be formatted.
+    ///
+    /// Returns `None` for `cuda:N` / `rocm:N` with `N != 0` — use [`Self::to_token`].
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
+    pub const fn as_static_str(self) -> Option<&'static str> {
         match self {
-            Self::Cpu => "cpu",
-            Self::Auto => "auto",
-            Self::Metal => "metal",
-            Self::Cuda(0) => "cuda:0",
-            Self::CudaMulti => "cuda:multi",
-            Self::Rocm(0) => "rocm:0",
-            Self::RocmMulti => "rocm:multi",
-            Self::Cuda(n) => {
-                let _ = n;
-                "cuda"
-            }
-            Self::Rocm(n) => {
-                let _ = n;
-                "rocm"
-            }
+            Self::Cpu => Some("cpu"),
+            Self::Auto => Some("auto"),
+            Self::Metal => Some("metal"),
+            Self::Cuda(0) => Some("cuda"),
+            Self::CudaMulti => Some("cuda:multi"),
+            Self::Rocm(0) => Some("rocm"),
+            Self::RocmMulti => Some("rocm:multi"),
+            Self::Cuda(_) | Self::Rocm(_) => None,
         }
     }
 
-    /// Wire/JSON token (includes index for `cuda:N`).
+    /// Wire/JSON token (includes index for `cuda:N` / `rocm:N`). Prefer this for logs and JSON.
     #[must_use]
     pub fn to_token(self) -> String {
-        match self {
-            Self::Cpu => "cpu".to_string(),
-            Self::Auto => "auto".to_string(),
-            Self::Metal => "metal".to_string(),
-            Self::Cuda(0) => "cuda".to_string(),
-            Self::Cuda(n) => format!("cuda:{n}"),
-            Self::CudaMulti => "cuda:multi".to_string(),
-            Self::Rocm(0) => "rocm".to_string(),
-            Self::Rocm(n) => format!("rocm:{n}"),
-            Self::RocmMulti => "rocm:multi".to_string(),
+        match self.as_static_str() {
+            Some(s) => s.to_owned(),
+            None => match self {
+                Self::Cuda(n) => format!("cuda:{n}"),
+                Self::Rocm(n) => format!("rocm:{n}"),
+                // Covered by `as_static_str`.
+                Self::Cpu | Self::Auto | Self::Metal | Self::CudaMulti | Self::RocmMulti => {
+                    unreachable!("as_static_str covers index-free devices")
+                }
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod operation_wire_tests {
+    use super::{Operation, TransformMethod};
+
+    #[test]
+    fn wire_keys_match_wire_key_and_from_axes() {
+        let samples: &[Operation] = &[
+            Operation::Sum { axes: vec![] },
+            Operation::Mean { axes: vec![] },
+            Operation::Min { axes: vec![] },
+            Operation::Max { axes: vec![] },
+            Operation::Count { axes: vec![] },
+            Operation::Var { axes: vec![] },
+            Operation::Std { axes: vec![] },
+            Operation::Product { axes: vec![] },
+            Operation::NormL1 { axes: vec![] },
+            Operation::NormL2 { axes: vec![] },
+            Operation::AllFinite { axes: vec![] },
+            Operation::AnyNan { axes: vec![] },
+            Operation::AnyInf { axes: vec![] },
+            Operation::ArgMin { axes: vec![] },
+            Operation::ArgMax { axes: vec![] },
+            Operation::Median { axes: vec![] },
+            Operation::Quantile {
+                axes: vec![],
+                q: 0.5,
+            },
+            Operation::Histogram {
+                axes: vec![],
+                bins: 1,
+                min: None,
+                max: None,
+            },
+            Operation::NanCount { axes: vec![] },
+            Operation::InfCount { axes: vec![] },
+            Operation::NullCount {
+                axes: vec![],
+                fill: None,
+            },
+            Operation::Covariance { axes: vec![] },
+            Operation::Correlation { axes: vec![] },
+            Operation::NanMean { axes: vec![] },
+            Operation::NanStd { axes: vec![] },
+            Operation::Transform {
+                method: TransformMethod::Zscore,
+                axes: vec![],
+            },
+        ];
+        assert_eq!(samples.len(), Operation::WIRE_KEYS.len());
+        for op in samples {
+            let key = op.wire_key();
+            assert!(
+                Operation::WIRE_KEYS.contains(&key),
+                "wire_key {key:?} missing from WIRE_KEYS"
+            );
+            if matches!(
+                op,
+                Operation::Quantile { .. }
+                    | Operation::Histogram { .. }
+                    | Operation::NullCount { .. }
+                    | Operation::Transform { .. }
+            ) {
+                assert!(Operation::from_axes_key(key, vec![]).is_none());
+            } else {
+                let rebuilt = Operation::from_axes_key(key, vec![]).expect(key);
+                assert_eq!(rebuilt.wire_key(), key);
+            }
         }
     }
 }

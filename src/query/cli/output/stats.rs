@@ -44,7 +44,7 @@ pub(super) struct StatsCatalog<'a> {
 
 #[derive(Serialize)]
 pub(super) struct StatsReadPlan<'a> {
-    chunk_touch_policy: &'a str,
+    chunk_touch_policy: &'a str, // wire token from ChunkTouchPolicy::as_str
     chunk_count: usize,
     #[serde(skip_serializing_if = "usize_is_zero")]
     zone_filter_skipped_chunks: usize,
@@ -81,7 +81,7 @@ pub(super) fn stats_catalog(c: &DatasetResolution) -> StatsCatalog<'_> {
 
 pub(super) fn stats_read_plan(p: &ReadPlan) -> StatsReadPlan<'_> {
     StatsReadPlan {
-        chunk_touch_policy: p.chunk_touch_policy,
+        chunk_touch_policy: p.chunk_touch_policy.as_str(),
         chunk_count: p.chunk_count,
         zone_filter_skipped_chunks: p.zone_filter_skipped_chunks,
         index_filter_skipped_chunks: p.index_filter_skipped_chunks,
@@ -204,7 +204,12 @@ fn push_execution_scalar_operation_stats(map: &mut Map<String, Value>, ex: &Quer
         "operation_correlation_order",
         ex.operation_correlation_order,
     );
-    opt_str(map, "transform_method", ex.transform_method.as_deref());
+    opt_str(
+        map,
+        "transform_method",
+        ex.transform_method
+            .map(crate::query::TransformMethod::as_str),
+    );
     opt_u64(
         map,
         "transform_div_by_zero_count",

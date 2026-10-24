@@ -481,12 +481,12 @@ flowchart TD
 | `execution.logical_selection_bytes`                                          | `elem_size × logical element count` for the dataset dtype.                                                                                                      |
 | `execution.spill_f32_path` / `spill_f32_bytes`                               | After **`mmap_spill`** or **`transform_spill`** decode (dtype-native spill paths for non-f32 use matching `spill_*` fields when set).                           |
 
-## Chunk-touch policy strings
+## Chunk-touch policy
 
-Stable tokens on `ReadPlan.chunk_touch_policy` (see [`CHUNK_TOUCH_POLICY`](../src/query/types/plan.rs)):
+[`ChunkTouchPolicy`](../src/query/types/plan.rs) on `ReadPlan` (JSON still uses the long historical wire strings):
 
-- **`dense_half_open_unit_step`** — JSON `step` omitted or 1; chunk list follows dense half-open intervals.
-- **`strided_half_open`** — per-axis JSON `step` affects which chunks are touched.
+- **`DenseHalfOpenUnitStep`** — JSON `step` omitted or 1; chunk list follows dense half-open intervals.
+- **`StridedHalfOpen`** — per-axis JSON `step` affects which chunks are touched.
 
 ## Related docs
 

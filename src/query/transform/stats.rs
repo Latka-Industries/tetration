@@ -97,7 +97,7 @@ fn stamp_preview_fields(
     stats: &TransformStats,
     layout: Option<&PartialAxisLayout>,
 ) {
-    fields.transform_method = Some(method.as_str().to_owned());
+    fields.transform_method = Some(method);
     if layout.is_some() {
         fields.reduced_mean = Some(stats.mean.clone());
         fields.reduced_std = Some(stats.std.clone());

@@ -15,7 +15,7 @@ pub use document::{
     ValuePredicate, WindowAlign, WindowMode, WindowPad, WindowSpec, WriteHints, WriteTarget,
 };
 pub use error::TetError;
-pub use plan::{CHUNK_TOUCH_POLICY, ChunkTouchPolicy, PlannedChunkIo, ReadPlan};
+pub use plan::{ChunkTouchPolicy, PlannedChunkIo, ReadPlan};
 pub(crate) use plan::{LabelEqPred, LabelGroupRemap};
 pub use response::{
     AlignmentAxisResult, AlignmentResult, DatasetResolution, QueryExecutionPreview, QueryResponse,

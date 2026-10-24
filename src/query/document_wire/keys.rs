@@ -1,33 +1,9 @@
 //! Flat-wire key tables and membership checks.
 
-pub(super) const OP_KEYS: &[&str] = &[
-    "sum",
-    "mean",
-    "min",
-    "max",
-    "count",
-    "var",
-    "std",
-    "product",
-    "norm_l1",
-    "norm_l2",
-    "all_finite",
-    "any_nan",
-    "any_inf",
-    "arg_min",
-    "arg_max",
-    "median",
-    "quantile",
-    "histogram",
-    "nan_count",
-    "inf_count",
-    "null_count",
-    "covariance",
-    "correlation",
-    "nan_mean",
-    "nan_std",
-    "transform",
-];
+use crate::query::types::Operation;
+
+/// Top-level reduction / transform keys — sourced from [`Operation::WIRE_KEYS`].
+pub(super) const OP_KEYS: &[&str] = Operation::WIRE_KEYS;
 
 pub(super) const RESERVED_KEYS: &[&str] = &[
     "layout_version",

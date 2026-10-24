@@ -7,7 +7,7 @@ Serde models for the **flat** query document and execution response. No I/O here
 | File                  | Main types                                                                |
 | --------------------- | ------------------------------------------------------------------------- |
 | `document.rs`         | `QueryDocument`, `Operation`, `AxisSlice`, `ExecutionHints`, `WriteHints` |
-| `plan.rs`             | `ReadPlan`, `PlannedChunkIo`, `ChunkTouchPolicy`                          |
+| `plan.rs`             | `ReadPlan`, `PlannedChunkIo`, `ChunkTouchPolicy` (enum + wire tokens)     |
 | `response.rs`         | `QueryResponse`, `QueryExecutionPreview`, `DatasetResolution`             |
 | `error.rs`            | `TetError`                                                                |
 | `transform_method.rs` | `TransformMethod` enum (`zscore`, `minmax`, `softmax`, …)                 |

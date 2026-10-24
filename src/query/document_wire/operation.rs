@@ -31,14 +31,6 @@ pub(super) fn parse_operation(name: &str, v: &Value) -> Result<Operation, TetErr
                 max,
             })
         }
-        "nan_count" => {
-            let axes = parse_axis_spec(v)?;
-            Ok(Operation::NanCount { axes })
-        }
-        "inf_count" => {
-            let axes = parse_axis_spec(v)?;
-            Ok(Operation::InfCount { axes })
-        }
         "null_count" => {
             if v.is_object() {
                 let (axes, obj) = parse_parametric_op_object("null_count", v)?;
@@ -48,14 +40,6 @@ pub(super) fn parse_operation(name: &str, v: &Value) -> Result<Operation, TetErr
                 let axes = parse_axis_spec(v)?;
                 Ok(Operation::NullCount { axes, fill: None })
             }
-        }
-        "covariance" => {
-            let axes = parse_axis_spec(v)?;
-            Ok(Operation::Covariance { axes })
-        }
-        "correlation" => {
-            let axes = parse_axis_spec(v)?;
-            Ok(Operation::Correlation { axes })
         }
         "transform" => {
             let (axes, obj) = parse_parametric_op_object("transform", v)?;
@@ -68,7 +52,11 @@ pub(super) fn parse_operation(name: &str, v: &Value) -> Result<Operation, TetErr
         }
         other => {
             let axes = parse_axis_spec(v)?;
-            Ok(operation_from_axes(other, axes))
+            Operation::from_axes_key(other, axes).ok_or_else(|| {
+                TetError::Validation(format!(
+                    "internal: op key `{other}` is listed but not axes-only"
+                ))
+            })
         }
     }
 }
@@ -90,30 +78,6 @@ fn parse_parametric_op_object(
         Vec::new()
     };
     Ok((axes, obj.clone()))
-}
-
-fn operation_from_axes(name: &str, axes: Vec<String>) -> Operation {
-    match name {
-        "sum" => Operation::Sum { axes },
-        "mean" => Operation::Mean { axes },
-        "min" => Operation::Min { axes },
-        "max" => Operation::Max { axes },
-        "count" => Operation::Count { axes },
-        "var" => Operation::Var { axes },
-        "std" => Operation::Std { axes },
-        "product" => Operation::Product { axes },
-        "norm_l1" => Operation::NormL1 { axes },
-        "norm_l2" => Operation::NormL2 { axes },
-        "all_finite" => Operation::AllFinite { axes },
-        "any_nan" => Operation::AnyNan { axes },
-        "any_inf" => Operation::AnyInf { axes },
-        "arg_min" => Operation::ArgMin { axes },
-        "arg_max" => Operation::ArgMax { axes },
-        "median" => Operation::Median { axes },
-        "nan_mean" => Operation::NanMean { axes },
-        "nan_std" => Operation::NanStd { axes },
-        _ => unreachable!("operation_from_axes: {name}"),
-    }
 }
 
 fn parse_axis_spec(v: &Value) -> Result<Vec<String>, TetError> {

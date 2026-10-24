@@ -138,7 +138,7 @@ pub(crate) fn build_read_plan(
     dataset_idx: usize,
     ndim: usize,
     coords: &[[u64; MAX_NDIM]],
-    chunk_touch_policy: &'static str,
+    chunk_touch_policy: crate::query::types::ChunkTouchPolicy,
     geom: &ReadPlanGeometry<'_>,
     pushdown: &ZonePushdown<'_>,
 ) -> Result<ReadPlan, TetError> {

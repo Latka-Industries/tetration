@@ -1,7 +1,7 @@
 //! Quiet one-line `tet query` stdout formatting.
 
 use crate::query::types::{
-    DatasetResolution, Operation, QueryExecutionPreview, QueryResponse, ReadPlan,
+    DatasetResolution, Operation, QueryExecutionPreview, QueryResponse, ReadPlan, TransformMethod,
 };
 
 use super::format_num::{
@@ -72,7 +72,7 @@ fn plan_quiet_line(dataset: &str, plan: &ReadPlan) -> String {
         format!("elements={}", plan.logical_element_count),
         format!("stored_bytes={}", plan.total_stored_bytes),
         format!("logical_shape={shape}"),
-        format!("touch_policy={}", plan.chunk_touch_policy),
+        format!("touch_policy={}", plan.chunk_touch_policy.as_str()),
     ];
     if plan.zone_filter_skipped_chunks > 0 {
         parts.push(format!(
@@ -445,8 +445,8 @@ fn transform_stat_value(
 
 /// Quiet-footer pass-1 stats for transform ops (`partial` selects `operation_reduced_*` fields).
 fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<String, String> {
-    match ex.transform_method.as_deref() {
-        Some("zscore") => {
+    match ex.transform_method {
+        Some(TransformMethod::Zscore) => {
             let mean = transform_stat_value(
                 partial,
                 "operation_mean",
@@ -463,7 +463,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             )?;
             Ok(format!("mean={mean} std={std}"))
         }
-        Some("minmax") => {
+        Some(TransformMethod::Minmax) => {
             let min = transform_stat_value(
                 partial,
                 "operation_min",
@@ -480,7 +480,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             )?;
             Ok(format!("min={min} max={max}"))
         }
-        Some("center") => transform_stat_value(
+        Some(TransformMethod::Center) => transform_stat_value(
             partial,
             "operation_mean",
             "operation_reduced_mean",
@@ -488,7 +488,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             ex.operation_reduced_mean.as_ref(),
         )
         .map(|mean| format!("mean={mean}")),
-        Some("scale") => transform_stat_value(
+        Some(TransformMethod::Scale) => transform_stat_value(
             partial,
             "operation_std",
             "operation_reduced_std",
@@ -496,7 +496,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             ex.operation_reduced_std.as_ref(),
         )
         .map(|std| format!("std={std}")),
-        Some("l1") => transform_stat_value(
+        Some(TransformMethod::L1) => transform_stat_value(
             partial,
             "operation_norm_l1",
             "operation_reduced_norm_l1",
@@ -504,7 +504,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             ex.operation_reduced_norm_l1.as_ref(),
         )
         .map(|n1| format!("norm_l1={n1}")),
-        Some("l2") => transform_stat_value(
+        Some(TransformMethod::L2) => transform_stat_value(
             partial,
             "operation_norm_l2",
             "operation_reduced_norm_l2",
@@ -512,7 +512,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             ex.operation_reduced_norm_l2.as_ref(),
         )
         .map(|n2| format!("norm_l2={n2}")),
-        Some("log1p" | "sqrt") => transform_stat_value(
+        Some(TransformMethod::Log1p | TransformMethod::Sqrt) => transform_stat_value(
             partial,
             "operation_min",
             "operation_reduced_min",
@@ -520,7 +520,7 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             ex.operation_reduced_min.as_ref(),
         )
         .map(|min| format!("min={min}")),
-        Some("softmax") => transform_stat_value(
+        Some(TransformMethod::Softmax) => transform_stat_value(
             partial,
             "operation_max",
             "operation_reduced_max",
@@ -528,7 +528,6 @@ fn transform_stats_line(ex: &QueryExecutionPreview, partial: bool) -> Result<Str
             ex.operation_reduced_max.as_ref(),
         )
         .map(|max| format!("max={max}")),
-        Some(method) => Ok(format!("method={method}")),
         None => Ok("method=transform".to_string()),
     }
 }

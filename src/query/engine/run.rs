@@ -15,7 +15,7 @@ use crate::layout::{SUPERBLOCK_FLAG_HISTORY_FOOTER, SUPERBLOCK_V1_LEN, Superbloc
 use crate::query::resolve_axes::resolve_query_document_axes;
 use crate::query::resolve_selection::resolve_query_document_selection;
 use crate::query::types::{
-    CHUNK_TOUCH_POLICY, DatasetResolution, OutputHint, QueryDocument, QueryExecutionPreview,
+    ChunkTouchPolicy, DatasetResolution, OutputHint, QueryDocument, QueryExecutionPreview,
     QueryResponse, ReadPlan, TetError,
 };
 
@@ -109,7 +109,7 @@ pub fn plan_query_empty(doc: &QueryDocument) -> QueryResponse {
 ///
 /// When the dataset matches, [`QueryResponse::read_plan`] lists chunk payloads that intersect the
 /// per-axis selection (default full tensor). Non-unit JSON `step` uses strided chunk selection
-/// (see [`crate::query::CHUNK_TOUCH_POLICY`]).
+/// (see [`crate::query::ChunkTouchPolicy`]).
 ///
 /// `raw_f32_preview_max`: when `Some(n)` with `n > 0`, read planned chunk payloads from `mmap`
 /// (raw or zstd `f32` tiles, codecs **0** / **1**) and attach up to `n` decoded little-endian `f32`
@@ -343,9 +343,9 @@ fn build_matched_read_plan(
     let (g0, g1, steps) = resolved_dense_global_box(doc, &rec.shape)?;
     let strided = steps.iter().any(|&t| t != 1);
     let touch_policy = if strided {
-        CHUNK_TOUCH_POLICY.strided_half_open
+        ChunkTouchPolicy::StridedHalfOpen
     } else {
-        CHUNK_TOUCH_POLICY.dense_half_open_unit_step
+        ChunkTouchPolicy::DenseHalfOpenUnitStep
     };
     let coords = chunk_coords_intersecting_strided(&rec.shape, &rec.chunk_shape, &g0, &g1, &steps)
         .map_err(map_geometry_catalog_error)?;
