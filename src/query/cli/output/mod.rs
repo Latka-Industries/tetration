@@ -25,7 +25,7 @@ pub enum QueryOutputFormat {
     Quiet,
     /// Compact human tables: overview + result (+ preview). No plan/execution dump.
     Table,
-    /// Verbose human tables: overview + read_plan + execution + result (short fields).
+    /// Verbose human tables: overview + `read_plan` + execution + result (short fields).
     TableVerbose,
 }
 

@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = session.commit_with_fill(1, |job, buf| {
         // Synthetic tile: value = row index of the chunk's first row (cheap stand-in for I/O).
         let row0 = job.chunk_coord[0] * CHUNK_SHAPE[0];
-        for slot in buf.chunks_exact_mut(4) {
+        for slot in buf.as_chunks_mut::<4>().0 {
             slot.copy_from_slice(&(row0 as f32).to_le_bytes());
         }
         Ok(())

@@ -20,7 +20,7 @@ fn write_tiny_f32(path: &std::path::Path) {
     let shape = [2u64, 3];
     let chunk = [2u64, 2];
     let mut data = vec![0u8; 24];
-    for (slot, n) in data.chunks_exact_mut(4).zip(1_u8..=6) {
+    for (slot, n) in data.as_chunks_mut::<4>().0.iter_mut().zip(1_u8..=6) {
         slot.copy_from_slice(&f32::from(n).to_le_bytes());
     }
     let mut session = TetWriterSession::create(path);

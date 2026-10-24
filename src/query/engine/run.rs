@@ -1,5 +1,6 @@
 //! Query planning and execution entrypoints against mmap’d `.tet` files.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -470,6 +471,7 @@ struct PlanAttach<'a> {
     index: Option<&'a GenerationSecondaryIndex>,
 }
 
+#[allow(clippy::too_many_lines)] // matched-path attach + execution stays together
 fn plan_query_matched_dataset(
     summary: &TetFileSummaryV1,
     dataset_idx: usize,
@@ -569,7 +571,7 @@ fn plan_query_matched_dataset(
         && let Some(count) = group_count_for(&doc, &read_plan)
     {
         preview.group_count = Some(count);
-        message.push_str(&format!("; group_count={count}"));
+        let _ = write!(message, "; group_count={count}");
     }
     Ok(query_response(
         &doc,

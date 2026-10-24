@@ -160,4 +160,27 @@ impl ElementDtype {
             Self::I32 | Self::I64 | Self::U8 | Self::U16 | Self::I16 | Self::U32 | Self::U64
         )
     }
+
+    /// Short wire label for CLI / scaffold (`f32`, `u8`, …).
+    #[must_use]
+    pub const fn wire_label(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::I16 => "i16",
+            Self::U32 => "u32",
+            Self::F16 => "f16",
+            Self::U64 => "u64",
+        }
+    }
+}
+
+/// Wire dtype tag → short label (`"?"` when unknown).
+#[must_use]
+pub fn dtype_wire_label(tag: u32) -> &'static str {
+    ElementDtype::try_from_wire_tag(tag).map_or("?", ElementDtype::wire_label)
 }

@@ -34,6 +34,7 @@ pub(crate) struct InfoRunOpts {
 impl InfoRunOpts {
     /// Build section request from clap bools.
     #[must_use]
+    #[allow(clippy::fn_params_excessive_bools)] // mirrors clap section flags 1:1
     pub(crate) fn sections_from_flags(
         all: bool,
         layout: bool,

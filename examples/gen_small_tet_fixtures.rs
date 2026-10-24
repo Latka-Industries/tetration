@@ -38,7 +38,7 @@ fn le_u8_1_to_6() -> Vec<u8> {
 }
 
 fn le_u32_1_to_6() -> Vec<u8> {
-    (1_u32..=6).flat_map(|n| n.to_le_bytes()).collect()
+    (1_u32..=6).flat_map(u32::to_le_bytes).collect()
 }
 
 fn le_f16_1_to_6() -> Vec<u8> {
@@ -52,7 +52,7 @@ fn write_large(path: &PathBuf) {
     const CHUNK: [u64; 2] = [4, 4];
     let ne = usize::try_from(SHAPE[0] * SHAPE[1]).unwrap();
     let mut data = vec![0u8; ne * 4];
-    for (slot, i) in data.chunks_exact_mut(4).zip(0_u32..) {
+    for (slot, i) in data.as_chunks_mut::<4>().0.iter_mut().zip(0_u32..) {
         slot.copy_from_slice(&(i as f32).to_le_bytes());
     }
     write_raw_array_file(

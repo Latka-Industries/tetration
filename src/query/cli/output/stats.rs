@@ -55,6 +55,8 @@ pub(super) struct StatsReadPlan<'a> {
     logical_element_count: usize,
 }
 
+// serde `skip_serializing_if` requires `fn(&T) -> bool`.
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn usize_is_zero(n: &usize) -> bool {
     *n == 0
 }

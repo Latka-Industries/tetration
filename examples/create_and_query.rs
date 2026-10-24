@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn f32_tensor_one_to_six() -> Vec<u8> {
     let mut data = vec![0u8; 24];
-    for (slot, n) in data.chunks_exact_mut(4).zip(1_u8..=6) {
+    for (slot, n) in data.as_chunks_mut::<4>().0.iter_mut().zip(1_u8..=6) {
         slot.copy_from_slice(&f32::from(n).to_le_bytes());
     }
     data

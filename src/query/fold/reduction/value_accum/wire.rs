@@ -6,6 +6,7 @@ use super::ValueAccum;
 /// Wire twin of [`ValueAccum`] (sufficient stats for associative tier-A/B merge).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::struct_excessive_bools)] // mirrors ValueAccum finite/nan/inf/min-max flags
 pub struct ValueAccumWire {
     pub count: usize,
     pub finite_count: usize,

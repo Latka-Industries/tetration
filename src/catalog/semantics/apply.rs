@@ -9,10 +9,12 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
+use super::declare::{ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS};
+use super::path_io::{ensure_mutable_tet, read_summary_from_path};
 use super::profiles::normalize_profile_id;
 use crate::catalog::history::{HistoryEvent, read_footer_blob_from_path, write_footer_blob};
 use crate::catalog::metadata::DatasetMetadataV1;
-use crate::catalog::{CatalogError, TetFileSummaryV1, TetMetadataV1, read_tet_summary_v1};
+use crate::catalog::{CatalogError, TetFileSummaryV1, TetMetadataV1};
 
 /// On-disk schema for `tet-semantics.toml`.
 pub const SEMANTICS_TOML_SCHEMA_VERSION: i64 = 1;
@@ -110,7 +112,7 @@ pub fn apply_semantics_toml(
     tet_path: &Path,
     toml_path: &Path,
 ) -> Result<SemanticsApplyReport, CatalogError> {
-    ensure_mutable_tet(tet_path)?;
+    ensure_mutable_tet(tet_path, "semantics apply")?;
     let text = fs::read_to_string(toml_path)?;
     let doc = parse_semantics_toml(&text)?;
     let summary = read_summary_from_path(tet_path)?;
@@ -272,7 +274,18 @@ fn parse_attrs(
 }
 
 fn coerce_attr(dataset: &str, key: &str, value: &toml::Value) -> Result<String, CatalogError> {
-    let where_ = format!("datasets.{dataset}.attrs.{key}");
+    coerce_toml_scalar(
+        &format!("datasets.{dataset}.attrs.{key}"),
+        value,
+        /*reject_compound*/ true,
+    )
+}
+
+fn coerce_toml_scalar(
+    where_: &str,
+    value: &toml::Value,
+    reject_compound: bool,
+) -> Result<String, CatalogError> {
     let text = match value {
         toml::Value::String(s) => s.clone(),
         toml::Value::Integer(i) => i.to_string(),
@@ -285,12 +298,12 @@ fn coerce_attr(dataset: &str, key: &str, value: &toml::Value) -> Result<String, 
             format!("{f}")
         }
         toml::Value::Boolean(b) => b.to_string(),
-        toml::Value::Array(_) | toml::Value::Table(_) => {
+        toml::Value::Array(_) | toml::Value::Table(_) if reject_compound => {
             return Err(CatalogError::InvalidSemantics(format!(
                 "{where_} must be a string, number, or bool (arrays and tables are rejected)"
             )));
         }
-        toml::Value::Datetime(_) => {
+        toml::Value::Array(_) | toml::Value::Table(_) | toml::Value::Datetime(_) => {
             return Err(CatalogError::InvalidSemantics(format!(
                 "{where_} must be a string, number, or bool"
             )));
@@ -367,17 +380,7 @@ fn parse_units(
         let inner = expect_table(body, &format!("units.{name}"))?;
         let mut fields = BTreeMap::new();
         for (key, field) in inner {
-            let text = match field {
-                toml::Value::String(s) => s.clone(),
-                toml::Value::Integer(i) => i.to_string(),
-                toml::Value::Float(f) if f.is_finite() => format!("{f}"),
-                toml::Value::Boolean(b) => b.to_string(),
-                _ => {
-                    return Err(CatalogError::InvalidSemantics(format!(
-                        "units.{name}.{key} must be a string, number, or bool"
-                    )));
-                }
-            };
+            let text = coerce_toml_scalar(&format!("units.{name}.{key}"), field, false)?;
             fields.insert(key.clone(), text);
         }
         out.insert(name.clone(), fields);
@@ -392,32 +395,6 @@ fn expect_table<'a>(
     value
         .as_table()
         .ok_or_else(|| CatalogError::InvalidSemantics(format!("{what} must be a table")))
-}
-
-fn ensure_mutable_tet(path: &Path) -> Result<(), CatalogError> {
-    if path.is_dir() || path.join("PROTOCOL").is_file() || ancestor_is_package(path) {
-        return Err(CatalogError::InvalidSemantics(
-            "semantics apply targets a mutable .tet file; a sealed .tet.d generation is immutable — apply on the mutable .tet, then seal a new generation"
-                .to_owned(),
-        ));
-    }
-    Ok(())
-}
-
-fn ancestor_is_package(path: &Path) -> bool {
-    let mut cur = path.parent();
-    while let Some(dir) = cur {
-        if dir.join("PROTOCOL").is_file() {
-            return true;
-        }
-        cur = dir.parent();
-    }
-    false
-}
-
-fn read_summary_from_path(path: &Path) -> Result<TetFileSummaryV1, CatalogError> {
-    let data = fs::read(path)?;
-    read_tet_summary_v1(&data)
 }
 
 fn plan_stamps(
@@ -435,7 +412,7 @@ fn plan_stamps(
                 names.len()
             )));
         }
-        if let Some(axis) = decl.attrs.get("time_axis") {
+        if let Some(axis) = decl.attrs.get(ATTR_TIME_AXIS) {
             check_time_axis(name, axis, rank)?;
         }
         if decl.dim_names.is_none() && decl.attrs.is_empty() {
@@ -457,10 +434,10 @@ fn normalize_profile_attr(
 ) -> (BTreeMap<String, String>, Option<(String, String)>) {
     let mut out = attrs.clone();
     let mut note = None;
-    if let Some(raw) = out.get("semantics_profile").cloned() {
+    if let Some(raw) = out.get(ATTR_SEMANTICS_PROFILE).cloned() {
         let canonical = normalize_profile_id(&raw).to_owned();
         if canonical != raw {
-            out.insert("semantics_profile".to_owned(), canonical.clone());
+            out.insert(ATTR_SEMANTICS_PROFILE.to_owned(), canonical.clone());
             note = Some((raw, canonical));
         }
     }

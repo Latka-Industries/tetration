@@ -50,11 +50,14 @@ fn compare_may_match(dtype: u32, zone: &ChunkZoneStat, op: ValueCompareOp, value
         ValueCompareOp::Eq => value >= min && value <= max,
         ValueCompareOp::Ne => {
             // Skip only when every non-null cell equals `value` and there are no nulls
-            // (null ≠ value is treated as a possible match).
+            // (null ≠ value is treated as a possible match). Exact IEEE equality is intentional.
             if zone.null_count > 0 {
                 return true;
             }
-            !(min == max && min == value)
+            #[allow(clippy::float_cmp)]
+            {
+                !(min == max && min == value)
+            }
         }
         ValueCompareOp::Lt => min < value,
         ValueCompareOp::Le => min <= value,

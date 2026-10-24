@@ -372,8 +372,8 @@ pub(super) fn validate_value_filter(
     }
     if let (Some((lo_op, lo)), Some((hi_op, hi))) = (lower, upper) {
         let empty = match (lo_op, hi_op) {
-            (ValueCompareOp::Gt, ValueCompareOp::Lt | ValueCompareOp::Le) => lo >= hi,
-            (ValueCompareOp::Ge, ValueCompareOp::Lt) => lo >= hi,
+            (ValueCompareOp::Gt, ValueCompareOp::Lt | ValueCompareOp::Le)
+            | (ValueCompareOp::Ge, ValueCompareOp::Lt) => lo >= hi,
             (ValueCompareOp::Ge, ValueCompareOp::Le) => lo > hi,
             _ => false,
         };

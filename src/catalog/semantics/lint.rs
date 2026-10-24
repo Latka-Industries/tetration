@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use super::declare::{declared_attrs, is_declared_key};
+use super::declare::{ATTR_SEMANTICS_PROFILE, declared_attrs, is_declared_key};
 use super::profiles::{PROV_LOG_V1, normalize_profile_id, recommended_keys_for_profile};
 use crate::catalog::history::HistoryEvent;
 use crate::catalog::package_semantics::PackageSemanticsV1;
@@ -23,6 +23,41 @@ pub enum SemanticsLintSeverity {
     Info,
 }
 
+/// Stable machine-readable lint code (advisory only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticsLintCode {
+    /// Legacy / alias profile id; prefer the canonical spelling.
+    ProfileAlias,
+    /// Open-minted id with no documented recommended keys.
+    UnknownProfile,
+    /// Claimed documented profile is missing a recommended attr.
+    MissingAttr,
+    /// `prov_log.v1` with an empty history.
+    EmptyHistory,
+    /// `prov_log.v1` missing agent or activity on history rows.
+    MissingProvParam,
+}
+
+impl SemanticsLintCode {
+    /// Wire / CLI token.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProfileAlias => "profile_alias",
+            Self::UnknownProfile => "unknown_profile",
+            Self::MissingAttr => "missing_attr",
+            Self::EmptyHistory => "empty_history",
+            Self::MissingProvParam => "missing_prov_param",
+        }
+    }
+}
+
+impl std::fmt::Display for SemanticsLintCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// One advisory finding from [`lint_declared_semantics`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticsLintFinding {
@@ -30,7 +65,7 @@ pub struct SemanticsLintFinding {
     /// Dataset catalog name, or `"*"` for file-wide notes.
     pub dataset: String,
     pub profile: Option<String>,
-    pub code: String,
+    pub code: SemanticsLintCode,
     pub message: String,
 }
 
@@ -60,11 +95,11 @@ pub fn lint_declared_semantics(
     let mut findings = Vec::new();
     for (name, ds) in &metadata.datasets {
         let attrs = declared_attrs(&ds.attrs);
-        let profile = attrs
-            .get("semantics_profile")
+        let Some(profile) = attrs
+            .get(ATTR_SEMANTICS_PROFILE)
             .cloned()
-            .or_else(|| ds.attrs.get("semantics_profile").cloned());
-        let Some(profile) = profile.filter(|p| !p.is_empty()) else {
+            .filter(|p| !p.is_empty())
+        else {
             continue;
         };
         let canonical = normalize_profile_id(&profile).to_owned();
@@ -73,7 +108,7 @@ pub fn lint_declared_semantics(
                 severity: SemanticsLintSeverity::Info,
                 dataset: name.clone(),
                 profile: Some(profile.clone()),
-                code: "profile_alias".into(),
+                code: SemanticsLintCode::ProfileAlias,
                 message: format!("legacy profile id {profile:?} → prefer {canonical:?}"),
             });
         }
@@ -83,7 +118,7 @@ pub fn lint_declared_semantics(
                 severity: SemanticsLintSeverity::Info,
                 dataset: name.clone(),
                 profile: Some(canonical.clone()),
-                code: "unknown_profile".into(),
+                code: SemanticsLintCode::UnknownProfile,
                 message: format!(
                     "unknown semantics_profile {canonical:?} (open minting; no registry keys)"
                 ),
@@ -91,7 +126,7 @@ pub fn lint_declared_semantics(
             continue;
         }
         for key in recommended {
-            if *key == "semantics_profile" {
+            if *key == ATTR_SEMANTICS_PROFILE {
                 continue;
             }
             let present = attrs.contains_key(*key) || ds.attrs.contains_key(*key);
@@ -100,7 +135,7 @@ pub fn lint_declared_semantics(
                     severity: SemanticsLintSeverity::Warning,
                     dataset: name.clone(),
                     profile: Some(canonical.clone()),
-                    code: "missing_attr".into(),
+                    code: SemanticsLintCode::MissingAttr,
                     message: format!("claims {canonical} but missing recommended attr {key:?}"),
                 });
             }
@@ -122,7 +157,7 @@ fn lint_prov_log_history(
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
             profile: Some(PROV_LOG_V1.id.into()),
-            code: "empty_history".into(),
+            code: SemanticsLintCode::EmptyHistory,
             message: format!("claims {} but history is empty", PROV_LOG_V1.id),
         });
         return;
@@ -142,7 +177,7 @@ fn lint_prov_log_history(
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
             profile: Some(PROV_LOG_V1.id.into()),
-            code: "missing_prov_param".into(),
+            code: SemanticsLintCode::MissingProvParam,
             message: format!(
                 "claims {} but no history row has agent / params.agent",
                 PROV_LOG_V1.id
@@ -154,7 +189,7 @@ fn lint_prov_log_history(
             severity: SemanticsLintSeverity::Warning,
             dataset: dataset.to_owned(),
             profile: Some(PROV_LOG_V1.id.into()),
-            code: "missing_prov_param".into(),
+            code: SemanticsLintCode::MissingProvParam,
             message: format!(
                 "claims {} but no history row has activity / params.activity",
                 PROV_LOG_V1.id
@@ -192,7 +227,7 @@ pub fn lint_package_semantics(doc: &PackageSemanticsV1) -> SemanticsLintReport {
             }
         }
         if let Some(p) = &decl.semantics_profile {
-            attrs.insert("semantics_profile".into(), p.clone());
+            attrs.insert(ATTR_SEMANTICS_PROFILE.into(), p.clone());
         }
         meta.datasets.insert(
             name.clone(),
@@ -251,10 +286,9 @@ mod tests {
         let report = lint_declared_semantics(&meta, &[]);
         assert!(!report.ok());
         assert!(
-            report
-                .findings
-                .iter()
-                .any(|f| f.code == "missing_attr" && f.message.contains("units"))
+            report.findings.iter().any(|f| {
+                f.code == SemanticsLintCode::MissingAttr && f.message.contains("units")
+            })
         );
     }
 
@@ -275,7 +309,12 @@ mod tests {
         );
         let report = lint_declared_semantics(&meta, &[]);
         assert!(report.ok());
-        assert!(report.findings.iter().any(|f| f.code == "profile_alias"));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.code == SemanticsLintCode::ProfileAlias)
+        );
         assert!(
             report
                 .findings
@@ -323,12 +362,9 @@ mod tests {
         );
         let report = lint_declared_semantics(&meta, &[]);
         assert!(report.ok());
-        assert!(
-            report
-                .findings
-                .iter()
-                .any(|f| { f.code == "profile_alias" && f.message.contains("media.v1") })
-        );
+        assert!(report.findings.iter().any(|f| {
+            f.code == SemanticsLintCode::ProfileAlias && f.message.contains("media.v1")
+        }));
     }
 
     #[test]
@@ -343,6 +379,11 @@ mod tests {
         );
         let report = lint_declared_semantics(&meta, &[]);
         assert!(report.ok());
-        assert!(report.findings.iter().any(|f| f.code == "unknown_profile"));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.code == SemanticsLintCode::UnknownProfile)
+        );
     }
 }
