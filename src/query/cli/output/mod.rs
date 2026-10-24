@@ -23,8 +23,10 @@ pub enum QueryOutputFormat {
     Plan,
     /// One human-readable line on stdout.
     Quiet,
-    /// ASCII tables (summary, plan, result, optional preview).
+    /// Compact human tables: overview + result (+ preview). No plan/execution dump.
     Table,
+    /// Verbose human tables: overview + read_plan + execution + result (short fields).
+    TableVerbose,
 }
 
 impl std::str::FromStr for QueryOutputFormat {
@@ -38,8 +40,9 @@ impl std::str::FromStr for QueryOutputFormat {
             "plan" => Ok(Self::Plan),
             "quiet" => Ok(Self::Quiet),
             "table" => Ok(Self::Table),
+            "table-verbose" | "table_verbose" | "tablev" => Ok(Self::TableVerbose),
             other => Err(format!(
-                "unknown output format {other:?}; expected full, json, stats, plan, quiet, or table"
+                "unknown output format {other:?}; expected full, json, stats, plan, quiet, table, or table-verbose"
             )),
         }
     }
@@ -63,7 +66,10 @@ pub fn format_query_response(
         QueryOutputFormat::Stats => stats::format_stats_json(response),
         QueryOutputFormat::Plan => plan::format_plan_json(response),
         QueryOutputFormat::Quiet => quiet::format_quiet_line(response),
-        QueryOutputFormat::Table => table::format_table_text(response),
+        QueryOutputFormat::Table => table::format_table_text(response, table::TableDetail::Compact),
+        QueryOutputFormat::TableVerbose => {
+            table::format_table_text(response, table::TableDetail::Verbose)
+        }
     }
 }
 

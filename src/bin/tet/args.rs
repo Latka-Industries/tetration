@@ -87,7 +87,7 @@ pub enum Commands {
         /// Decode planned chunks and attach `execution` (requires `-t`).
         #[arg(short = 'x', long, requires = "tet")]
         execute: bool,
-        /// stdout: full, json, stats, plan (`read_plan` only), quiet. Default: full.
+        /// stdout: full, json, stats, plan, quiet, table, table-verbose. Default: full.
         #[arg(long, value_enum, default_value_t = QueryStdoutFormat::Full, conflicts_with = "quiet")]
         format: QueryStdoutFormat,
         /// Shorthand for `--format quiet` (one-line stdout).
@@ -477,8 +477,11 @@ pub enum QueryStdoutFormat {
     Plan,
     /// One human-readable line (`dataset=… op=… mean=…`).
     Quiet,
-    /// ASCII tables (summary, plan, aggregates, optional preview sample).
+    /// Compact tables: overview + result (+ preview). Receipt-style.
     Table,
+    /// Verbose tables: overview + read_plan + execution + result (short fields, no wide rows).
+    #[value(name = "table-verbose", alias = "tablev")]
+    TableVerbose,
 }
 
 impl From<QueryStdoutFormat> for QueryOutputFormat {
@@ -490,6 +493,7 @@ impl From<QueryStdoutFormat> for QueryOutputFormat {
             QueryStdoutFormat::Plan => Self::Plan,
             QueryStdoutFormat::Quiet => Self::Quiet,
             QueryStdoutFormat::Table => Self::Table,
+            QueryStdoutFormat::TableVerbose => Self::TableVerbose,
         }
     }
 }

@@ -10,6 +10,7 @@ use crate::catalog::{
 };
 use crate::layout::SuperblockV1;
 
+use super::pretty;
 use super::text::{contains_ascii_case_insensitive, truncate_field};
 
 /// Default max chunk rows in the text table (`tet info --chunks`).
@@ -246,20 +247,21 @@ pub fn format_info_text(
 ) -> String {
     let filtered = filtered_summary(summary, filter);
     let mut out = String::new();
+    let mut header_rows = Vec::new();
     if let Some(p) = path {
-        let _ = writeln!(out, "file: {}", p.display());
+        header_rows.push(("file".into(), p.display().to_string()));
     }
-    let _ = writeln!(
-        out,
-        "size: {} bytes  layout_version: {}  datasets: {}  chunks: {}",
-        file_len,
-        summary.superblock.layout_version,
-        summary.datasets.len(),
-        summary.chunks.len()
-    );
+    header_rows.push(("size_bytes".into(), file_len.to_string()));
+    header_rows.push((
+        "layout_version".into(),
+        summary.superblock.layout_version.to_string(),
+    ));
+    header_rows.push(("datasets".into(), summary.datasets.len().to_string()));
+    header_rows.push(("chunks".into(), summary.chunks.len().to_string()));
     if let Some(f) = filter.filter(|f| !f.is_empty()) {
-        let _ = writeln!(out, "filter: {}", f.summary());
+        header_rows.push(("filter".into(), f.summary()));
     }
+    out.push_str(&pretty::render_kv_section("file:", &header_rows));
     if sections.layout() {
         out.push('\n');
         out.push_str(&format_layout_section(&summary.superblock));
@@ -449,26 +451,30 @@ fn format_datasets_table(
         }
         return out;
     }
-    out.push_str("datasets:\n");
-    let _ = writeln!(
-        out,
-        "  {:>3}  {:<20}  {:<5}  {:<16}  {:<12}  chunks",
-        "id", "name", "dtype", "shape", "chunk_shape"
-    );
-    for (id, ds) in datasets.iter().enumerate() {
-        let n_chunks = chunks.iter().filter(|c| c.dataset_id == id as u64).count();
-        let _ = writeln!(
-            out,
-            "  {:>3}  {:<20}  {:<5}  {:<16}  {:<12}  {}",
-            id,
-            truncate_field(&ds.name, 20),
-            dtype_label(ds.dtype),
-            shape_label(&ds.shape),
-            shape_label(&ds.chunk_shape),
-            n_chunks
-        );
+    let _ = writeln!(out, "{}", pretty::section_title("datasets:"));
+    let rows: Vec<Vec<String>> = datasets
+        .iter()
+        .enumerate()
+        .map(|(id, ds)| {
+            let n_chunks = chunks.iter().filter(|c| c.dataset_id == id as u64).count();
+            vec![
+                id.to_string(),
+                truncate_field(&ds.name, 40),
+                dtype_label(ds.dtype).to_owned(),
+                shape_label(&ds.shape),
+                shape_label(&ds.chunk_shape),
+                n_chunks.to_string(),
+            ]
+        })
+        .collect();
+    out.push_str(&pretty::render_table(
+        &["id", "name", "dtype", "shape", "chunk_shape", "chunks"],
+        &rows,
+    ));
+    out.push('\n');
+    for ds in datasets {
         if let Some(ds_meta) = metadata.datasets.get(&ds.name) {
-            append_dataset_metadata_lines(&mut out, ds_meta, metadata_display);
+            append_dataset_metadata_lines(&mut out, ds.name.as_str(), ds_meta, metadata_display);
         }
     }
     out
@@ -476,11 +482,13 @@ fn format_datasets_table(
 
 fn append_dataset_metadata_lines(
     out: &mut String,
+    dataset: &str,
     ds_meta: &DatasetMetadataV1,
     display: InfoMetadataDisplay,
 ) {
+    let mut rows = Vec::new();
     if let Some(dim_names) = &ds_meta.dim_names {
-        let _ = writeln!(out, "       dim_names: {}", dim_names.join(", "));
+        rows.push(("dim_names".to_owned(), dim_names.join(", ")));
     }
     if let Some(coords) = &ds_meta.coords {
         match display {
@@ -489,18 +497,25 @@ fn append_dataset_metadata_lines(
                     .iter()
                     .map(|(axis, c)| format!("{axis}({} labels)", c.labels.len()))
                     .collect();
-                let _ = writeln!(out, "       coords: {}", summary.join(", "));
+                rows.push(("coords".to_owned(), summary.join(", ")));
             }
             InfoMetadataDisplay::Verbose => {
                 for (axis, c) in coords {
-                    let _ = writeln!(out, "       {}", format_coord_axis_verbose(axis, c));
+                    rows.push(("coords".to_owned(), format_coord_axis_verbose(axis, c)));
                 }
             }
         }
     }
     for (k, v) in &ds_meta.attrs {
-        let _ = writeln!(out, "       {k}: {v}");
+        rows.push((k.clone(), v.clone()));
     }
+    if rows.is_empty() {
+        return;
+    }
+    out.push_str(&pretty::render_kv_section(
+        &format!("{dataset} metadata:"),
+        &rows,
+    ));
 }
 
 fn format_coord_axis_verbose(axis: &str, c: &CoordAxisV1) -> String {
@@ -532,59 +547,76 @@ fn format_chunks_table(
     } else {
         limit.min(chunks.len())
     };
-    out.push_str("chunks:\n");
+    let _ = writeln!(out, "{}", pretty::section_title("chunks:"));
     if show < chunks.len() {
         let _ = writeln!(
             out,
-            "  (showing {show} of {}; use -n 0 for all)",
-            chunks.len()
+            "{}",
+            pretty::dim_line(&format!(
+                "(showing {show} of {}; use -n 0 for all)",
+                chunks.len()
+            ))
         );
     }
-    let _ = writeln!(
-        out,
-        "  {:>4}  {:<12}  {:<8}  {:>10}  {:>10}  {:>5}  offset",
-        "#", "dataset", "coords", "raw", "stored", "codec"
-    );
-    for (i, ch) in chunks.iter().take(show).enumerate() {
-        let ds_name = datasets
-            .get(ch.dataset_id as usize)
-            .map_or("?", |d| d.name.as_str());
-        let _ = writeln!(
-            out,
-            "  {:>4}  {:<12}  {:<8}  {:>10}  {:>10}  {:>5}  {}",
-            i,
-            truncate_field(ds_name, 12),
-            chunk_coords_label(ch, datasets.get(ch.dataset_id as usize)),
-            ch.raw_byte_len,
-            ch.stored_byte_len,
-            codec_label(ch.codec),
-            ch.payload_offset
-        );
-    }
+    let rows: Vec<Vec<String>> = chunks
+        .iter()
+        .take(show)
+        .enumerate()
+        .map(|(i, ch)| {
+            let ds_name = datasets
+                .get(ch.dataset_id as usize)
+                .map_or("?", |d| d.name.as_str());
+            vec![
+                i.to_string(),
+                truncate_field(ds_name, 24),
+                chunk_coords_label(ch, datasets.get(ch.dataset_id as usize)),
+                ch.raw_byte_len.to_string(),
+                ch.stored_byte_len.to_string(),
+                codec_label(ch.codec).to_owned(),
+                ch.payload_offset.to_string(),
+            ]
+        })
+        .collect();
+    out.push_str(&pretty::render_table(
+        &["#", "dataset", "coords", "raw", "stored", "codec", "offset"],
+        &rows,
+    ));
     out
 }
 
 fn format_history_section(history: &[HistoryEventV1]) -> String {
     let mut out = String::new();
-    out.push_str("history:\n");
+    let _ = writeln!(out, "{}", pretty::section_title("history:"));
     if history.is_empty() {
         out.push_str("  (none)\n");
         return out;
     }
+    let rows: Vec<Vec<String>> = history
+        .iter()
+        .enumerate()
+        .map(|(i, ev)| {
+            vec![
+                (i + 1).to_string(),
+                ev.op.clone(),
+                ev.source.clone(),
+                ev.at.clone(),
+            ]
+        })
+        .collect();
+    out.push_str(&pretty::render_table(&["#", "op", "source", "at"], &rows));
     for (i, ev) in history.iter().enumerate() {
-        let _ = writeln!(
-            out,
-            "  {:>3}  {}  {}  at={}",
-            i + 1,
-            ev.op,
-            ev.source,
-            ev.at
-        );
+        let mut detail = Vec::new();
         if !ev.parents.is_empty() {
-            let _ = writeln!(out, "       parents: {}", ev.parents.join(", "));
+            detail.push(("parents".to_owned(), ev.parents.join(", ")));
         }
         for (k, v) in &ev.params {
-            let _ = writeln!(out, "       {k}: {v}");
+            detail.push((k.clone(), v.clone()));
+        }
+        if !detail.is_empty() {
+            out.push_str(&pretty::render_kv_section(
+                &format!("history[{}] params:", i + 1),
+                &detail,
+            ));
         }
     }
     out

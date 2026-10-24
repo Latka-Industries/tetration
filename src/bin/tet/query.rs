@@ -58,7 +58,8 @@ pub(crate) fn resolve_execute_preview_limit(
         QueryOutputFormat::Stats
         | QueryOutputFormat::Plan
         | QueryOutputFormat::Quiet
-        | QueryOutputFormat::Table => 0,
+        | QueryOutputFormat::Table
+        | QueryOutputFormat::TableVerbose => 0,
     })))
 }
 

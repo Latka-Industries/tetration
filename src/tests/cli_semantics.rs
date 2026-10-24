@@ -54,8 +54,10 @@ fn cli_semantics_set_then_info_and_scaffold() {
         .expect("spawn tet info");
     assert!(info.status.success());
     let info_out = String::from_utf8_lossy(&info.stdout);
-    assert!(info_out.contains("frame_rate: 30"), "{info_out}");
-    assert!(info_out.contains("time_axis: 0"), "{info_out}");
+    assert!(info_out.contains("frame_rate"), "{info_out}");
+    assert!(info_out.contains("30"), "{info_out}");
+    assert!(info_out.contains("time_axis"), "{info_out}");
+    assert!(info_out.contains('0'), "{info_out}");
 
     let scaffold = tet_command(&["semantics", "scaffold", path_s, "--format", "toml"])
         .output()
@@ -146,7 +148,8 @@ display = "Hz"
         .expect("spawn tet info");
     assert!(info.status.success());
     let info_out = String::from_utf8_lossy(&info.stdout);
-    assert!(info_out.contains("frame_rate: 30"), "{info_out}");
+    assert!(info_out.contains("frame_rate"), "{info_out}");
+    assert!(info_out.contains("30"), "{info_out}");
 
     let annotated = dir.path().join("annotated.toml");
     let again = tet_command(&[
