@@ -9,12 +9,17 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
-use super::declare::{ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS};
+use super::declare::{ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, DeclareFacts};
 use super::path_io::{ensure_mutable_tet, read_summary_from_path};
 use super::profiles::normalize_profile_id;
 use crate::catalog::history::{HistoryEvent, read_footer_blob_from_path, write_footer_blob};
 use crate::catalog::metadata::DatasetMetadataV1;
 use crate::catalog::{CatalogError, TetFileSummaryV1, TetMetadataV1};
+
+/// Declare section for one dataset (`dim_names` and/or attrs).
+///
+/// Absent `dim_names` means “do not touch axis names”. An empty `attrs` map means no attr writes.
+pub type DatasetDeclare = DeclareFacts;
 
 /// On-disk schema for `tet-semantics.toml`.
 pub const SEMANTICS_TOML_SCHEMA_VERSION: i64 = 1;
@@ -28,15 +33,6 @@ pub struct SemanticsDocument {
     pub datasets: BTreeMap<String, DatasetDeclare>,
     pub profiles: BTreeMap<String, BTreeMap<String, String>>,
     pub units: BTreeMap<String, BTreeMap<String, String>>,
-}
-
-/// Declare section for one dataset (`dim_names` and/or attrs).
-///
-/// Absent `dim_names` means “do not touch axis names”. An empty `attrs` map means no attr writes.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct DatasetDeclare {
-    pub dim_names: Option<Vec<String>>,
-    pub attrs: BTreeMap<String, String>,
 }
 
 /// One dataset that received a stamp.

@@ -77,13 +77,15 @@ pub use secondary_index::{
     encode_secondary_index, known_index_entries, prepare_secondary_index,
     read_secondary_index_file, secondary_index_for_packed, sorted_axis_ranges, value_postings,
 };
+#[cfg(test)]
+pub(crate) use semantics::ScriptedWizardIo;
 pub use semantics::{
     ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, CF_LITE_V1, DECLARED_ATTR_KEYS, DOCUMENTED_PROFILE_IDS,
-    DOCUMENTED_PROFILES, DatasetDeclare, MEDIA_V1, PROV_LOG_RECOMMENDED_PARAMS, PROV_LOG_V1,
-    ProfileContract, SEMANTICS_GUIDE_URL, ScaffoldFormat, ScaffoldPolicy, ScriptedWizardIo,
+    DOCUMENTED_PROFILES, DatasetDeclare, DeclareFacts, MEDIA_V1, PROV_LOG_RECOMMENDED_PARAMS,
+    PROV_LOG_V1, ProfileContract, SEMANTICS_GUIDE_URL, ScaffoldFormat, ScaffoldPolicy,
     SemanticsApplyReport, SemanticsDocument, SemanticsLintCode, SemanticsLintFinding,
     SemanticsLintReport, SemanticsLintSeverity, StampedDataset, StdWizardIo, TIMESERIES_V1,
-    WizardIo, WizardOptions, WizardResult, apply_semantics_toml, declared_attrs,
+    WizardChoice, WizardIo, WizardOptions, WizardResult, apply_semantics_toml, declared_attrs,
     declared_attrs_for_dataset, default_rate_formula_pairs, default_rate_formulas,
     format_apply_report, format_lint_report, get_dataset_attr, infer_profile_id, is_declared_key,
     is_documented_profile, lint_declared_semantics, lint_package_semantics, lint_summary,

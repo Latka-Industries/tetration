@@ -323,8 +323,8 @@ fn scaffold_json(summary: &TetFileSummaryV1) -> String {
         datasets.insert(
             row.name.clone(),
             DatasetOut {
-                dim_names: row.dim_names.clone(),
-                attrs: row.attrs.clone(),
+                dim_names: row.facts.dim_names.clone(),
+                attrs: row.facts.attrs.clone(),
             },
         );
     }
@@ -339,10 +339,18 @@ fn scaffold_json(summary: &TetFileSummaryV1) -> String {
     serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_owned())
 }
 
+/// Shared `dim_names` + attrs facts (scaffold / apply / wizard). Open attr minting stays a map.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DeclareFacts {
+    /// Axis names in rank order. `None` means “do not touch” (apply) or absent (scaffold).
+    pub dim_names: Option<Vec<String>>,
+    /// Footer / TOML attrs (any key allowed).
+    pub attrs: BTreeMap<String, String>,
+}
+
 struct DeclareRow {
     name: String,
-    dim_names: Option<Vec<String>>,
-    attrs: BTreeMap<String, String>,
+    facts: DeclareFacts,
 }
 
 fn collect_declare_rows(summary: &TetFileSummaryV1) -> Vec<DeclareRow> {
@@ -358,8 +366,7 @@ fn collect_declare_rows(summary: &TetFileSummaryV1) -> Vec<DeclareRow> {
         }
         rows.push(DeclareRow {
             name: rec.name.clone(),
-            dim_names,
-            attrs,
+            facts: DeclareFacts { dim_names, attrs },
         });
     }
     rows
@@ -410,21 +417,31 @@ fn render_combined_toml(rows: &[DeclareRow], overlay: Option<&ScaffoldPolicy>) -
 }
 
 fn render_dataset_toml(out: &mut String, row: &DeclareRow) {
-    let _ = writeln!(out, "[datasets.{}]", bare_or_quoted(&row.name));
-    if let Some(names) = &row.dim_names {
+    let missing = missing_recommended(row);
+    render_dataset_declare_toml(out, &row.name, &row.facts, &missing);
+}
+
+/// Write `[datasets.<name>]` + optional attrs (and `# key =` comments for `missing`).
+pub(crate) fn render_dataset_declare_toml(
+    out: &mut String,
+    name: &str,
+    facts: &DeclareFacts,
+    missing: &[&str],
+) {
+    let _ = writeln!(out, "[datasets.{}]", bare_or_quoted(name));
+    if let Some(names) = &facts.dim_names {
         out.push_str("dim_names = [");
-        for (i, name) in names.iter().enumerate() {
+        for (i, dim) in names.iter().enumerate() {
             if i > 0 {
                 out.push_str(", ");
             }
-            out.push_str(&toml_string(name));
+            out.push_str(&toml_string(dim));
         }
         out.push_str("]\n");
     }
-    let missing = missing_recommended(row);
-    if !row.attrs.is_empty() || !missing.is_empty() {
-        let _ = writeln!(out, "[datasets.{}.attrs]", bare_or_quoted(&row.name));
-        for (key, value) in &row.attrs {
+    if !facts.attrs.is_empty() || !missing.is_empty() {
+        let _ = writeln!(out, "[datasets.{}.attrs]", bare_or_quoted(name));
+        for (key, value) in &facts.attrs {
             out.push_str(&bare_or_quoted(key));
             out.push_str(" = ");
             out.push_str(&toml_string(value));
@@ -446,15 +463,15 @@ fn missing_recommended(row: &DeclareRow) -> Vec<&'static str> {
     recommended_keys_for_profile(&profile)
         .iter()
         .copied()
-        .filter(|key| !row.attrs.contains_key(*key))
+        .filter(|key| !row.facts.attrs.contains_key(*key))
         .collect()
 }
 
 fn profile_for_row(row: &DeclareRow) -> Option<String> {
-    if let Some(id) = row.attrs.get(ATTR_SEMANTICS_PROFILE) {
+    if let Some(id) = row.facts.attrs.get(ATTR_SEMANTICS_PROFILE) {
         return Some(normalize_profile_id(id).to_owned());
     }
-    infer_profile_id(&row.attrs).map(str::to_owned)
+    infer_profile_id(&row.facts.attrs).map(str::to_owned)
 }
 
 fn generated_profiles(rows: &[DeclareRow]) -> BTreeMap<String, BTreeMap<String, String>> {
@@ -515,7 +532,7 @@ fn collect_unit_tokens(rows: &[DeclareRow]) -> BTreeSet<String> {
     let mut units = BTreeSet::new();
     for row in rows {
         for key in ["units", "frame_rate_unit", "sample_rate_unit", "pixel_unit"] {
-            if let Some(unit) = row.attrs.get(key)
+            if let Some(unit) = row.facts.attrs.get(key)
                 && unit.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
             {
                 units.insert(unit.clone());
