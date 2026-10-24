@@ -234,7 +234,7 @@ fn ensure_dataset_exists(summary: &TetFileSummaryV1, dataset: &str) -> Result<()
     }
 }
 
-fn dtype_label(tag: u32) -> &'static str {
+pub(crate) fn dtype_label(tag: u32) -> &'static str {
     match ElementDtype::try_from_wire_tag(tag) {
         Some(ElementDtype::F32) => "f32",
         Some(ElementDtype::F64) => "f64",
@@ -494,7 +494,7 @@ fn generated_units(rows: &[DeclareRow]) -> BTreeMap<String, BTreeMap<String, Str
     units
 }
 
-fn dotted_table(prefix: &str, id: &str) -> String {
+pub(crate) fn dotted_table(prefix: &str, id: &str) -> String {
     let body = id
         .split('.')
         .map(bare_or_quoted)
@@ -503,7 +503,7 @@ fn dotted_table(prefix: &str, id: &str) -> String {
     format!("[{prefix}.{body}]")
 }
 
-fn bare_or_quoted(segment: &str) -> String {
+pub(crate) fn bare_or_quoted(segment: &str) -> String {
     if !segment.is_empty()
         && segment
             .chars()
@@ -515,7 +515,7 @@ fn bare_or_quoted(segment: &str) -> String {
     }
 }
 
-fn toml_string(value: &str) -> String {
+pub(crate) fn toml_string(value: &str) -> String {
     format!("{value:?}")
 }
 
@@ -550,6 +550,19 @@ fn collect_unit_tokens(rows: &[DeclareRow]) -> BTreeSet<String> {
     units
 }
 
+/// Write bare `frames` `[6, 2, 2]` / chunk `[2, 2, 2]` (values `1..24` as `f32`) with **no** footer dims/attrs.
+///
+/// Intended for the metadata wizard scratch loop ([THI-638](https://linear.app/thicclatka/issue/THI-638)):
+/// open → see shape → name axes interactively. Prefer `fixtures/scratch/wizard.tet` via
+/// `mise semantics:scratch` rather than mutating tracked fixtures.
+///
+/// # Errors
+///
+/// Returns [`CatalogError`] when the raw write fails.
+pub fn write_wizard_scratch_fixture(path: &Path) -> Result<(), CatalogError> {
+    write_recording_raw(path)
+}
+
 /// Write a small recording fixture with media attrs + provenance (tests / tracked fixtures).
 ///
 /// Shape `[6, 2, 2]` / chunk `[2, 2, 2]`, dataset `frames`, values `1..24` as `f32`.
@@ -558,28 +571,7 @@ fn collect_unit_tokens(rows: &[DeclareRow]) -> BTreeSet<String> {
 ///
 /// Returns [`CatalogError`] when write or footer update fails.
 pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
-    use crate::catalog::{
-        CHUNK_PAYLOAD_CODEC_V1, DATASET_DTYPE_TAG_V1, RawArrayWrite, write_raw_array_file,
-    };
-
-    const SHAPE: [u64; 3] = [6, 2, 2];
-    const CHUNK: [u64; 3] = [2, 2, 2];
-    let mut data = vec![0u8; 6 * 2 * 2 * 4];
-    for (slot, n) in data.as_chunks_mut::<4>().0.iter_mut().zip(1_u32..=24) {
-        slot.copy_from_slice(&(n as f32).to_le_bytes());
-    }
-    write_raw_array_file(
-        path,
-        &RawArrayWrite {
-            name: "frames",
-            dtype: DATASET_DTYPE_TAG_V1.f32,
-            shape: &SHAPE,
-            chunk_shape: &CHUNK,
-            chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
-            data: &data,
-            file_execution: None,
-        },
-    )?;
+    write_recording_raw(path)?;
 
     let mut attrs = BTreeMap::new();
     attrs.insert("frame_rate".into(), "30".into());
@@ -614,4 +606,29 @@ pub fn write_recording_fixture(path: &Path) -> Result<(), CatalogError> {
         },
     )?;
     Ok(())
+}
+
+fn write_recording_raw(path: &Path) -> Result<(), CatalogError> {
+    use crate::catalog::{
+        CHUNK_PAYLOAD_CODEC_V1, DATASET_DTYPE_TAG_V1, RawArrayWrite, write_raw_array_file,
+    };
+
+    const SHAPE: [u64; 3] = [6, 2, 2];
+    const CHUNK: [u64; 3] = [2, 2, 2];
+    let mut data = vec![0u8; 6 * 2 * 2 * 4];
+    for (slot, n) in data.as_chunks_mut::<4>().0.iter_mut().zip(1_u32..=24) {
+        slot.copy_from_slice(&(n as f32).to_le_bytes());
+    }
+    write_raw_array_file(
+        path,
+        &RawArrayWrite {
+            name: "frames",
+            dtype: DATASET_DTYPE_TAG_V1.f32,
+            shape: &SHAPE,
+            chunk_shape: &CHUNK,
+            chunk_codec: CHUNK_PAYLOAD_CODEC_V1.raw,
+            data: &data,
+            file_execution: None,
+        },
+    )
 }

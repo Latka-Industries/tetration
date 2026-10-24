@@ -14,3 +14,8 @@ large/
 extra_large/
 bench_small/
 bench_results/
+
+# Metadata wizard scratch (mise semantics:scratch) — mutable; do not commit
+scratch/**/*
+!scratch/
+!scratch/README.md

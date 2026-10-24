@@ -12,6 +12,7 @@ Tracked binaries for **manual** CLI checks and `src/tests/small_tet_fixtures.rs`
 | `multichunk_u32.tet` | Multichunk `u32`, values 1..6                                            |
 | `multichunk_f16.tet` | Multichunk `f16`, values 1..6                                            |
 | `recording.tet`      | Media worked example: `frames` `[6,2,2]` + `frame_rate` / `time_axis` (THI-583) |
+| *(scratch)*          | Mutable wizard clip: `mise semantics:scratch` → [`fixtures/scratch/`](../../scratch/README.md) (THI-638) |
 | `group_by_labels.tet` | Multichunk `f32` `[2,3]` + repeated `col` labels (`east`,`east`,`west`) for label `group_by` (THI-596) |
 | `align_pair.tet`     | Two datasets `a`/`b` for multi-dataset `align` checks (THI-594) |
 | `reject/overflow_tile_extent.tet` | Malformed chunk coords (libFuzzer); `tet verify` must fail without panic |
