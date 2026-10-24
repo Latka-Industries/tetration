@@ -362,14 +362,9 @@ mod tests {
         );
         let report = lint_declared_semantics(&meta, &[]);
         assert!(report.ok());
-        assert!(
-            report
-                .findings
-                .iter()
-                .any(|f| {
-                    f.code == SemanticsLintCode::ProfileAlias && f.message.contains("media.v1")
-                })
-        );
+        assert!(report.findings.iter().any(|f| {
+            f.code == SemanticsLintCode::ProfileAlias && f.message.contains("media.v1")
+        }));
     }
 
     #[test]

@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let shape = ds
             .shape
             .iter()
-            .map(|d| d.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join("×");
         println!("  {}  dtype={}  shape={shape}", ds.name, ds.dtype);
@@ -82,7 +82,7 @@ fn resolve_tet_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
 
 fn write_demo_file(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut data = vec![0u8; 24];
-    for (slot, n) in data.chunks_exact_mut(4).zip(1_u8..=6) {
+    for (slot, n) in data.as_chunks_mut::<4>().0.iter_mut().zip(1_u8..=6) {
         slot.copy_from_slice(&f32::from(n).to_le_bytes());
     }
     write_raw_array_file(

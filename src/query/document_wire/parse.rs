@@ -17,6 +17,7 @@ use super::pipeline::{lower_pipeline, parse_pipeline};
 /// # Errors
 ///
 /// [`TetError::Validation`] or [`TetError::InvalidJson`].
+#[allow(clippy::too_many_lines)] // flat document field dispatch stays in one place
 pub fn parse_query_value(value_ref: &Value) -> Result<QueryDocument, TetError> {
     let obj = value_ref
         .as_object()

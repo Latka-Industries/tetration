@@ -480,7 +480,7 @@ pub enum QueryStdoutFormat {
     Quiet,
     /// Compact tables: overview + result (+ preview). Receipt-style.
     Table,
-    /// Verbose tables: overview + read_plan + execution + result (short fields, no wide rows).
+    /// Verbose tables: overview + `read_plan` + execution + result (short fields, no wide rows).
     #[value(name = "table-verbose", alias = "tablev")]
     TableVerbose,
 }

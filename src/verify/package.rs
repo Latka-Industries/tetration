@@ -285,6 +285,7 @@ fn check_manifest_ids(
     Ok(findings)
 }
 
+#[allow(clippy::too_many_lines)] // required/present/absent zone-map cases stay in one check
 fn check_zone_maps(
     package: &TetPackage,
     generation: u64,

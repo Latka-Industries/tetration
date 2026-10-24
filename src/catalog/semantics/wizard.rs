@@ -608,14 +608,14 @@ fn prompt_profile_and_attrs(
         .attrs
         .get(ATTR_SEMANTICS_PROFILE)
         .map(String::as_str);
-    let profile = if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_items, profile_last)?
-    {
-        let p = WizardProfile::ALL[i];
-        attrs.insert(ATTR_SEMANTICS_PROFILE.to_owned(), p.id().to_owned());
-        Some(p)
-    } else {
-        None
-    };
+    let profile =
+        if let Some(i) = io.select(ATTR_SEMANTICS_PROFILE, &profile_items, profile_last)? {
+            let p = WizardProfile::ALL[i];
+            attrs.insert(ATTR_SEMANTICS_PROFILE.to_owned(), p.id().to_owned());
+            Some(p)
+        } else {
+            None
+        };
     let keys = profile
         .map(WizardProfile::recommended_attr_keys)
         .unwrap_or_default();
@@ -757,11 +757,7 @@ fn format_profile_menu() -> String {
         &["#", "id", "about", "includes (attrs)"],
         &rows,
     ));
-    let _ = writeln!(
-        out,
-        "{}",
-        dim_line("↑↓ pick · Enter · Esc/(skip) = none")
-    );
+    let _ = writeln!(out, "{}", dim_line("↑↓ pick · Enter · Esc/(skip) = none"));
     out
 }
 

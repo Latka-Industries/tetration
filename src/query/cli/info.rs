@@ -4,9 +4,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::catalog::{
-    CHUNK_PAYLOAD_CODEC_V1, ChunkIndexEntryV1, CoordAxisV1,
-    DatasetMetadataV1, DatasetRecordV1, FileExecutionSettingsV1, HistoryEventV1, TetFileSummaryV1,
-    TetMetadataV1,
+    CHUNK_PAYLOAD_CODEC_V1, ChunkIndexEntryV1, CoordAxisV1, DatasetMetadataV1, DatasetRecordV1,
+    FileExecutionSettingsV1, HistoryEventV1, TetFileSummaryV1, TetMetadataV1,
 };
 use crate::layout::SuperblockV1;
 

@@ -610,37 +610,37 @@ fn accumulate_chunk(
     }
     let tags = DATASET_DTYPE_TAG_V1;
     if tags.is_f32(dtype) {
-        return stream_float_chunk::<4, f32>(
+        return Ok(stream_float_chunk::<4, f32>(
             acc,
             chunk_index,
             raw,
             fill,
             f32::from_le_bytes,
             f32::is_nan,
-        );
+        ));
     }
     if tags.is_f64(dtype) {
-        return stream_float_chunk::<8, f64>(
+        return Ok(stream_float_chunk::<8, f64>(
             acc,
             chunk_index,
             raw,
             fill,
             f64::from_le_bytes,
             f64::is_nan,
-        );
+        ));
     }
     if tags.is_f16(dtype) {
-        return stream_float_chunk::<2, half::f16>(
+        return Ok(stream_float_chunk::<2, half::f16>(
             acc,
             chunk_index,
             raw,
             fill,
             half::f16::from_le_bytes,
             half::f16::is_nan,
-        );
+        ));
     }
     if matches_int(dtype, elem_size) {
-        return stream_int_chunk(acc, chunk_index, raw, elem_size, fill);
+        return Ok(stream_int_chunk(acc, chunk_index, raw, elem_size, fill));
     }
     Err(CatalogError::InvalidWriteSpec(
         "unsupported dataset dtype tag",
@@ -668,16 +668,16 @@ fn stream_int_chunk(
     raw: &[u8],
     elem_size: usize,
     fill: Option<&[u8]>,
-) -> Result<bool, CatalogError> {
+) -> bool {
     for le in raw.chunks_exact(elem_size) {
         if fill.is_some_and(|f| f == le) {
             continue;
         }
         if !note_value(acc, chunk_index, le.to_vec()) {
-            return Ok(false);
+            return false;
         }
     }
-    Ok(true)
+    true
 }
 
 fn stream_float_chunk<const N: usize, T: Copy>(
@@ -687,17 +687,17 @@ fn stream_float_chunk<const N: usize, T: Copy>(
     fill: Option<&[u8]>,
     from_le: fn([u8; N]) -> T,
     is_nan: fn(T) -> bool,
-) -> Result<bool, CatalogError> {
+) -> bool {
     for le in raw.as_chunks::<N>().0 {
         let v = from_le(*le);
         if is_nan(v) || fill.is_some_and(|f| f == le.as_slice()) {
             continue;
         }
         if !note_value(acc, chunk_index, le.to_vec()) {
-            return Ok(false);
+            return false;
         }
     }
-    Ok(true)
+    true
 }
 
 fn matches_int(dtype: u32, elem_size: usize) -> bool {
