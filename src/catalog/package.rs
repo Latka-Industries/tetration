@@ -130,7 +130,7 @@ pub struct GcOptions {
 }
 
 /// Paths / generation ids [`TetPackage::gc`] would remove (or did remove when applied).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct GcPlan {
     /// Staging session directories under `staging/` (whole trees).
     pub staging_sessions: Vec<PathBuf>,

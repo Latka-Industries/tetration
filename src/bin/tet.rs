@@ -56,7 +56,17 @@ fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Commands::Semantics(args) => run_semantics(args.cmd),
         Commands::Worker { job } => run_worker(job),
-        Commands::Run { job, dry_run, root } => run_run(RunCmdOpts { job, dry_run, root }),
+        Commands::Run {
+            job,
+            dry_run,
+            root,
+            json,
+        } => run_run(RunCmdOpts {
+            job,
+            dry_run,
+            root,
+            json,
+        }),
         cmd @ (Commands::Info { .. }
         | Commands::Query { .. }
         | Commands::Qhist(_)

@@ -761,3 +761,132 @@ fn ingest_creates_a_missing_package_regardless_of_create() {
         assert!(dir.path().join("deep/p.tet.d/PROTOCOL").is_file());
     }
 }
+
+#[test]
+fn every_executed_step_fills_data() {
+    let dir = scratch_with_csv();
+    let job = toml_job(
+        r#"
+schema_version = 1
+[[step]]
+op = "convert"
+from = "raw/table.csv"
+to = "work/table.tet"
+[[step]]
+op = "info"
+path = "work/table.tet"
+[[step]]
+op = "repair"
+path = "work/table.tet"
+[[step]]
+op = "index"
+path = "work/table.tet"
+quiet = true
+[[step]]
+op = "semantics.set"
+path = "work/table.tet"
+dataset = "temp"
+set = { frame_rate = 30 }
+[[step]]
+op = "semantics.lint"
+path = "work/table.tet"
+[[step]]
+op = "semantics.scaffold"
+path = "work/table.tet"
+[[step]]
+op = "semantics.scaffold"
+path = "work/table.tet"
+output = "out/policy.toml"
+[[step]]
+op = "ingest"
+from = "work/table.tet"
+to = "work/pkg.tet.d"
+jobs = 1
+quiet = true
+[[step]]
+op = "publish"
+package = "work/pkg.tet.d"
+dry_run = true
+quiet = true
+[[step]]
+op = "compact"
+package = "work/pkg.tet.d"
+quiet = true
+[[step]]
+op = "semantics.package-write"
+path = "work/pkg.tet.d"
+[[step]]
+op = "gc"
+target = "work/pkg.tet.d"
+quiet = true
+[[step]]
+op = "pack"
+from = "work/pkg.tet.d"
+to = "out/packed.tet"
+quiet = true
+[[step]]
+op = "index"
+path = "work/table.tet"
+clear = true
+quiet = true
+"#,
+    )
+    .unwrap();
+    let report = run_job(&job, &opts(dir.path())).unwrap();
+    for step in &report.steps {
+        assert!(step.data.is_some(), "{} has no data", step.op);
+    }
+    let data = |i: usize| report.steps[i].data.as_ref().unwrap();
+    assert_eq!(
+        data(1)["summary"]["datasets"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert!(data(2)["actions"].is_array());
+    assert_eq!(data(3)["ok"], true);
+    assert_eq!(data(3)["cleared"], false);
+    assert_eq!(data(4)["dataset"], "temp");
+    assert_eq!(data(4)["set"]["frame_rate"], "30");
+    assert!(data(5)["findings"].is_array());
+    assert_eq!(data(6)["format"], "toml");
+    assert!(data(6)["output"].is_null());
+    assert!(data(7)["output"].is_string());
+    assert_eq!(data(8)["parts"].as_array().map(Vec::len), Some(1));
+    assert!(data(8)["parts"][0]["part"]["part_id"].is_string());
+    assert_eq!(data(9)["mode"], "dry_run");
+    assert_eq!(data(9)["validation"]["generation"], 1);
+    assert_eq!(data(10)["mode"], "published");
+    assert_eq!(data(10)["manifest"]["generation"], 1);
+    assert_eq!(data(11)["generation"], 1);
+    assert!(data(11)["semantics"]["datasets"].is_object());
+    assert_eq!(data(12)["apply"], false);
+    assert!(data(12)["plan"]["generations"].is_array());
+    assert_eq!(data(13)["generation"], 1);
+    assert_eq!(data(14)["cleared"], true);
+}
+
+#[test]
+fn semantics_apply_fills_data() {
+    let dir = scratch_with_csv();
+    let job = toml_job(
+        r#"
+schema_version = 1
+[[step]]
+op = "convert"
+from = "raw/table.csv"
+to = "work/table.tet"
+[[step]]
+op = "semantics.apply"
+path = "work/table.tet"
+from = "sem.toml"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("sem.toml"),
+        "schema_version = 1\n[datasets.temp]\ndim_names = [\"t\"]\n",
+    )
+    .unwrap();
+    let report = run_job(&job, &opts(dir.path())).unwrap();
+    let stamped = &report.steps[1].data.as_ref().unwrap()["stamped"];
+    assert_eq!(stamped[0]["dataset"], "temp");
+}

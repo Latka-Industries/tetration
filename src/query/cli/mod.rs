@@ -23,6 +23,6 @@ pub use history::{
 pub use info::{
     DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, InfoSection,
     InfoSectionRequest, InfoViewSections, format_info_json, format_info_quiet, format_info_text,
-    info_view_sections_from_flags,
+    info_json_value, info_view_sections_from_flags,
 };
 pub use output::{QueryOutputFormat, format_query_response, format_query_stderr_hints};

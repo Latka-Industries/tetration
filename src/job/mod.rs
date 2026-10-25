@@ -148,7 +148,8 @@ pub struct StepReport {
     pub stdout: Option<String>,
     /// Text the matching `tet` command prints to stderr (progress / summary lines).
     pub note: Option<String>,
-    /// Structured result where one exists (convert / export / verify report, query response).
+    /// Structured result: the programmatic grab bag (the CLI's `--json` shape or the library
+    /// report type, serialized). Set for every executed step; `None` under dry run.
     pub data: Option<serde_json::Value>,
 }
 

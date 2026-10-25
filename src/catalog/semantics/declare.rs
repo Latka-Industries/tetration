@@ -50,7 +50,8 @@ pub const DECLARED_ATTR_KEYS: &[&str] = &[
 pub const SEMANTICS_GUIDE_URL: &str = "https://docs.tetration.sh/guides/semantics/";
 
 /// Output format for [`scaffold_policy`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "tetration-cli", derive(clap::ValueEnum))]
 pub enum ScaffoldFormat {
     /// `tet-semantics.toml` stub.

@@ -290,6 +290,12 @@ pub enum Commands {
         /// Directory that relative paths in the job resolve against.
         #[arg(long, value_name = "DIR")]
         root: Option<PathBuf>,
+        /// Print the full `JobReport` as pretty JSON on stdout (progress stays on stderr).
+        ///
+        /// Each `steps[].data` carries the step's structured result. On a step failure the
+        /// exit code is 1 and stdout holds the steps that completed plus an `error` object.
+        #[arg(long)]
+        json: bool,
     },
     /// Run one distributed worker job (`WorkerJobV1` JSON → `WorkerPartialV1` JSON).
     ///

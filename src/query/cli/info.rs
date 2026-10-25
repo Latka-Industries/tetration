@@ -204,14 +204,25 @@ pub fn format_info_json(
     summary: &TetFileSummaryV1,
     filter: Option<&InfoListFilter>,
 ) -> Result<String, String> {
+    serde_json::to_string_pretty(&info_json_value(path, file_len, summary, filter))
+        .map_err(|e| e.to_string())
+}
+
+/// The value [`format_info_json`] prints (`tet info --json`), for structured callers.
+#[must_use]
+pub fn info_json_value(
+    path: Option<&Path>,
+    file_len: u64,
+    summary: &TetFileSummaryV1,
+    filter: Option<&InfoListFilter>,
+) -> serde_json::Value {
     let filtered = filtered_summary(summary, filter);
-    let out = serde_json::json!({
+    serde_json::json!({
         "path": path.map(|p| p.display().to_string()),
         "file_len": file_len,
         "filter": filter.filter(|f| !f.is_empty()).map(InfoListFilter::summary),
         "summary": filtered,
-    });
-    serde_json::to_string_pretty(&out).map_err(|e| e.to_string())
+    })
 }
 
 /// One-line summary (`tet info -q`).

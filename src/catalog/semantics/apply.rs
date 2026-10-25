@@ -9,6 +9,8 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
+use serde::Serialize;
+
 use super::declare::{ATTR_SEMANTICS_PROFILE, ATTR_TIME_AXIS, DeclareFacts};
 use super::path_io::{ensure_mutable_tet, read_summary_from_path};
 use super::profiles::normalize_profile_id;
@@ -36,7 +38,7 @@ pub struct SemanticsDocument {
 }
 
 /// One dataset that received a stamp.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StampedDataset {
     pub dataset: String,
     pub dim_names: Option<Vec<String>>,
@@ -47,7 +49,7 @@ pub struct StampedDataset {
 }
 
 /// What `apply` wrote versus what stayed in the TOML.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SemanticsApplyReport {
     pub stamped: Vec<StampedDataset>,
     pub profiles_left: Vec<String>,

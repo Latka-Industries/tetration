@@ -10,6 +10,8 @@ use std::fs;
 use std::io::{self, BufRead, Write as IoWrite};
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
+
 use super::apply::{
     SemanticsApplyReport, apply_semantics_toml, format_apply_report, parse_semantics_toml,
 };
@@ -193,7 +195,7 @@ impl WizardOptions {
 }
 
 /// What the wizard wrote / stamped.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WizardResult {
     pub dataset: String,
     pub toml_path: PathBuf,

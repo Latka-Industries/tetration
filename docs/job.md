@@ -8,12 +8,14 @@ A job file is an ordered list of stock `tet` steps in TOML or JSON. `tet run job
 tet run job.toml                    # run; relative paths resolve against the job file's directory
 tet run job.toml --dry-run          # validate + print the plan; execute nothing
 tet run job.toml --root /data/run1  # resolve relative paths against DIR instead
+tet run job.toml --json > report.json  # full JobReport as JSON on stdout
 ```
 
 | Flag        | Effect                                                                       |
 | ----------- | ---------------------------------------------------------------------------- |
 | `--dry-run` | Parse, validate (including query documents), print each step; run nothing    |
 | `--root DIR`| Base directory for relative paths (default: the job file's parent directory) |
+| `--json`    | Print the full `JobReport` as pretty JSON on **stdout**; progress stays on stderr (see [Machine-readable output](#machine-readable-output)) |
 
 `s3://…` values (convert `from`, query `tet`, gc `target`) are passed through untouched.
 
@@ -86,6 +88,41 @@ Notes:
 
 Steps call the same library functions as the CLI (no subprocess), so a step behaves like the equivalent `tet` command.
 
+## Machine-readable output
+
+`tet run job.toml --json` prints the whole `JobReport` (`dry_run`, `root`, `steps`, `elapsed_secs`) as pretty JSON on **stdout** after the job finishes. Nothing else goes to stdout: the `[N/TOTAL]` progress lines, kv tables, and notes still print on **stderr** so a human watching sees progress, and multi-line step dumps (`quiet = false`, tables) move to stderr too (they are also in each step's `stdout` field). Combine with `--dry-run` for a planned report (`status = "planned"`, `data = null`).
+
+```bash
+tet run fixtures/jobs/csv_verify_query.toml --json 2>/dev/null | jq '.steps[].data | keys'
+```
+
+Each entry in `steps` is a `StepReport`: `index`, `op`, `status`, `description`, `elapsed_secs`, `stdout` (text the CLI prints), `note` (text for stderr), and **`data`**.
+
+**`step.data` is the programmatic grab bag.** Every executed step fills it with the structured result (serde of the library report type where one exists), so tooling never has to parse `stdout` / `note`. tet-py is expected to expose the same `JobReport` shape once job bindings land.
+
+| `op` | `data` |
+| ---- | ------ |
+| `info` | The `tet info --json` envelope (`path`, `file_len`, `filter`, `summary`), regardless of `json` / `quiet` |
+| `verify` | `TetVerifyReport` |
+| `repair` | `RepairPlan` (no `apply`) or `TetRepairReport` |
+| `query` | `QueryResponse` |
+| `convert` / `export` | `ConvertReport` / `ExportReport` |
+| `index` | `{ ok, path, cleared, packed_sha256, zone_maps_sha256, index_present }` (`cleared = true` carries only `ok` / `path` / `cleared`) |
+| `semantics.apply` | `SemanticsApplyReport` (`stamped`, `profiles_left`, `units_left`) |
+| `semantics.scaffold` | `{ ok, path, format, output }` (`output` is `null` when the text went to `stdout`) |
+| `semantics.set` | `{ ok, path, dataset, set, clear }` |
+| `semantics.wizard` | `WizardResult` (`dataset`, `toml_path`, `apply`) |
+| `semantics.lint` | `SemanticsLintReport` (`findings`) |
+| `semantics.package-write` | `{ ok, path, generation, sha256, semantics }` (`semantics` is the written `SEMANTICS.json` document) |
+| `ingest` | `{ package, jobs, parts: [{ source, part }] }` (`part` is `PartMeta`) |
+| `publish` / `compact` | `{ mode: "published", package, manifest }` (`GenerationManifest`), `{ mode: "dry_run", package, validation }` (`PublishValidation`), or `{ mode: "aborted", package, generation, current_before }` |
+| `pack` | `{ ok, package, output, generation, remove_package }` |
+| `gc` | `{ target, apply, plan }` (local, `GcPlan`) or `{ target, apply, report }` (`s3://`, `PruneReport`) |
+
+`data` is set even when `quiet = true` suppresses the matching `note`.
+
+**Failures.** The exit code is still 1 and stderr still says `error: step N (op) failed: …` (`N` is **1-based**). If at least one step **completed**, stdout additionally holds those steps as a `JobReport` plus an `error` object (`index`, `op`, `message`, `path`). `error.index` is **0-based** (same as `steps[].index`), so stderr “step 2” ↔ JSON `"index": 1`. `elapsed_secs` on a partial report is the sum of completed step times, not wall clock. First-step failures, parse, pre-flight, and I/O errors print nothing on stdout. Always check the exit code (or the `error` key) before treating stdout as a success report.
+
 ## Library API
 
 `tetration::job` is the same engine, quiet and structured (no `indicatif`, no printing):
@@ -99,7 +136,7 @@ let report = run_job_path(
 )?;
 for step in &report.steps {
     println!("{} {} ({:.2}s)", step.op, step.description, step.elapsed_secs);
-    // step.stdout / step.note / step.data (convert / export / verify reports, query response)
+    // step.stdout / step.note / step.data (structured result for every executed step)
 }
 ```
 

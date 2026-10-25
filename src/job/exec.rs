@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rayon::prelude::*;
+use serde::Serialize;
+use serde_json::json;
 
 use crate::catalog::{
     GcOptions, PackGenerationOptions, PublishPartsOptions, ScaffoldFormat, ScaffoldPolicy,
@@ -27,8 +29,8 @@ use crate::layout::mmap_file_read;
 use crate::query::cli::{
     DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, InfoSection,
     InfoSectionRequest, QUERY_PREVIEW_DEFAULT, QueryOutputFormat, append_cli_query_history,
-    format_info_json, format_info_quiet, format_info_text, format_query_response,
-    format_query_stderr_hints, info_view_sections_from_flags,
+    format_info_quiet, format_info_text, format_query_response, format_query_stderr_hints,
+    info_json_value, info_view_sections_from_flags,
 };
 use crate::query::{
     ExecutionDeviceHint, QueryDocument, QueryResponse, SpillPathAllowlist,
@@ -83,6 +85,18 @@ impl StepOutput {
             Self::note(text)
         }
     }
+
+    /// Attach the structured result (`StepReport::data`). Serialization of our report types
+    /// cannot fail in practice; a failure leaves `data` empty rather than failing the step.
+    fn with_data(mut self, data: impl Serialize) -> Self {
+        self.data = serde_json::to_value(data).ok();
+        self
+    }
+}
+
+/// Path as text for `data` objects (lossy; `json!` would panic on non-UTF-8).
+fn path_text(path: &Path) -> String {
+    path.display().to_string()
 }
 
 /// Why a step failed: the message plus the resolved path the failing operation touched.
@@ -411,8 +425,9 @@ fn run_info(s: &InfoStep, root: &Path) -> StepResult<StepOutput> {
     };
     let filter = (!filter.is_empty()).then_some(filter);
     let path_ref = Some(path.as_path());
+    let data = info_json_value(path_ref, file_len, &summary, filter.as_ref());
     let out = if s.json {
-        format_info_json(path_ref, file_len, &summary, filter.as_ref())?
+        serde_json::to_string_pretty(&data).map_err(es)?
     } else if effective_quiet(s.quiet, false) {
         format_info_quiet(path_ref, file_len, &summary, filter.as_ref())
     } else {
@@ -445,7 +460,7 @@ fn run_info(s: &InfoStep, root: &Path) -> StepResult<StepOutput> {
             },
         )
     };
-    Ok(StepOutput::stdout(out))
+    Ok(StepOutput::stdout(out).with_data(data))
 }
 
 fn verify_once(path: &Path, opts: VerifyOptions) -> StepResult<crate::verify::TetVerifyReport> {
@@ -495,7 +510,7 @@ fn run_repair(s: &RepairStep, root: &Path) -> StepResult<StepOutput> {
         } else {
             format_plan_text(&plan)
         };
-        return Ok(StepOutput::stdout(out));
+        return Ok(StepOutput::stdout(out).with_data(&plan));
     }
     let repair_opts = RepairOptions {
         dry_run: s.dry_run,
@@ -511,7 +526,7 @@ fn run_repair(s: &RepairStep, root: &Path) -> StepResult<StepOutput> {
     if !report.dry_run && report.verify_after_ok == Some(false) {
         return Err(fail(&path, "repair finished but verification still failed"));
     }
-    Ok(StepOutput::stdout(out))
+    Ok(StepOutput::stdout(out).with_data(&report))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -738,11 +753,13 @@ fn run_index(s: &IndexStep, root: &Path) -> StepResult<StepOutput> {
         return Ok(StepOutput::quiet_note(
             s.quiet,
             format!("cleared embedded ZONE/INDEX → {}", path.display()),
-        ));
+        )
+        .with_data(json!({ "ok": true, "path": path_text(&path), "cleared": true })));
     }
     let embedded =
         embed_indexes_in_tet(&path, crate::catalog::EMBEDDED_STANDALONE_GENERATION).at(&path)?;
-    let index = if embedded.secondary_index.bytes.is_some() {
+    let index_present = embedded.secondary_index.bytes.is_some();
+    let index = if index_present {
         "INDEX present"
     } else {
         "INDEX omitted"
@@ -758,7 +775,15 @@ fn run_index(s: &IndexStep, root: &Path) -> StepResult<StepOutput> {
             "embedded ZONE + {index} → {} (packed_sha256={sha})",
             path.display()
         ),
-    ))
+    )
+    .with_data(json!({
+        "ok": true,
+        "path": path_text(&path),
+        "cleared": false,
+        "packed_sha256": embedded.packed_sha256,
+        "zone_maps_sha256": embedded.zone_maps_sha256,
+        "index_present": index_present,
+    })))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -787,7 +812,7 @@ fn run_semantics_apply(s: &SemanticsApplyStep, root: &Path) -> StepResult<StepOu
     }
     let report = apply_semantics_toml(&path, &from).map_err(|e| fail_input(&from, e))?;
     let note = format_apply_report(&path, &report);
-    let mut step_out = StepOutput::note(note.trim_end());
+    let mut step_out = StepOutput::note(note.trim_end()).with_data(&report);
     if s.annotate {
         let toml_text = fs::read_to_string(&from).at(&from)?;
         let doc = parse_semantics_toml(&toml_text).at(&from)?;
@@ -814,11 +839,20 @@ fn run_semantics_scaffold(s: &SemanticsScaffoldStep, root: &Path) -> StepResult<
     let path = abs(root, &s.path);
     let format = s.format.unwrap_or(ScaffoldFormat::Toml);
     let text = scaffold_policy_from_path(&path, format).at(&path)?;
+    let data = |output: Option<&Path>| {
+        json!({
+            "ok": true,
+            "path": path_text(&path),
+            "format": format,
+            "output": output.map(path_text),
+        })
+    };
     if let Some(out) = &s.output {
-        write_text(&abs(root, out), &text)?;
-        return Ok(StepOutput::default());
+        let out = abs(root, out);
+        write_text(&out, &text)?;
+        return Ok(StepOutput::default().with_data(data(Some(&out))));
     }
-    Ok(StepOutput::stdout(text))
+    Ok(StepOutput::stdout(text).with_data(data(None)))
 }
 
 fn run_semantics_set(s: &SemanticsSetStep, root: &Path) -> StepResult<StepOutput> {
@@ -829,11 +863,22 @@ fn run_semantics_set(s: &SemanticsSetStep, root: &Path) -> StepResult<StepOutput
         .map(|(k, v)| (k.clone(), v.to_attr_string()))
         .collect();
     set_dataset_attrs(&path, &s.dataset, &pairs, &s.clear).at(&path)?;
+    let set: serde_json::Map<String, serde_json::Value> = pairs
+        .into_iter()
+        .map(|(k, v)| (k, serde_json::Value::String(v)))
+        .collect();
     Ok(StepOutput::note(format!(
         "semantics: updated dataset {:?} on {}",
         s.dataset,
         path.display()
-    )))
+    ))
+    .with_data(json!({
+        "ok": true,
+        "path": path_text(&path),
+        "dataset": s.dataset,
+        "set": set,
+        "clear": s.clear,
+    })))
 }
 
 fn run_semantics_wizard_step(s: &SemanticsWizardStep, root: &Path) -> StepResult<StepOutput> {
@@ -850,7 +895,8 @@ fn run_semantics_wizard_step(s: &SemanticsWizardStep, root: &Path) -> StepResult
         "wizard: done dataset {:?} → {}",
         result.dataset,
         result.toml_path.display()
-    )))
+    ))
+    .with_data(&result))
 }
 
 fn resolve_generation(package: &TetPackage, generation: Option<u64>) -> Result<u64, String> {
@@ -876,7 +922,7 @@ fn run_semantics_lint(s: &SemanticsLintStep, root: &Path) -> StepResult<StepOutp
     } else {
         lint_tet_path(&path).at(&path)?
     };
-    Ok(StepOutput::stdout(format_lint_report(&report)))
+    Ok(StepOutput::stdout(format_lint_report(&report)).with_data(&report))
 }
 
 fn run_semantics_package_write(
@@ -890,7 +936,14 @@ fn run_semantics_package_write(
     Ok(StepOutput::note(format!(
         "semantics: wrote generations/{g:08}/SEMANTICS.json ({} dataset(s), sha256={sha})",
         doc.datasets.len()
-    )))
+    ))
+    .with_data(json!({
+        "ok": true,
+        "path": path_text(&path),
+        "generation": g,
+        "sha256": sha,
+        "semantics": doc,
+    })))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -944,7 +997,15 @@ fn run_ingest(s: &IngestStep, root: &Path) -> StepResult<StepOutput> {
             meta.claims.len()
         );
     }
-    Ok(StepOutput::quiet_note(s.quiet, note))
+    let parts: Vec<_> = sealed
+        .iter()
+        .map(|(src, meta)| json!({ "source": path_text(src), "part": meta }))
+        .collect();
+    Ok(StepOutput::quiet_note(s.quiet, note).with_data(json!({
+        "package": path_text(&out),
+        "jobs": jobs,
+        "parts": parts,
+    })))
 }
 
 struct PublishArgs {
@@ -988,7 +1049,13 @@ fn run_publish(opts: &PublishArgs) -> StepResult<StepOutput> {
                 opts.package.display(),
                 current_before.map_or_else(|| "none".into(), |g| g.to_string())
             ),
-        ));
+        )
+        .with_data(json!({
+            "mode": "aborted",
+            "package": path_text(&opts.package),
+            "generation": generation,
+            "current_before": current_before,
+        })));
     }
     let generation = match opts.generation {
         Some(g) => g,
@@ -1018,7 +1085,12 @@ fn run_publish(opts: &PublishArgs) -> StepResult<StepOutput> {
                 validation.part_ids.len(),
                 opts.package.display()
             ),
-        ));
+        )
+        .with_data(json!({
+            "mode": "dry_run",
+            "package": path_text(&opts.package),
+            "validation": validation,
+        })));
     }
     let manifest = publish_parts_with_options(&pkg, generation, &part_ids, &options).at(at)?;
     Ok(StepOutput::quiet_note(
@@ -1031,7 +1103,12 @@ fn run_publish(opts: &PublishArgs) -> StepResult<StepOutput> {
             opts.package.display(),
             manifest.generation
         ),
-    ))
+    )
+    .with_data(json!({
+        "mode": "published",
+        "package": path_text(&opts.package),
+        "manifest": manifest,
+    })))
 }
 
 fn run_pack(s: &PackStep, root: &Path) -> StepResult<StepOutput> {
@@ -1060,7 +1137,13 @@ fn run_pack(s: &PackStep, root: &Path) -> StepResult<StepOutput> {
     } else {
         format!("packed generation={generation} → {}", output.display())
     };
-    Ok(StepOutput::quiet_note(s.quiet, note))
+    Ok(StepOutput::quiet_note(s.quiet, note).with_data(json!({
+        "ok": true,
+        "package": path_text(&package),
+        "output": path_text(&output),
+        "generation": generation,
+        "remove_package": s.remove_package,
+    })))
 }
 
 fn run_gc(s: &GcStep, root: &Path) -> StepResult<StepOutput> {
@@ -1078,11 +1161,17 @@ fn run_gc(s: &GcStep, root: &Path) -> StepResult<StepOutput> {
     let pkg = TetPackage::open(&target).at(&target)?;
     let plan = pkg.gc(&GcOptions { apply: s.apply }).at(&target)?;
     let mode = if s.apply { "applied" } else { "dry-run" };
+    let data = json!({
+        "target": path_text(&target),
+        "apply": s.apply,
+        "plan": plan,
+    });
     if plan.is_empty() {
         return Ok(StepOutput::quiet_note(
             s.quiet,
             format!("gc {mode}: nothing to remove → {}", target.display()),
-        ));
+        )
+        .with_data(data));
     }
     let mut note = format!(
         "gc {mode}: staging_sessions={} generations={:?} → {}",
@@ -1096,7 +1185,7 @@ fn run_gc(s: &GcStep, root: &Path) -> StepResult<StepOutput> {
     for &g in &plan.generations {
         let _ = write!(note, "\n  generation {g}");
     }
-    Ok(StepOutput::quiet_note(s.quiet, note))
+    Ok(StepOutput::quiet_note(s.quiet, note).with_data(data))
 }
 
 fn run_gc_s3(s: &GcStep, uri: &str) -> Result<StepOutput, String> {
@@ -1154,6 +1243,10 @@ fn run_gc_s3(s: &GcStep, uri: &str) -> Result<StepOutput, String> {
                 }
             }
         }
-        Ok(StepOutput::quiet_note(s.quiet, note))
+        Ok(StepOutput::quiet_note(s.quiet, note).with_data(json!({
+            "target": uri,
+            "apply": s.apply,
+            "report": report,
+        })))
     }
 }
