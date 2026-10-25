@@ -2,14 +2,21 @@
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-25
+
 ### Added
 
-- cargo-fuzz target `parse_job` (TOML/JSON parse + static validate only; seeds from `fixtures/jobs` + reject stubs); `mise fuzz-job` / `fuzz-job-smoke`; `fuzz-smoke` CI job (THI-651 / THI-650).
-- Crate trust-boundary checklist in `docs/query_engine.md` § JSON security and verify-first / host-owns-paths notes in `docs/job.md` (THI-652).
+- cargo-fuzz target `parse_job` (TOML/JSON parse + static validate only; seeds from `fixtures/jobs` + reject stubs); `mise fuzz-job` / `fuzz-job-smoke`; `fuzz-smoke` CI job (THI-651 / THI-650 / #197).
+- Crate trust-boundary checklist in `docs/query_engine.md` § JSON security and verify-first / host-owns-paths notes in `docs/job.md` (THI-652 / #197).
+
+### Fixed
+
+- Parallel `cargo test` no longer flakes on HDF5/NetCDF fixture opens (`errno 11` / NetCDF `-101`): `.cargo/config.toml` sets `HDF5_USE_FILE_LOCKING=FALSE` for this repo (#197).
 
 ### Notes
 
 - `parse_query_json` corpus: post-0.6 shapes (window, `group_by` labels, align, filter, label-range / `label_filter`) covered via conformance + named stubs; documented in `fuzz/README.md` / fuzz-reseed (no separate pipeline/transform seed ocean this cut).
+- Semver patch on the 0.8 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). Pin **tet-py** and docs-site **Trust boundaries** guide after crates.io (THI-654 / THI-656).
 
 ## [0.8.2] - 2026-10-25
 
