@@ -11,11 +11,9 @@ to = "work/table.tet"
 [[step]]
 op = "verify"
 path = "work/table.tet"
-quiet = true
 
 [[step]]
 op = "query"
 tet = "work/table.tet"
 execute = true
-quiet = true
 query = { dataset = "temp", mean = [] }

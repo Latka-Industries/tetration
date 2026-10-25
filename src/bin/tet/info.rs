@@ -10,8 +10,8 @@ use tetration::query::cli::{
     info_view_sections_from_flags,
 };
 
-use crate::package_ops::resolve_tet_read_path;
 use crate::util::cli_error;
+use tetration::catalog::resolve_tet_read_path;
 
 /// Output mode for `tet info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,7 +67,7 @@ impl InfoRunOpts {
 }
 
 pub(crate) fn run_info(opts: InfoRunOpts) -> Result<(), String> {
-    let resolved = resolve_tet_read_path(&opts.path)?;
+    let resolved = resolve_tet_read_path(&opts.path).map_err(cli_error)?;
     let mmap = mmap_file_read(&resolved).map_err(cli_error)?;
     let file_len = u64::try_from(mmap.len())
         .map_err(|_| format!("file size {} exceeds u64::MAX", mmap.len()))?;

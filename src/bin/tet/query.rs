@@ -4,18 +4,16 @@ use std::path::PathBuf;
 
 use tetration::layout::mmap_file_read;
 use tetration::query::cli::{
-    QueryOutputFormat, append_cli_query_history, format_query_response, format_query_stderr_hints,
+    QUERY_PREVIEW_DEFAULT, QueryOutputFormat, append_cli_query_history, format_query_response,
+    format_query_stderr_hints,
 };
 use tetration::query::{
     ExecutionDeviceHint, QueryDocument, QueryResponse, SpillPathAllowlist, plan_query_empty,
     plan_query_with_tet_mmap_ex, validate_query,
 };
 
-use crate::package_ops::resolve_tet_read_path;
 use crate::util::cli_error;
-
-/// Default preview cap when `--preview` is omitted.
-pub(crate) const QUERY_PREVIEW_DEFAULT: usize = 64;
+use tetration::catalog::resolve_tet_read_path;
 
 pub(crate) struct QueryRunOpts {
     pub doc: QueryDocument,
@@ -115,7 +113,10 @@ fn query_local_tet(
     preview: Option<usize>,
     spill_allow: &[PathBuf],
 ) -> Result<QueryResponse, String> {
-    let resolved_tet = tet.map(|path| resolve_tet_read_path(path)).transpose()?;
+    let resolved_tet = tet
+        .map(|path| resolve_tet_read_path(path))
+        .transpose()
+        .map_err(cli_error)?;
     let mut spill_owned = None;
     if execute {
         let path = resolved_tet.as_ref().ok_or_else(|| {

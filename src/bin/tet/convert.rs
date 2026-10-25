@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use tetration::cli_pretty::chunk_progress_style;
 use tetration::convert::{
     ConvertOptions, ConvertProgress, ConvertReport, convert_s3_object_to_tet,
     convert_to_tet_with_options, detect_convert_format, is_s3_convert_uri,
@@ -101,14 +102,10 @@ fn run_convert_with_bar(
         indicatif::ProgressBar,
     ) -> Result<ConvertReport, tetration::convert::ConvertError>,
 ) -> Result<(), String> {
-    use indicatif::{ProgressBar, ProgressStyle};
+    use indicatif::ProgressBar;
 
     let pb = ProgressBar::new(0);
-    pb.set_style(
-        ProgressStyle::with_template("{msg} [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
-            .map_err(cli_error)?
-            .progress_chars("=>-"),
-    );
+    pb.set_style(chunk_progress_style().map_err(cli_error)?);
     pb.set_message(progress_prefix.to_owned());
     let report = convert(pb.clone()).map_err(cli_error)?;
     finish_convert_report(&pb, label, &report)

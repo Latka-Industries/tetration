@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `tet run` / `tetration::job` UX polish (THI-646): **`info` / `verify` / `query` steps default to quiet** when `quiet` is omitted (`quiet = false` restores full text; `json` / explicit `format` still win; `quiet = true` + `json` / `format` still conflicts). Other ops keep `quiet = false`. `quiet` on those three steps is now `Option<bool>`.
+- `tet run` prints `[N/TOTAL] ok   <step> (0.12s)` / `plan` lines (styled via `cli_pretty` when stderr is a terminal, plain ASCII otherwise) instead of `✓` / `·` glyphs. The job observer callback now also receives the total step count: `FnMut(&StepReport, usize)`.
+- `JobError::Step` gains `path: Option<PathBuf>`; failing file operations append the resolved absolute path (`step 2 (verify) failed: No such file or directory (os error 2): /abs/path`).
+- `tet convert` and `tet run` share one progress-bar template (`cli_pretty::chunk_progress_style`); `QUERY_PREVIEW_DEFAULT` is now one public const in `query::cli`.
+- DRY: job + CLI share `convert::resolve_parallel_jobs`, `catalog::open_or_create_package`, and `catalog::resolve_tet_read_path` (new public helpers); `semantics.scaffold` `format` is deserialized straight into `ScaffoldFormat`.
+
+### Fixed
+
+- `open_or_create_package` had a dead `create` branch and a stale `--create` help text: a missing package is always created, an existing non-package path always fails. `--create` / `create = …` are documented as no-ops (behavior unchanged).
+
 ### Added
 
 - `tet run <job.toml|json>` (`--dry-run`, `--root DIR`): run an ordered list of stock `tet` steps from a job file, fail-fast (THI-646). Closed v1 op set: `info`, `verify`, `repair`, `query` (`doc` or inline `query`), `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Not a scheduler or query-pipeline ETL; guide in `docs/job.md`.

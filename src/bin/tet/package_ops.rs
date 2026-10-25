@@ -1,53 +1,22 @@
 //! `tet ingest` / `tet publish` / `tet compact` / `tet pack` / `tet gc` for `.tet.d` packages.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rayon::prelude::*;
 use tetration::catalog::{
     PublishPartsOptions, TetPackage, dry_run_publish_parts_with_options, ingest_tet_file,
-    list_sealed_parts, part_id_from_path, publish_parts_with_options,
+    list_sealed_parts, open_or_create_package, part_id_from_path, publish_parts_with_options,
 };
-use tetration::verify::looks_like_tet_package;
+use tetration::convert::resolve_parallel_jobs;
 
 use crate::util::cli_error;
-
-/// Open an existing package, or create when `create` is set / path is missing.
-pub(crate) fn open_or_create_package(path: &Path, create: bool) -> Result<TetPackage, String> {
-    if looks_like_tet_package(path) {
-        return TetPackage::open(path).map_err(cli_error);
-    }
-    if path.exists() {
-        return Err(cli_error(format!(
-            "{} exists but is not a .tet.d package (missing PROTOCOL)",
-            path.display()
-        )));
-    }
-    if create || !path.exists() {
-        return TetPackage::create(path).map_err(cli_error);
-    }
-    Err(cli_error(format!(
-        "package not found: {} (pass --create)",
-        path.display()
-    )))
-}
-
-/// Resolve `-t` / info path: package → sealed `packed.tet`, else the path itself.
-pub(crate) fn resolve_tet_read_path(path: &Path) -> Result<PathBuf, String> {
-    if !looks_like_tet_package(path) {
-        return Ok(path.to_path_buf());
-    }
-    let pkg = TetPackage::open(path).map_err(cli_error)?;
-    let pin = pkg.pin_current().map_err(cli_error)?;
-    Ok(pin.packed_tet_path().to_path_buf())
-}
 
 pub(crate) struct IngestOpts {
     pub inputs: Vec<PathBuf>,
     pub out: PathBuf,
     pub jobs: usize,
-    pub create: bool,
     pub quiet: bool,
 }
 
@@ -61,8 +30,8 @@ pub(crate) fn run_ingest(opts: &IngestOpts) -> Result<(), String> {
         }
     }
 
-    let pkg = open_or_create_package(&opts.out, opts.create)?;
-    let jobs = resolve_jobs(opts.jobs);
+    let pkg = open_or_create_package(&opts.out).map_err(cli_error)?;
+    let jobs = resolve_parallel_jobs(opts.jobs);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(jobs)
         .build()
@@ -365,15 +334,5 @@ fn print_store_gc(target: &str, apply: bool, report: &tetration::catalog::PruneR
                 println!("  refused {session} ({why})");
             }
         }
-    }
-}
-
-fn resolve_jobs(jobs: usize) -> usize {
-    if jobs == 0 {
-        std::thread::available_parallelism()
-            .map_or(1, std::num::NonZero::get)
-            .min(64)
-    } else {
-        jobs.clamp(1, 64)
     }
 }

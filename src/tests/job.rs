@@ -428,8 +428,8 @@ to = "work/never.tet"
     )
     .unwrap();
     let mut seen = Vec::new();
-    let err =
-        crate::job::run_job_observed(&job, &opts(dir.path()), |s| seen.push(s.index)).unwrap_err();
+    let err = crate::job::run_job_observed(&job, &opts(dir.path()), |s, _| seen.push(s.index))
+        .unwrap_err();
     let JobError::Step {
         index,
         op,
@@ -444,6 +444,18 @@ to = "work/never.tet"
     assert_eq!(seen, [0]);
     assert!(
         err.to_string().starts_with("step 2 (verify) failed"),
+        "{err}"
+    );
+    // The failing step names the resolved (absolute) path once, at the end.
+    let missing = dir.path().join("work/does-not-exist.tet");
+    assert!(
+        err.to_string()
+            .ends_with(&format!(": {}", missing.display())),
+        "{err}"
+    );
+    assert_eq!(
+        err.to_string().matches("does-not-exist.tet").count(),
+        1,
         "{err}"
     );
     assert!(dir.path().join("work/a.tet").is_file());
@@ -608,4 +620,143 @@ quiet = true
     .unwrap();
     let report = run_job(&job, &opts(dir.path())).unwrap();
     assert!(report.steps[1].note.is_none());
+}
+
+fn verify_step_stdout(extra: &str) -> String {
+    let dir = scratch_with_csv();
+    let job = toml_job(&format!(
+        "schema_version = 1\n[[step]]\nop = \"convert\"\nfrom = \"raw/table.csv\"\nto = \"a.tet\"\n\
+         [[step]]\nop = \"verify\"\npath = \"a.tet\"\n{extra}\n"
+    ))
+    .unwrap();
+    let report = run_job(&job, &opts(dir.path())).unwrap();
+    report.steps[1].stdout.clone().unwrap()
+}
+
+#[test]
+fn verify_omitted_quiet_defaults_to_one_line() {
+    let out = verify_step_stdout("");
+    assert_eq!(out.trim_end().lines().count(), 1, "{out}");
+    assert!(out.contains("status=ok"), "{out}");
+}
+
+#[test]
+fn verify_explicit_quiet_false_restores_full_text() {
+    let full = verify_step_stdout("quiet = false");
+    assert!(full.trim_end().lines().count() > 1, "{full}");
+    // `quiet = true` is the same one-liner as the default.
+    assert_eq!(
+        verify_step_stdout("quiet = true")
+            .trim_end()
+            .lines()
+            .count(),
+        1
+    );
+    // `json` wins over the quiet default.
+    let json = verify_step_stdout("json = true");
+    assert!(json.trim_start().starts_with('{'), "{json}");
+}
+
+#[test]
+fn query_omitted_quiet_is_quiet_and_format_wins() {
+    let run = |extra: &str| {
+        let dir = scratch_with_csv();
+        let job = toml_job(&format!(
+            "schema_version = 1\n[[step]]\nop = \"convert\"\nfrom = \"raw/table.csv\"\nto = \"a.tet\"\n\
+             [[step]]\nop = \"query\"\ntet = \"a.tet\"\nexecute = true\n{extra}\n\
+             query = {{ dataset = \"temp\", mean = [] }}\n"
+        ))
+        .unwrap();
+        run_job(&job, &opts(dir.path())).unwrap().steps[1]
+            .stdout
+            .clone()
+            .unwrap()
+    };
+    let default = run("");
+    assert_eq!(default.trim_end().lines().count(), 1, "{default}");
+    assert_eq!(default, run("quiet = true"));
+    assert_ne!(default, run("quiet = false"));
+    // Explicit format is allowed without `quiet` and is not overridden by the default.
+    let json = run("format = \"json\"");
+    assert!(json.trim_start().starts_with('{'), "{json}");
+}
+
+#[test]
+fn quiet_true_still_conflicts_with_json_or_format_but_omitted_does_not() {
+    for (op, body) in [
+        ("info", "path = \"a\"\njson = true\nquiet = true"),
+        ("query", "doc = \"q.json\"\nformat = \"json\"\nquiet = true"),
+    ] {
+        let msg = parse_err(&format!(
+            "schema_version = 1\n[[step]]\nop = \"{op}\"\n{body}\n"
+        ));
+        assert!(msg.contains("conflict"), "{op}: {msg}");
+    }
+    for (op, body) in [
+        ("info", "path = \"a\"\njson = true"),
+        ("info", "path = \"a\"\njson = true\nquiet = false"),
+        ("query", "doc = \"q.json\"\nformat = \"json\""),
+        (
+            "query",
+            "doc = \"q.json\"\nformat = \"json\"\nquiet = false",
+        ),
+    ] {
+        toml_job(&format!(
+            "schema_version = 1\n[[step]]\nop = \"{op}\"\n{body}\n"
+        ))
+        .unwrap_or_else(|e| panic!("{op} {body}: {e}"));
+    }
+}
+
+#[test]
+fn scaffold_format_is_parsed_once_at_deserialize_time() {
+    let job = toml_job(
+        "schema_version = 1\n[[step]]\nop = \"semantics.scaffold\"\npath = \"a.tet\"\nformat = \"JSON\"\n",
+    )
+    .unwrap();
+    let Step::SemanticsScaffold(s) = &job.steps[0] else {
+        panic!("expected scaffold");
+    };
+    assert_eq!(s.format, Some(crate::catalog::ScaffoldFormat::Json));
+    let msg = parse_err(
+        "schema_version = 1\n[[step]]\nop = \"semantics.scaffold\"\npath = \"a.tet\"\nformat = \"yaml\"\n",
+    );
+    assert!(msg.contains("step 1 (semantics.scaffold)"), "{msg}");
+    assert!(msg.contains("toml or json"), "{msg}");
+}
+
+#[test]
+fn step_errors_carry_the_resolved_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let job = toml_job(
+        "schema_version = 1\n[[step]]\nop = \"ingest\"\nfrom = \"gone.tet\"\nto = \"p.tet.d\"\n",
+    )
+    .unwrap();
+    let err = run_job(&job, &opts(dir.path())).unwrap_err();
+    let JobError::Step { path, message, .. } = &err else {
+        panic!("expected Step, got {err}");
+    };
+    assert_eq!(path.as_deref(), Some(dir.path().join("gone.tet").as_path()));
+    assert_eq!(message, "input not found");
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "step 1 (ingest) failed: input not found: {}",
+            dir.path().join("gone.tet").display()
+        )
+    );
+}
+
+#[test]
+fn ingest_creates_a_missing_package_regardless_of_create() {
+    for create in ["", "create = false\n", "create = true\n"] {
+        let dir = scratch_with_csv();
+        let job = toml_job(&format!(
+            "schema_version = 1\n[[step]]\nop = \"convert\"\nfrom = \"raw/table.csv\"\nto = \"a.tet\"\n\
+             [[step]]\nop = \"ingest\"\nfrom = \"a.tet\"\nto = \"deep/p.tet.d\"\n{create}"
+        ))
+        .unwrap();
+        run_job(&job, &opts(dir.path())).unwrap();
+        assert!(dir.path().join("deep/p.tet.d/PROTOCOL").is_file());
+    }
 }

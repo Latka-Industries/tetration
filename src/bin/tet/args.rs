@@ -188,7 +188,7 @@ pub enum Commands {
         /// Parallel ingest workers (`0` = host `available_parallelism`, capped at 64).
         #[arg(long = "jobs", default_value_t = 0)]
         jobs: usize,
-        /// Create the package even if the path already exists as a non-package (still fails).
+        /// No-op: a missing package is always created; an existing non-package path always fails.
         #[arg(long)]
         create: bool,
         /// Suppress progress lines.
