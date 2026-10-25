@@ -4,6 +4,42 @@ A job file is an ordered list of stock `tet` steps in TOML or JSON. `tet run job
 
 **This is not Airflow.** No DAG, conditionals, loops, retries, schedules, or `on_error = continue`. It is also **not query-pipeline ETL**: chained transforms inside one query belong in the query `pipeline` wire ([`query_engine.md`](query_engine.md)). A job only sequences whole CLI verbs (convert, verify, query, publish, …).
 
+## Trust boundaries (jobs)
+
+Job documents are **data**, same rule as query JSON ([JSON security](query_engine.md#json-security-input-and-output)):
+
+| Rule | Practice |
+| ---- | -------- |
+| **Verify before open** when bytes are external | Prefer a `verify` (or `repair`) step **before** `query` / `index` / semantics on ingest paths. Trusted pipelines may skip; untrusted ingest should not. |
+| **Host owns paths** | `.tet` / package / convert paths come from the **job file the operator chose** and `--root`, not from nested query-document fields that pick which store to open. Do not accept a remote job document that invents absolute paths unless your host allowlists them. |
+| **Spill allowlist** | Query steps may pass `spill_allow`; do not widen casually. See [`SpillPathAllowlist`](../src/query/engine/spill_policy.rs) / CLI `--spill-allow`. |
+| **No shell / SQL / path concat from fields** | Never build shell commands, SQL, or filesystem paths by concatenating raw job or query field strings. |
+| **Response labels are display text** | Dataset / axis names echoed in `query` step output are untrusted for HTML/logs/`eval`. |
+| **HTTP wrappers live outside the crate** | Auth, rate limits, body size caps, and dataset allowlists belong in your service — not inside `tetration::job`. |
+
+Worked pattern (also the checked-in fixture): convert → **verify** → query:
+
+```toml
+schema_version = 1
+
+[[step]]
+op = "convert"
+from = "raw/table.csv"
+to = "work/table.tet"
+
+[[step]]
+op = "verify"
+path = "work/table.tet"
+
+[[step]]
+op = "query"
+tet = "work/table.tet"
+execute = true
+query = { dataset = "temp", mean = [] }
+```
+
+`parse_job` is covered by cargo-fuzz (`fuzz` target `parse_job`; parse + validate only — not full `tet run`).
+
 ```bash
 tet run job.toml                    # run; relative paths resolve against the job file's directory
 tet run job.toml --dry-run          # validate + print the plan; execute nothing

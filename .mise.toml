@@ -248,6 +248,14 @@ run = "cargo +nightly fuzz run parse_query_json"
 description = "60s query-wire fuzz smoke (THI-604; needs nightly)"
 run = "cargo +nightly fuzz run parse_query_json -- -max_total_time=60 -timeout=10 -rss_limit_mb=2048"
 
+[tasks.fuzz-job]
+description = "Run cargo-fuzz parse_job (THI-651; needs nightly)"
+run = "cargo +nightly fuzz run parse_job"
+
+[tasks.fuzz-job-smoke]
+description = "60s job-file fuzz smoke (THI-651; needs nightly)"
+run = "cargo +nightly fuzz run parse_job -- -max_total_time=60 -timeout=10 -rss_limit_mb=2048"
+
 [tasks.fuzz-index]
 description = "Run cargo-fuzz secondary_index_json (THI-613; needs nightly)"
 run = "cargo +nightly fuzz run secondary_index_json"
@@ -265,7 +273,7 @@ description = "60s seal-time secondary index fuzz smoke (needs nightly)"
 run = "cargo +nightly fuzz run secondary_index_seal -- -max_total_time=60 -timeout=10 -rss_limit_mb=2048"
 
 [tasks.fuzz-clean]
-description = "Remove mutated fuzz corpus + crash artifacts; keep *.tet / *.pkgfuzz / *.json / *.bin seeds"
+description = "Remove mutated fuzz corpus + crash artifacts; keep *.tet / *.pkgfuzz / *.json / *.toml / *.bin seeds"
 run = "bash fuzz/scripts/fuzz-clean.sh"
 
 [tasks.fuzz-reseed]

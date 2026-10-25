@@ -1,0 +1,1 @@
+{"schema_version":1,"retries":3,"steps":[{"op":"verify","path":"a.tet"}]}

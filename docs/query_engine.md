@@ -778,12 +778,28 @@ When adding an op, update this table, [`Operation`](../src/query/types/document.
 
 The query control plane (JSON or TOML input) is a **declarative document**, not executable code. There is no query language interpreter, SQL engine, or “run this string from the payload” path. Security still matters in **both directions**: untrusted input must not drive memory-unsafe or out-of-policy behavior, and untrusted consumers must not treat output JSON as shell/HTML/SQL without encoding.
 
+Job files (`tet run` / [`docs/job.md`](job.md)) follow the same trust model: documents are data; the host chooses which paths to open.
+
+### Checklist (product)
+
+| # | Rule | Notes |
+| - | ---- | ----- |
+| 1 | **Verify before open** when bytes are external | Run `tet verify` (or a job `verify` step) before query/index on untrusted ingest. Advisory in trusted pipelines; **not** mandatory on every `open`. |
+| 2 | **Host owns `.tet` / package paths** | Paths come from CLI flags / API args / job step fields the **operator** wrote — never invent a store path from nested query-document fields alone. |
+| 3 | **Spill allowlist; don’t widen casually** | [`SpillPathAllowlist`](../src/query/engine/spill_policy.rs), CLI `--spill-allow` / job `spill_allow`. Default roots stay tight. |
+| 4 | **Query/job JSON is data** | No shell, SQL, or path construction by concatenating raw document fields. |
+| 5 | **Response dataset/axis labels = untrusted display text** | Escape for HTML/logs; never `eval` response JSON. |
+| 6 | **HTTP wrappers: auth, rate limits, body size, dataset allowlist outside the crate** | Document and enforce in your service. This library does **not** ship a multi-tenant auth daemon. |
+
+Site UX guide (consume-facing): docs.tetration.sh **Trust boundaries** (ships with 0.8.3).
+
 ### Threat model (v1)
 
 | Surface                | Source                                                   | Risk if mishandled                                                                                                  |
 | ---------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | **Query JSON/TOML in** | User, HTTP body, stdin, agent prompt                     | DoS (huge/deep payload), logic abuse (absurd selection), confused deputy (if a host passes paths from the document) |
-| **`.tet` mmap**        | Caller-chosen file path (CLI flag, not JSON field today) | Malicious file → bad index spans (mitigated in [catalog robustness](#robustness-catalog-index))                     |
+| **Job TOML/JSON in**   | Operator job file / CI artifact                          | Same as query for parse DoS; path steps resolve under `--root` — host must not run untrusted job files blindly      |
+| **`.tet` mmap**        | Caller-chosen file path (CLI flag / job `tet`/`path`, not a nested query field) | Malicious file → bad index spans (mitigated in [catalog robustness](#robustness-catalog-index)); prefer verify first |
 | **Query JSON out**     | `QueryResponse` pretty-print                             | Log/UI injection if embedded raw; unsafe `eval` in downstream scripts                                               |
 | **Binary payloads**    | Chunk bytes on disk                                      | Not inlined in JSON; decoded only through catalog + read plan                                                       |
 | **Spill path**         | `"spill"` string in query JSON/TOML                      | Host path chosen by caller; validated against [`SpillPathAllowlist`](../src/query/engine/spill_policy.rs)           |
@@ -808,7 +824,9 @@ Implemented in [`document.rs`](../src/query/document.rs) and planning:
 **Not enforced yet (deployments should add limits):**
 
 - Canonical JSON / duplicate-key rejection (depends on `serde_json` behavior).
-- Rate limiting and authentication on any HTTP wrapper around `tet query`.
+- Rate limiting, authentication, request body size, and dataset allowlists on any HTTP wrapper around `tet query` / `tet run` — **outside this crate** (checklist item 6).
+
+**Fuzz:** `parse_query_json` and `parse_job` cargo-fuzz targets (`fuzz/`; CI `fuzz-smoke`). Job fuzz is parse/validate only — not full executor / `tet run`.
 
 ### Output protections (today)
 
@@ -818,12 +836,14 @@ Implemented in [`document.rs`](../src/query/document.rs) and planning:
 
 ### Caller responsibilities (either direction)
 
-#### Ingesting query JSON or TOML
+#### Ingesting query JSON or TOML (and job files)
 
 - Cap input size and parse time; reject documents above policy limits before calling the library.
 - Do not build shell commands, SQL, or file paths by string-concatenating raw document fields.
-- Keep the `.tet` path under caller control (allowlist directories, no user-supplied absolute paths in multi-tenant services unless intended).
-- For **`spill`**, validate or rewrite the path before execution (path traversal, writable location, quota).
+- Keep the `.tet` / package path under caller control (allowlist directories, no user-supplied absolute paths in multi-tenant services unless intended). Job `path` / `tet` / `from` / `to` fields are still host-owned — only run job files you trust.
+- Prefer **verify before query** when the bytes came from outside your trust boundary ([`docs/job.md`](job.md#trust-boundaries-jobs)).
+- For **`spill`**, validate or rewrite the path before execution (path traversal, writable location, quota); do not casually widen `--spill-allow`.
+- If you expose HTTP: put **auth, rate limits, body size, dataset allowlist** in the wrapper — not in this crate.
 
 **Consuming `QueryResponse` JSON**
 
@@ -840,7 +860,8 @@ Implemented in [`document.rs`](../src/query/document.rs) and planning:
 | Dataset / axis length caps                 | In        | **Done** in `validate_query` via `QueryLimits`                                                                    |
 | Spill path allowlist                       | In/out    | **Done** — `SpillPathAllowlist`, `plan_query_with_tet_mmap_ex`, CLI `--spill-allow`                               |
 | Response schema version + stability        | Out       | Document breaking changes                                                                                         |
-| Fuzz `parse_query_json` / `validate_query` | In        | **Basic** proptest in `src/tests/query.rs`; TOML smoke in same module                                             |
+| Fuzz `parse_query_json` / `validate_query` | In        | **Done** — cargo-fuzz + proptest; post-0.6 corpus covered (window / group_by / label_filter) via conformance seeds |
+| Fuzz `parse_job` (parse + validate)        | In        | **Done** — cargo-fuzz (THI-651); executor / `tet run` fuzz out of scope for 0.8.3                                 |
 | TOML query front-end                       | In        | **Done** — [`parse_query_toml`](../src/query/document_toml.rs), CLI `.toml` + auto-detect                         |
 | Redaction mode for echoed fields           | Out       | Multi-tenant logging                                                                                              |
 | Capped preview without full-buffer alloc   | In        | **Done** — bounded scatter buffer when `max_elements < logical`                                                   |

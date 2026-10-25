@@ -25,10 +25,13 @@ fn repo_root() -> PathBuf {
 
 #[cfg(feature = "tetration-hdf5")]
 fn small_h5(name: &str) -> PathBuf {
+    super::ensure_hdf5_no_file_locking();
     repo_root().join("fixtures/small/h5").join(name)
 }
 
 fn small_nc(name: &str) -> PathBuf {
+    #[cfg(any(feature = "tetration-hdf5", feature = "tetration-netcdf"))]
+    super::ensure_hdf5_no_file_locking();
     repo_root().join("fixtures/small/netcdf").join(name)
 }
 

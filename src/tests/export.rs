@@ -80,6 +80,7 @@ mod hdf5_export {
     }
 
     fn small_h5(name: &str) -> PathBuf {
+        super::super::ensure_hdf5_no_file_locking();
         repo_root().join("fixtures/small/h5").join(name)
     }
 
@@ -152,6 +153,7 @@ mod hdf5_export {
 
     #[test]
     fn export_hdf5_groups_and_dispatch_by_extension() {
+        super::super::ensure_hdf5_no_file_locking();
         let input = small_zarr("groups_3d");
         let dir = tempfile::tempdir().unwrap();
         let tet = dir.path().join("groups.tet");
@@ -214,6 +216,7 @@ mod netcdf_export {
     }
 
     fn small_nc(name: &str) -> PathBuf {
+        super::super::ensure_hdf5_no_file_locking();
         repo_root().join("fixtures/small/netcdf").join(name)
     }
 

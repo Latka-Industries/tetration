@@ -1,0 +1,4 @@
+schema_version = 99
+[[step]]
+op = "verify"
+path = "a.tet"
