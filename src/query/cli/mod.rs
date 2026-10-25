@@ -9,6 +9,10 @@ pub mod output;
 pub(crate) mod pretty;
 mod text;
 
+/// Default preview cap for an executing query when `--preview` / `preview` is omitted and the
+/// stdout format prints sample values (`full` / `json`); other formats default to `0`.
+pub const QUERY_PREVIEW_DEFAULT: usize = 64;
+
 pub use history::{
     CliQueryHistoryEntry, HistoryExecuteFilter, HistoryListFilter, HistorySettings,
     append_cli_query_history, clear_cli_query_history, cli_query_history_enabled,

@@ -30,13 +30,11 @@ to = "work/table.tet"
 [[step]]
 op = "verify"
 path = "work/table.tet"
-quiet = true
 
 [[step]]
 op = "query"
 tet = "work/table.tet"
 execute = true
-quiet = true
 query = { dataset = "temp", mean = [] }
 ```
 
@@ -46,7 +44,9 @@ Example files: [`fixtures/jobs/`](../fixtures/jobs/).
 
 ## Ops (closed set)
 
-Field names mirror the CLI flags (`--dry-run` → `dry_run`). Booleans default to `false`.
+Field names mirror the CLI flags (`--dry-run` → `dry_run`). Booleans default to `false`, except `quiet` on `info` / `verify` / `query` (see below).
+
+**`quiet` defaults are job-specific.** For **`info`**, **`verify`**, and **`query`** only, an omitted `quiet` means **quiet** (one-line summary) so job logs stay short. `quiet = false` restores the full text the CLI prints. `json = true` (info / verify) or an explicit `format = "…"` (query) always wins over the quiet default, and `quiet = true` together with `json` / `format` is still a conflict. Every other op keeps `quiet = false` as the default (ingest, publish, compact, index, pack, gc: notes are printed unless you set `quiet = true`).
 
 | `op`                      | Fields (besides `op`)                                                                                       | CLI                    |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- |
@@ -63,7 +63,7 @@ Field names mirror the CLI flags (`--dry-run` → `dry_run`). Booleans default t
 | `semantics.wizard`        | `path`, `dataset`, `output`, `no_apply` — interactive, see below                                            | `tet semantics wizard` |
 | `semantics.lint`          | `path`, `generation`                                                                                        | `tet semantics lint`   |
 | `semantics.package-write` | `path`, `generation`, `no_manifest`                                                                         | `tet semantics package-write` |
-| `ingest`                  | `from` (path or list), `to` (`.tet.d`), `jobs`, `create`, `quiet`                                           | `tet ingest`           |
+| `ingest`                  | `from` (path or list), `to` (`.tet.d`), `jobs`, `create` (no-op), `quiet`                                         | `tet ingest`           |
 | `publish`                 | `package`, `generation`, `parts`, `abort`, `dry_run`, `replace`, `quiet`                                    | `tet publish`          |
 | `compact`                 | `package`, `generation`, `parts`, `replace`, `quiet`                                                        | `tet compact`          |
 | `pack`                    | `from` (`.tet.d`), `to` (`.tet`), `generation`, `remove_package`, `quiet`                                   | `tet pack`             |
@@ -81,8 +81,8 @@ Notes:
 ## Execution model
 
 1. **Pre-flight** (also under `--dry-run`): schema and flag rules, then every query document is loaded and validated and the wizard rule is applied. A failure here means **no step ran**.
-2. **Run** steps in order. The first error stops the job; later steps do not run. Exit code is non-zero and stderr names the step (`error: step 2 (verify) failed: …`).
-3. Each step prints what the matching command would: query / info / verify output goes to **stdout**; progress and summary lines go to **stderr** (indented under `✓ step N`).
+2. **Run** steps in order. The first error stops the job; later steps do not run. Exit code is non-zero and stderr names the step and, when the failing operation touched a file, its resolved absolute path: `error: step 2 (verify) failed: No such file or directory (os error 2): /abs/path/work/x.tet`.
+3. Each step prints what the matching command would: query / info / verify output goes to **stdout**; progress and summary lines go to **stderr** as `[N/TOTAL] ok   <description> (1.23s)` (`plan` instead of `ok` under `--dry-run`), with notes indented underneath. Colour is used only when stderr is a terminal.
 
 Steps call the same library functions as the CLI (no subprocess), so a step behaves like the equivalent `tet` command.
 
@@ -108,7 +108,9 @@ for step in &report.steps {
 | `parse_job(text, JobFormat)` | Parse + statically validate TOML / JSON → `Job` |
 | `run_job(&Job, &RunJobOptions)` | Pre-flight, then run (or plan with `dry_run`) → `JobReport` |
 | `run_job_path(path, &RunJobOptions)` | Read file, default `root` to its parent, run |
-| `run_job_observed` / `run_job_path_observed` | Same, with a callback after each step |
-| `JobError::Step { index, op, message, completed }` | Fail-fast error; `completed` holds the steps that finished |
+| `run_job_observed` / `run_job_path_observed` | Same, with a callback `(&StepReport, total_steps)` after each step |
+| `JobError::Step { index, op, message, path, completed }` | Fail-fast error; `path` is the resolved path the failing operation touched (shown after the message), `completed` holds the steps that finished |
+
+Library callers get the same quiet defaults (`StepReport::stdout` is the one-line form unless `quiet = false`).
 
 `RunJobOptions`: `root`, `dry_run`, `allow_interactive` (default `false`), `record_query_history` (default `false`).

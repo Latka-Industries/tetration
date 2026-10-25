@@ -63,6 +63,7 @@ pub use metadata::{
 pub use package::{
     DEFAULT_PUBLISH_LOCK_STALE, GcOptions, GcPlan, GenerationManifest, PACKAGE_PROTOCOL_VERSION,
     PackGenerationOptions, PackageProtocol, TetPackage, TetPackagePin, format_generation_id,
+    open_or_create_package, resolve_tet_read_path,
 };
 pub use package_semantics::{
     DatasetSemanticsDecl, PACKAGE_SEMANTICS_VERSION, PackageSemanticsV1, SEMANTICS_FILE,

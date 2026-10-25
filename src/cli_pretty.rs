@@ -1,7 +1,9 @@
-//! Shared pretty-print helpers for `tet` human text (`comfy-table` / `console`).
+//! Shared pretty-print helpers for `tet` human text (`comfy-table` / `console` / `indicatif`).
 //!
-//! Used by `query::cli` (info / query tables) and `catalog::semantics::wizard`.
-//! Gated on `tetration-cli` so library builds without the feature keep plain ASCII.
+//! Used by `query::cli` (info / query tables), `catalog::semantics::wizard`, and the `tet`
+//! binary (`tet run` step lines, convert progress bar). Gated on `tetration-cli` so library
+//! builds without the feature keep plain ASCII. Only the `pub` items below are for the binary;
+//! the module is `#[doc(hidden)]` and not part of the supported library API.
 
 use std::fmt::Write as _;
 
@@ -93,4 +95,119 @@ pub(crate) fn fmt_shape_dims(shape: &[u64], empty: &str) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("×")
+}
+
+// ---------------------------------------------------------------------------------------------
+// `tet run` step lines (stderr chrome; the `job` library itself never prints)
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Clone, Copy)]
+enum StepTone {
+    Planned,
+    Ok,
+}
+
+/// Fixed-width (4) status word, coloured on stderr when pretty output is on.
+fn step_tag(tone: StepTone) -> String {
+    let text = match tone {
+        StepTone::Planned => "plan",
+        StepTone::Ok => "ok  ",
+    };
+    #[cfg(feature = "tetration-cli")]
+    {
+        use console::style;
+        let styled = style(text).for_stderr();
+        match tone {
+            StepTone::Planned => styled.dim(),
+            StepTone::Ok => styled.green(),
+        }
+        .to_string()
+    }
+    #[cfg(not(feature = "tetration-cli"))]
+    {
+        text.to_owned()
+    }
+}
+
+/// `[1/3]`, right-aligned to the width of `total` so columns line up.
+fn step_counter(index_1based: usize, total: usize) -> String {
+    let width = total.to_string().len();
+    format!("[{index_1based:>width$}/{total}]")
+}
+
+/// Dry-run line: `[1/3] plan convert a.csv → a.tet`.
+#[must_use]
+pub fn step_planned(index_1based: usize, total: usize, description: &str) -> String {
+    format!(
+        "{} {} {description}",
+        step_counter(index_1based, total),
+        step_tag(StepTone::Planned)
+    )
+}
+
+/// Finished-step line: `[1/3] ok   convert a.csv → a.tet (0.12s)`.
+#[must_use]
+pub fn step_ok(index_1based: usize, total: usize, description: &str, elapsed_secs: f64) -> String {
+    format!(
+        "{} {} {description} ({elapsed_secs:.2}s)",
+        step_counter(index_1based, total),
+        step_tag(StepTone::Ok)
+    )
+}
+
+/// Dim, indented continuation line under a step (notes / skipped datasets).
+#[must_use]
+pub fn step_note_line(line: &str) -> String {
+    let text = format!("       {line}");
+    #[cfg(feature = "tetration-cli")]
+    {
+        console::style(text).for_stderr().dim().to_string()
+    }
+    #[cfg(not(feature = "tetration-cli"))]
+    {
+        text
+    }
+}
+
+/// Chunk progress bar template shared by `tet convert` (and any future job-side bar).
+///
+/// # Errors
+///
+/// Template parse failure (cannot happen for the built-in template).
+#[cfg(feature = "tetration-cli")]
+pub fn chunk_progress_style() -> Result<indicatif::ProgressStyle, indicatif::style::TemplateError> {
+    Ok(indicatif::ProgressStyle::with_template(
+        "{msg} [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})",
+    )?
+    .progress_chars("=>-"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn step_lines_are_ascii_structured() {
+        let plain = |s: String| console_strip(&s);
+        assert_eq!(
+            plain(step_planned(1, 3, "convert a → b")),
+            "[1/3] plan convert a → b"
+        );
+        assert_eq!(
+            plain(step_ok(2, 12, "verify x", 0.5)),
+            "[ 2/12] ok   verify x (0.50s)"
+        );
+        assert_eq!(plain(step_note_line("hi")), "       hi");
+    }
+
+    fn console_strip(s: &str) -> String {
+        #[cfg(feature = "tetration-cli")]
+        {
+            console::strip_ansi_codes(s).into_owned()
+        }
+        #[cfg(not(feature = "tetration-cli"))]
+        {
+            s.to_owned()
+        }
+    }
 }

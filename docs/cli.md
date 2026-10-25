@@ -210,7 +210,7 @@ Copies each input `.tet` into staging as a **full-grid** part (whole datasets). 
 | `<INPUT.tet>…` | One or more sealed `.tet` files (each → one staging part) |
 | `--out PKG.tet.d` | Package directory (created if missing) |
 | `--jobs N` | Parallel ingest workers (`0` = host parallelism, capped at 64) |
-| `--create` | Explicit create (default already creates when path is absent) |
+| `--create` | No-op (kept for compatibility): a missing package is always created; an existing non-package path always fails |
 | `-q` | Quiet |
 
 ### `tet publish` / `tet compact`

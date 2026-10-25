@@ -17,6 +17,7 @@ use super::CatalogError;
 use super::session::TetFile;
 use super::store::{LocalStore, PublishGeneration};
 use crate::utils::fs_device;
+use crate::verify::looks_like_tet_package;
 
 /// Package protocol version locked with writer protocol v2 (decision F).
 pub const PACKAGE_PROTOCOL_VERSION: u32 = 2;
@@ -31,6 +32,39 @@ const PUBLISHING_DIR: &str = "publishing";
 const PACKED_TET: &str = "packed.tet";
 const MANIFEST_FILE: &str = "MANIFEST.json";
 const HEARTBEAT_FILE: &str = "HEARTBEAT";
+
+/// Open an existing `.tet.d` package, or create one (with missing parents) when `path` is absent.
+///
+/// This is what `tet ingest` and the `ingest` job step do for their destination, so the CLI's
+/// `--create` flag is redundant: a missing path is always created.
+///
+/// # Errors
+///
+/// [`CatalogError::NotAPackage`] when `path` exists but is not a package (no `PROTOCOL`);
+/// otherwise the errors of [`TetPackage::open`] / [`TetPackage::create`].
+pub fn open_or_create_package(path: &Path) -> Result<TetPackage, CatalogError> {
+    if looks_like_tet_package(path) {
+        TetPackage::open(path)
+    } else if path.exists() {
+        Err(CatalogError::NotAPackage(path.to_path_buf()))
+    } else {
+        TetPackage::create(path)
+    }
+}
+
+/// Resolve a read path (`info`, query `-t`): a package becomes its sealed `CURRENT`
+/// `packed.tet`, anything else is returned unchanged.
+///
+/// # Errors
+///
+/// Package open / pin failures (e.g. [`CatalogError::NoCurrentGeneration`]).
+pub fn resolve_tet_read_path(path: &Path) -> Result<PathBuf, CatalogError> {
+    if !looks_like_tet_package(path) {
+        return Ok(path.to_path_buf());
+    }
+    let pin = TetPackage::open(path)?.pin_current()?;
+    Ok(pin.packed_tet_path().to_path_buf())
+}
 
 /// Root `PROTOCOL` file contents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

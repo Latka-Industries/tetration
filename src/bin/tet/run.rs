@@ -3,6 +3,7 @@
 use std::io::IsTerminal;
 use std::path::PathBuf;
 
+use tetration::cli_pretty::{step_note_line, step_ok, step_planned};
 use tetration::job::{RunJobOptions, StepReport, StepStatus, run_job_path_observed};
 
 use crate::util::cli_error;
@@ -13,18 +14,17 @@ pub(crate) struct RunCmdOpts {
     pub root: Option<PathBuf>,
 }
 
-fn print_step(report: &StepReport) {
+/// Step status line + notes on stderr, step stdout on stdout.
+fn print_step(report: &StepReport, total: usize) {
     let n = report.index + 1;
-    match report.status {
-        StepStatus::Planned => eprintln!("· step {n}: {}", report.description),
-        StepStatus::Ok => eprintln!(
-            "✓ step {n}: {} ({:.2}s)",
-            report.description, report.elapsed_secs
-        ),
-    }
+    let line = match report.status {
+        StepStatus::Planned => step_planned(n, total, &report.description),
+        StepStatus::Ok => step_ok(n, total, &report.description, report.elapsed_secs),
+    };
+    eprintln!("{line}");
     if let Some(note) = &report.note {
         for line in note.lines() {
-            eprintln!("    {line}");
+            eprintln!("{}", step_note_line(line));
         }
     }
     if let Some(out) = &report.stdout {

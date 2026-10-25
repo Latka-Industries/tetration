@@ -13,21 +13,22 @@ use crate::catalog::{
     StdWizardIo, TetPackage, WizardOptions, apply_semantics_toml, clear_embedded_indexes,
     dry_run_publish_parts_with_options, embed_indexes_in_tet, format_apply_report,
     format_lint_report, ingest_tet_file, lint_package_semantics, lint_tet_path, list_sealed_parts,
-    parse_semantics_toml, part_id_from_path, publish_parts_with_options, read_package_semantics,
-    read_tet_summary_v1, run_semantics_wizard, scaffold_annotated_toml, scaffold_policy_from_path,
-    set_dataset_attrs, write_package_semantics_from_packed,
+    open_or_create_package, parse_semantics_toml, part_id_from_path, publish_parts_with_options,
+    read_package_semantics, read_tet_summary_v1, resolve_tet_read_path, run_semantics_wizard,
+    scaffold_annotated_toml, scaffold_policy_from_path, set_dataset_attrs,
+    write_package_semantics_from_packed,
 };
 use crate::convert::{
     ConvertOptions, ConvertProgress, convert_s3_object_to_tet, convert_to_tet_with_options,
-    is_s3_convert_uri,
+    is_s3_convert_uri, resolve_parallel_jobs,
 };
 use crate::export::export_tet_with_progress;
 use crate::layout::mmap_file_read;
 use crate::query::cli::{
     DEFAULT_INFO_CHUNK_TABLE_LIMIT, InfoListFilter, InfoMetadataDisplay, InfoSection,
-    InfoSectionRequest, QueryOutputFormat, append_cli_query_history, format_info_json,
-    format_info_quiet, format_info_text, format_query_response, format_query_stderr_hints,
-    info_view_sections_from_flags,
+    InfoSectionRequest, QUERY_PREVIEW_DEFAULT, QueryOutputFormat, append_cli_query_history,
+    format_info_json, format_info_quiet, format_info_text, format_query_response,
+    format_query_stderr_hints, info_view_sections_from_flags,
 };
 use crate::query::{
     ExecutionDeviceHint, QueryDocument, QueryResponse, SpillPathAllowlist,
@@ -48,11 +49,9 @@ use super::schema::{
     CompactStep, ConvertStep, ExportStep, GcStep, IndexStep, InfoStep, IngestStep, Job, PackStep,
     QueryStep, RepairStep, SemanticsApplyStep, SemanticsLintStep, SemanticsPackageWriteStep,
     SemanticsScaffoldStep, SemanticsSetStep, SemanticsWizardStep, Step, VerifyStep,
+    effective_quiet,
 };
 use super::{JobError, RunJobOptions};
-
-/// Default sample count for an executing query when `preview` is omitted (matches the CLI).
-const QUERY_PREVIEW_DEFAULT: usize = 64;
 
 /// What one executed step produced.
 #[derive(Default)]
@@ -83,6 +82,64 @@ impl StepOutput {
         } else {
             Self::note(text)
         }
+    }
+}
+
+/// Why a step failed: the message plus the resolved path the failing operation touched.
+///
+/// Becomes [`JobError::Step`] at the module boundary. Build it with [`fail`] / [`AtPath::at`]
+/// (path attached once, at the call that knows it) or `?` from a plain `String` / `&str`.
+#[derive(Debug)]
+pub(super) struct StepFailure {
+    pub message: String,
+    pub path: Option<PathBuf>,
+}
+
+type StepResult<T> = Result<T, StepFailure>;
+
+impl From<String> for StepFailure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            path: None,
+        }
+    }
+}
+
+impl From<&str> for StepFailure {
+    fn from(message: &str) -> Self {
+        message.to_owned().into()
+    }
+}
+
+/// Failure at `path` (reported absolute). The path is dropped when `err` already spells it out.
+fn fail(path: &Path, err: impl Display) -> StepFailure {
+    let message = err.to_string();
+    let named = message.contains(&path.display().to_string());
+    StepFailure {
+        message,
+        path: (!named).then(|| std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())),
+    }
+}
+
+/// `result.at(&path)?` — attach the resolved path to a failing filesystem-ish operation.
+trait AtPath<T> {
+    fn at(self, path: &Path) -> StepResult<T>;
+}
+
+impl<T, E: Display> AtPath<T> for Result<T, E> {
+    fn at(self, path: &Path) -> StepResult<T> {
+        self.map_err(|e| fail(path, e))
+    }
+}
+
+/// Failure reading `input`: name it only when it is missing (other errors may be about the
+/// output side, where blaming the input would mislead).
+fn fail_input(input: &Path, err: impl Display) -> StepFailure {
+    if input.exists() {
+        err.to_string().into()
+    } else {
+        fail(input, err)
     }
 }
 
@@ -120,22 +177,13 @@ fn abs_or_s3(root: &Path, p: &Path) -> PathBuf {
     }
 }
 
-fn ensure_parent(path: &Path) -> Result<(), String> {
+fn ensure_parent(path: &Path) -> StepResult<()> {
     match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() && !parent.exists() => {
-            fs::create_dir_all(parent).map_err(es)
+            fs::create_dir_all(parent).at(parent)
         }
         _ => Ok(()),
     }
-}
-
-fn resolve_tet_read_path(path: &Path) -> Result<PathBuf, String> {
-    if !looks_like_tet_package(path) {
-        return Ok(path.to_path_buf());
-    }
-    let pkg = TetPackage::open(path).map_err(es)?;
-    let pin = pkg.pin_current().map_err(es)?;
-    Ok(pin.packed_tet_path().to_path_buf())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -300,7 +348,7 @@ pub(super) fn execute(
     root: &Path,
     doc: Option<&QueryDocument>,
     opts: &RunJobOptions,
-) -> Result<StepOutput, String> {
+) -> StepResult<StepOutput> {
     match step {
         Step::Info(s) => run_info(s, root),
         Step::Verify(s) => run_verify(s, root),
@@ -338,13 +386,13 @@ pub(super) fn execute(
 // info / verify / repair
 // ---------------------------------------------------------------------------------------------
 
-fn run_info(s: &InfoStep, root: &Path) -> Result<StepOutput, String> {
+fn run_info(s: &InfoStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
-    let resolved = resolve_tet_read_path(&path)?;
-    let mmap = mmap_file_read(&resolved).map_err(es)?;
+    let resolved = resolve_tet_read_path(&path).at(&path)?;
+    let mmap = mmap_file_read(&resolved).at(&resolved)?;
     let file_len = u64::try_from(mmap.len())
         .map_err(|_| format!("file size {} exceeds u64::MAX", mmap.len()))?;
-    let summary = read_tet_summary_v1(&mmap).map_err(es)?;
+    let summary = read_tet_summary_v1(&mmap).at(&resolved)?;
     let filter = InfoListFilter {
         dataset: s.dataset.clone(),
         grep: s.grep.clone(),
@@ -353,7 +401,7 @@ fn run_info(s: &InfoStep, root: &Path) -> Result<StepOutput, String> {
     let path_ref = Some(path.as_path());
     let out = if s.json {
         format_info_json(path_ref, file_len, &summary, filter.as_ref())?
-    } else if s.quiet {
+    } else if effective_quiet(s.quiet, false) {
         format_info_quiet(path_ref, file_len, &summary, filter.as_ref())
     } else {
         let mut req = InfoSectionRequest::default();
@@ -388,15 +436,15 @@ fn run_info(s: &InfoStep, root: &Path) -> Result<StepOutput, String> {
     Ok(StepOutput::stdout(out))
 }
 
-fn verify_once(path: &Path, opts: VerifyOptions) -> Result<crate::verify::TetVerifyReport, String> {
+fn verify_once(path: &Path, opts: VerifyOptions) -> StepResult<crate::verify::TetVerifyReport> {
     if looks_like_tet_package(path) {
-        verify_tet_package_with_options(path, opts).map_err(es)
+        verify_tet_package_with_options(path, opts).at(path)
     } else {
-        verify_tet_file_with_options(path, opts).map_err(es)
+        verify_tet_file_with_options(path, opts).at(path)
     }
 }
 
-fn run_verify(s: &VerifyStep, root: &Path) -> Result<StepOutput, String> {
+fn run_verify(s: &VerifyStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     let verify_opts = VerifyOptions {
         deep_decode: s.deep,
@@ -404,19 +452,19 @@ fn run_verify(s: &VerifyStep, root: &Path) -> Result<StepOutput, String> {
     let mut report = verify_once(&path, verify_opts)?;
     let mut note = None;
     if s.repair && !report.ok {
-        let repaired = repair_from_verify_report(&path, &report, false).map_err(es)?;
+        let repaired = repair_from_verify_report(&path, &report, false).at(&path)?;
         note = Some(format_repair_text(&repaired));
         report = verify_once(&path, verify_opts)?;
     }
     let out = if s.json {
         format_verify_json(&report).map_err(es)?
-    } else if s.quiet {
+    } else if effective_quiet(s.quiet, false) {
         format_verify_quiet(&report)
     } else {
         format_verify_text(&report)
     };
     if !report.ok {
-        return Err(format!("verification failed\n{}", out.trim_end()));
+        return Err(format!("verification failed\n{}", out.trim_end()).into());
     }
     Ok(StepOutput {
         stdout: Some(out),
@@ -425,10 +473,10 @@ fn run_verify(s: &VerifyStep, root: &Path) -> Result<StepOutput, String> {
     })
 }
 
-fn run_repair(s: &RepairStep, root: &Path) -> Result<StepOutput, String> {
+fn run_repair(s: &RepairStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     if s.apply.is_empty() {
-        let verify = verify_tet_file(&path).map_err(es)?;
+        let verify = verify_tet_file(&path).at(&path)?;
         let plan = repair_plan(&path, &verify);
         let out = if s.json {
             format_plan_json(&plan).map_err(es)?
@@ -442,14 +490,14 @@ fn run_repair(s: &RepairStep, root: &Path) -> Result<StepOutput, String> {
         apply: s.apply.clone(),
         plan_codes: Vec::new(),
     };
-    let report = repair_tet_file(&path, &repair_opts).map_err(es)?;
+    let report = repair_tet_file(&path, &repair_opts).at(&path)?;
     let out = if s.json {
         format_repair_json(&report).map_err(es)?
     } else {
         format_repair_text(&report)
     };
     if !report.dry_run && report.verify_after_ok == Some(false) {
-        return Err("repair finished but verification still failed".to_owned());
+        return Err(fail(&path, "repair finished but verification still failed"));
     }
     Ok(StepOutput::stdout(out))
 }
@@ -463,8 +511,8 @@ fn run_query(
     doc: &QueryDocument,
     root: &Path,
     opts: &RunJobOptions,
-) -> Result<StepOutput, String> {
-    let stdout_format = if s.quiet {
+) -> StepResult<StepOutput> {
+    let stdout_format = if effective_quiet(s.quiet, s.format.is_some()) {
         QueryOutputFormat::Quiet
     } else {
         s.format.unwrap_or_default()
@@ -526,8 +574,10 @@ fn query_local_tet(
     execute: bool,
     preview: Option<usize>,
     spill_allow: &[PathBuf],
-) -> Result<QueryResponse, String> {
-    let resolved_tet = tet.map(|path| resolve_tet_read_path(path)).transpose()?;
+) -> StepResult<QueryResponse> {
+    let resolved_tet = tet
+        .map(|path| resolve_tet_read_path(path).at(path))
+        .transpose()?;
     let mut spill_owned = None;
     if execute {
         let path = resolved_tet.as_ref().ok_or("`execute` requires `tet`")?;
@@ -538,7 +588,7 @@ fn query_local_tet(
     if let (Some(orig), Some(resolved)) = (tet, resolved_tet.as_ref()) {
         // Plan against the sealed packed.tet but echo the user-facing path as `tet_file`.
         let path_for_io = resolved.display().to_string();
-        let mmap = mmap_file_read(resolved).map_err(es)?;
+        let mmap = mmap_file_read(resolved).at(resolved)?;
         let mut response = plan_query_with_tet_mmap_ex(
             doc,
             Some(path_for_io.as_str()),
@@ -598,7 +648,7 @@ fn query_s3_package(
 // convert / export / index
 // ---------------------------------------------------------------------------------------------
 
-fn run_convert(s: &ConvertStep, root: &Path) -> Result<StepOutput, String> {
+fn run_convert(s: &ConvertStep, root: &Path) -> StepResult<StepOutput> {
     let out = abs(root, &s.to);
     ensure_parent(&out)?;
     let options = ConvertOptions {
@@ -607,12 +657,12 @@ fn run_convert(s: &ConvertStep, root: &Path) -> Result<StepOutput, String> {
         chunk_mib: s.chunk_mib,
     };
     let report = if is_s3_convert_uri(&s.from) {
-        convert_s3_object_to_tet(&s.from, &out, options, None::<fn(ConvertProgress)>)
+        convert_s3_object_to_tet(&s.from, &out, options, None::<fn(ConvertProgress)>).map_err(es)?
     } else {
         let input = abs(root, Path::new(&s.from));
         convert_to_tet_with_options(&input, &out, options, None::<fn(ConvertProgress)>)
-    }
-    .map_err(es)?;
+            .map_err(|e| fail_input(&input, e))?
+    };
     let mut note = format!(
         "converted {} dataset(s) → {} ({:.2}s)",
         report.dataset_count, report.output, report.elapsed_secs
@@ -627,11 +677,12 @@ fn run_convert(s: &ConvertStep, root: &Path) -> Result<StepOutput, String> {
     })
 }
 
-fn run_export(s: &ExportStep, root: &Path) -> Result<StepOutput, String> {
+fn run_export(s: &ExportStep, root: &Path) -> StepResult<StepOutput> {
     let input = abs(root, &s.from);
     let out = abs(root, &s.to);
     ensure_parent(&out)?;
-    let report = export_tet_with_progress(&input, &out, None::<fn(_)>).map_err(es)?;
+    let report =
+        export_tet_with_progress(&input, &out, None::<fn(_)>).map_err(|e| fail_input(&input, e))?;
     Ok(StepOutput {
         note: Some(format!(
             "exported {} dataset(s), {} chunk(s) → {} ({:.2}s)",
@@ -642,17 +693,17 @@ fn run_export(s: &ExportStep, root: &Path) -> Result<StepOutput, String> {
     })
 }
 
-fn run_index(s: &IndexStep, root: &Path) -> Result<StepOutput, String> {
+fn run_index(s: &IndexStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     if s.clear {
-        clear_embedded_indexes(&path).map_err(es)?;
+        clear_embedded_indexes(&path).at(&path)?;
         return Ok(StepOutput::quiet_note(
             s.quiet,
             format!("cleared embedded ZONE/INDEX → {}", path.display()),
         ));
     }
     let embedded =
-        embed_indexes_in_tet(&path, crate::catalog::EMBEDDED_STANDALONE_GENERATION).map_err(es)?;
+        embed_indexes_in_tet(&path, crate::catalog::EMBEDDED_STANDALONE_GENERATION).at(&path)?;
     let index = if embedded.secondary_index.bytes.is_some() {
         "INDEX present"
     } else {
@@ -680,12 +731,12 @@ fn same_path(a: &Path, b: &Path) -> bool {
     a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
 }
 
-fn write_text(out: &Path, text: &str) -> Result<(), String> {
+fn write_text(out: &Path, text: &str) -> StepResult<()> {
     ensure_parent(out)?;
-    fs::write(out, text).map_err(es)
+    fs::write(out, text).at(out)
 }
 
-fn run_semantics_apply(s: &SemanticsApplyStep, root: &Path) -> Result<StepOutput, String> {
+fn run_semantics_apply(s: &SemanticsApplyStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     let from = abs(root, &s.from);
     let output = s.output.as_ref().map(|o| abs(root, o));
@@ -696,14 +747,14 @@ fn run_semantics_apply(s: &SemanticsApplyStep, root: &Path) -> Result<StepOutput
             "`output` must not be the `from` file (the source TOML is never rewritten)".into(),
         );
     }
-    let report = apply_semantics_toml(&path, &from).map_err(es)?;
+    let report = apply_semantics_toml(&path, &from).map_err(|e| fail_input(&from, e))?;
     let note = format_apply_report(&path, &report);
     let mut step_out = StepOutput::note(note.trim_end());
     if s.annotate {
-        let toml_text = fs::read_to_string(&from).map_err(es)?;
-        let doc = parse_semantics_toml(&toml_text).map_err(es)?;
-        let mmap = mmap_file_read(&path).map_err(es)?;
-        let summary = read_tet_summary_v1(&mmap).map_err(es)?;
+        let toml_text = fs::read_to_string(&from).at(&from)?;
+        let doc = parse_semantics_toml(&toml_text).at(&from)?;
+        let mmap = mmap_file_read(&path).at(&path)?;
+        let summary = read_tet_summary_v1(&mmap).at(&path)?;
         let overlay = ScaffoldPolicy {
             profiles: doc.profiles,
             units: doc.units,
@@ -721,13 +772,10 @@ fn run_semantics_apply(s: &SemanticsApplyStep, root: &Path) -> Result<StepOutput
     Ok(step_out)
 }
 
-fn run_semantics_scaffold(s: &SemanticsScaffoldStep, root: &Path) -> Result<StepOutput, String> {
+fn run_semantics_scaffold(s: &SemanticsScaffoldStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
-    let format = match &s.format {
-        Some(f) => ScaffoldFormat::parse(f).map_err(es)?,
-        None => ScaffoldFormat::Toml,
-    };
-    let text = scaffold_policy_from_path(&path, format).map_err(es)?;
+    let format = s.format.unwrap_or(ScaffoldFormat::Toml);
+    let text = scaffold_policy_from_path(&path, format).at(&path)?;
     if let Some(out) = &s.output {
         write_text(&abs(root, out), &text)?;
         return Ok(StepOutput::default());
@@ -735,14 +783,14 @@ fn run_semantics_scaffold(s: &SemanticsScaffoldStep, root: &Path) -> Result<Step
     Ok(StepOutput::stdout(text))
 }
 
-fn run_semantics_set(s: &SemanticsSetStep, root: &Path) -> Result<StepOutput, String> {
+fn run_semantics_set(s: &SemanticsSetStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     let pairs: Vec<(String, String)> = s
         .set
         .iter()
         .map(|(k, v)| (k.clone(), v.to_attr_string()))
         .collect();
-    set_dataset_attrs(&path, &s.dataset, &pairs, &s.clear).map_err(es)?;
+    set_dataset_attrs(&path, &s.dataset, &pairs, &s.clear).at(&path)?;
     Ok(StepOutput::note(format!(
         "semantics: updated dataset {:?} on {}",
         s.dataset,
@@ -750,7 +798,7 @@ fn run_semantics_set(s: &SemanticsSetStep, root: &Path) -> Result<StepOutput, St
     )))
 }
 
-fn run_semantics_wizard_step(s: &SemanticsWizardStep, root: &Path) -> Result<StepOutput, String> {
+fn run_semantics_wizard_step(s: &SemanticsWizardStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     let mut opts = WizardOptions::beside_tet(&path);
     opts.dataset.clone_from(&s.dataset);
@@ -759,7 +807,7 @@ fn run_semantics_wizard_step(s: &SemanticsWizardStep, root: &Path) -> Result<Ste
         opts.toml_out = abs(root, out);
     }
     let mut io = StdWizardIo::new();
-    let result = run_semantics_wizard(&path, &opts, &mut io).map_err(es)?;
+    let result = run_semantics_wizard(&path, &opts, &mut io).at(&path)?;
     Ok(StepOutput::note(format!(
         "wizard: done dataset {:?} → {}",
         result.dataset,
@@ -777,18 +825,18 @@ fn resolve_generation(package: &TetPackage, generation: Option<u64>) -> Result<u
     }
 }
 
-fn run_semantics_lint(s: &SemanticsLintStep, root: &Path) -> Result<StepOutput, String> {
+fn run_semantics_lint(s: &SemanticsLintStep, root: &Path) -> StepResult<StepOutput> {
     let path = abs(root, &s.path);
     let report = if looks_like_tet_package(&path) {
-        let package = TetPackage::open(&path).map_err(es)?;
+        let package = TetPackage::open(&path).at(&path)?;
         let g = resolve_generation(&package, s.generation)?;
-        if let Some(doc) = read_package_semantics(&package, g).map_err(es)? {
+        if let Some(doc) = read_package_semantics(&package, g).at(&path)? {
             lint_package_semantics(&doc)
         } else {
-            lint_tet_path(&package.packed_tet_path(g)).map_err(es)?
+            lint_tet_path(&package.packed_tet_path(g)).at(&path)?
         }
     } else {
-        lint_tet_path(&path).map_err(es)?
+        lint_tet_path(&path).at(&path)?
     };
     Ok(StepOutput::stdout(format_lint_report(&report)))
 }
@@ -796,11 +844,11 @@ fn run_semantics_lint(s: &SemanticsLintStep, root: &Path) -> Result<StepOutput, 
 fn run_semantics_package_write(
     s: &SemanticsPackageWriteStep,
     root: &Path,
-) -> Result<StepOutput, String> {
-    let package = TetPackage::open(abs(root, &s.path)).map_err(es)?;
+) -> StepResult<StepOutput> {
+    let path = abs(root, &s.path);
+    let package = TetPackage::open(&path).at(&path)?;
     let g = resolve_generation(&package, s.generation)?;
-    let (doc, sha) =
-        write_package_semantics_from_packed(&package, g, !s.no_manifest).map_err(es)?;
+    let (doc, sha) = write_package_semantics_from_packed(&package, g, !s.no_manifest).at(&path)?;
     Ok(StepOutput::note(format!(
         "semantics: wrote generations/{g:08}/SEMANTICS.json ({} dataset(s), sha256={sha})",
         doc.datasets.len()
@@ -811,47 +859,22 @@ fn run_semantics_package_write(
 // ingest / publish / compact / pack / gc
 // ---------------------------------------------------------------------------------------------
 
-fn open_or_create_package(path: &Path, create: bool) -> Result<TetPackage, String> {
-    if looks_like_tet_package(path) {
-        return TetPackage::open(path).map_err(es);
-    }
-    if path.exists() {
-        return Err(format!(
-            "{} exists but is not a .tet.d package (missing PROTOCOL)",
-            path.display()
-        ));
-    }
-    let _ = create; // a missing path is created either way (same as the CLI)
-    ensure_parent(path)?;
-    TetPackage::create(path).map_err(es)
-}
-
-fn resolve_jobs(jobs: usize) -> usize {
-    if jobs == 0 {
-        std::thread::available_parallelism()
-            .map_or(1, std::num::NonZero::get)
-            .min(64)
-    } else {
-        jobs.clamp(1, 64)
-    }
-}
-
-fn run_ingest(s: &IngestStep, root: &Path) -> Result<StepOutput, String> {
+fn run_ingest(s: &IngestStep, root: &Path) -> StepResult<StepOutput> {
     let inputs: Vec<PathBuf> = s.from.iter().map(|p| abs(root, p)).collect();
     for input in &inputs {
         if !input.is_file() {
-            return Err(format!("input not found: {}", input.display()));
+            return Err(fail(input, "input not found"));
         }
     }
     let out = abs(root, &s.to);
-    let pkg = open_or_create_package(&out, s.create)?;
-    let jobs = resolve_jobs(s.jobs);
+    let pkg = open_or_create_package(&out).at(&out)?;
+    let jobs = resolve_parallel_jobs(s.jobs);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(jobs)
         .build()
         .map_err(es)?;
     let counter = AtomicUsize::new(0);
-    let sealed: Result<Vec<_>, String> = pool.install(|| {
+    let sealed: StepResult<Vec<_>> = pool.install(|| {
         inputs
             .par_iter()
             .map(|input| {
@@ -863,7 +886,7 @@ fn run_ingest(s: &IngestStep, root: &Path) -> Result<StepOutput, String> {
                     format!("{base}-{n}")
                 };
                 let session_id = format!("ingest-{part_id}");
-                let meta = ingest_tet_file(&pkg, input, &session_id, &part_id).map_err(es)?;
+                let meta = ingest_tet_file(&pkg, input, &session_id, &part_id).at(input)?;
                 Ok((input.clone(), meta))
             })
             .collect()
@@ -896,7 +919,7 @@ struct PublishArgs {
     quiet: bool,
 }
 
-fn run_compact(s: &CompactStep, root: &Path) -> Result<StepOutput, String> {
+fn run_compact(s: &CompactStep, root: &Path) -> StepResult<StepOutput> {
     let mut out = run_publish(&PublishArgs {
         package: abs(root, &s.package),
         generation: s.generation,
@@ -913,12 +936,13 @@ fn run_compact(s: &CompactStep, root: &Path) -> Result<StepOutput, String> {
     Ok(out)
 }
 
-fn run_publish(opts: &PublishArgs) -> Result<StepOutput, String> {
-    let pkg = TetPackage::open(&opts.package).map_err(es)?;
+fn run_publish(opts: &PublishArgs) -> StepResult<StepOutput> {
+    let at = opts.package.as_path();
+    let pkg = TetPackage::open(at).at(at)?;
     if opts.abort {
         let generation = opts.generation.ok_or("`abort` requires `generation`")?;
-        let current_before = pkg.current().map_err(es)?;
-        pkg.abort_publish(generation).map_err(es)?;
+        let current_before = pkg.current().at(at)?;
+        pkg.abort_publish(generation).at(at)?;
         return Ok(StepOutput::quiet_note(
             opts.quiet,
             format!(
@@ -930,12 +954,12 @@ fn run_publish(opts: &PublishArgs) -> Result<StepOutput, String> {
     }
     let generation = match opts.generation {
         Some(g) => g,
-        None => pkg.next_generation().map_err(es)?,
+        None => pkg.next_generation().at(at)?,
     };
     let part_ids = match &opts.parts {
         Some(ids) if !ids.is_empty() => ids.clone(),
         _ => {
-            let sealed = list_sealed_parts(&pkg).map_err(es)?;
+            let sealed = list_sealed_parts(&pkg).at(at)?;
             if sealed.is_empty() {
                 return Err("no sealed staging parts to publish (run ingest first)".into());
             }
@@ -946,8 +970,8 @@ fn run_publish(opts: &PublishArgs) -> Result<StepOutput, String> {
         replace: opts.replace.clone(),
     };
     if opts.dry_run {
-        let validation = dry_run_publish_parts_with_options(&pkg, generation, &part_ids, &options)
-            .map_err(es)?;
+        let validation =
+            dry_run_publish_parts_with_options(&pkg, generation, &part_ids, &options).at(at)?;
         return Ok(StepOutput::quiet_note(
             opts.quiet,
             format!(
@@ -958,7 +982,7 @@ fn run_publish(opts: &PublishArgs) -> Result<StepOutput, String> {
             ),
         ));
     }
-    let manifest = publish_parts_with_options(&pkg, generation, &part_ids, &options).map_err(es)?;
+    let manifest = publish_parts_with_options(&pkg, generation, &part_ids, &options).at(at)?;
     Ok(StepOutput::quiet_note(
         opts.quiet,
         format!(
@@ -972,23 +996,23 @@ fn run_publish(opts: &PublishArgs) -> Result<StepOutput, String> {
     ))
 }
 
-fn run_pack(s: &PackStep, root: &Path) -> Result<StepOutput, String> {
+fn run_pack(s: &PackStep, root: &Path) -> StepResult<StepOutput> {
     let package = abs(root, &s.from);
     let output = abs(root, &s.to);
-    let pkg = TetPackage::open(&package).map_err(es)?;
+    let pkg = TetPackage::open(&package).at(&package)?;
     let generation = match s.generation {
         Some(g) => g,
         None => pkg
             .current()
-            .map_err(es)?
-            .ok_or("package has no CURRENT generation")?,
+            .at(&package)?
+            .ok_or_else(|| fail(&package, "package has no CURRENT generation"))?,
     };
     ensure_parent(&output)?;
     let pack_opts = PackGenerationOptions {
         remove_package: s.remove_package,
     };
     pkg.pack_generation_with(generation, &output, &pack_opts)
-        .map_err(es)?;
+        .at(&package)?;
     let note = if s.remove_package {
         format!(
             "packed generation={generation} → {} (removed package {})",
@@ -1001,11 +1025,11 @@ fn run_pack(s: &PackStep, root: &Path) -> Result<StepOutput, String> {
     Ok(StepOutput::quiet_note(s.quiet, note))
 }
 
-fn run_gc(s: &GcStep, root: &Path) -> Result<StepOutput, String> {
+fn run_gc(s: &GcStep, root: &Path) -> StepResult<StepOutput> {
     let target = abs_or_s3(root, &s.target);
     let text = target.to_string_lossy().into_owned();
     if is_s3_target(&text) {
-        return run_gc_s3(s, text.trim());
+        return Ok(run_gc_s3(s, text.trim())?);
     }
     if !s.protect_generation.is_empty() {
         return Err(
@@ -1013,8 +1037,8 @@ fn run_gc(s: &GcStep, root: &Path) -> Result<StepOutput, String> {
                 .into(),
         );
     }
-    let pkg = TetPackage::open(&target).map_err(es)?;
-    let plan = pkg.gc(&GcOptions { apply: s.apply }).map_err(es)?;
+    let pkg = TetPackage::open(&target).at(&target)?;
+    let plan = pkg.gc(&GcOptions { apply: s.apply }).at(&target)?;
     let mode = if s.apply { "applied" } else { "dry-run" };
     if plan.is_empty() {
         return Ok(StepOutput::quiet_note(

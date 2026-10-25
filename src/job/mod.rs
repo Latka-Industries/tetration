@@ -80,6 +80,8 @@ pub enum JobError {
         index: usize,
         op: &'static str,
         message: String,
+        /// The resolved path the failing operation touched, when known.
+        path: Option<PathBuf>,
         /// Steps that finished before the failure.
         completed: Vec<StepReport>,
     },
@@ -91,8 +93,18 @@ impl fmt::Display for JobError {
             Self::Io { path, message } => write!(f, "{}: {message}", path.display()),
             Self::Parse(m) | Self::Invalid(m) => write!(f, "invalid job: {m}"),
             Self::Step {
-                index, op, message, ..
-            } => write!(f, "step {} ({op}) failed: {message}", index + 1),
+                index,
+                op,
+                message,
+                path,
+                ..
+            } => {
+                write!(f, "step {} ({op}) failed: {message}", index + 1)?;
+                if let Some(path) = path {
+                    write!(f, ": {}", path.display())?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -182,15 +194,15 @@ impl Job {
 /// [`JobError::Parse`] for syntax / schema errors (unknown `op`, unknown field, wrong type);
 /// [`JobError::Invalid`] from [`Job::validate`].
 pub fn parse_job(text: &str, format: JobFormat) -> Result<Job, JobError> {
-    let format = match format {
-        JobFormat::Auto => detect_job_format(None, text),
-        other => other,
+    let is_json = match format {
+        JobFormat::Json => true,
+        JobFormat::Toml => false,
+        JobFormat::Auto => detect_job_format(None, text) == JobFormat::Json,
     };
-    let value: serde_json::Value = match format {
-        JobFormat::Json | JobFormat::Auto => {
-            serde_json::from_str(text).map_err(|e| JobError::Parse(e.to_string()))?
-        }
-        JobFormat::Toml => toml::from_str(text).map_err(|e| JobError::Parse(e.to_string()))?,
+    let value: serde_json::Value = if is_json {
+        serde_json::from_str(text).map_err(|e| JobError::Parse(e.to_string()))?
+    } else {
+        toml::from_str(text).map_err(|e| JobError::Parse(e.to_string()))?
     };
     let job = job_from_value(value)?;
     job.validate()?;
@@ -255,10 +267,11 @@ fn step_from_value(index: usize, item: serde_json::Value) -> Result<Step, JobErr
 ///
 /// [`JobError::Io`] when the file cannot be read, plus everything [`run_job`] returns.
 pub fn run_job_path(path: &Path, opts: &RunJobOptions) -> Result<JobReport, JobError> {
-    run_job_path_observed(path, opts, |_| {})
+    run_job_path_observed(path, opts, |_, _| {})
 }
 
 /// [`run_job_path`] with a callback after each finished step (the CLI prints through this).
+/// The callback gets the step report and the job's total step count.
 ///
 /// # Errors
 ///
@@ -266,7 +279,7 @@ pub fn run_job_path(path: &Path, opts: &RunJobOptions) -> Result<JobReport, JobE
 pub fn run_job_path_observed(
     path: &Path,
     opts: &RunJobOptions,
-    on_step: impl FnMut(&StepReport),
+    on_step: impl FnMut(&StepReport, usize),
 ) -> Result<JobReport, JobError> {
     let text = std::fs::read_to_string(path).map_err(|e| JobError::Io {
         path: path.to_path_buf(),
@@ -291,10 +304,11 @@ pub fn run_job_path_observed(
 ///
 /// [`JobError::Invalid`] from pre-flight, or [`JobError::Step`] for the first failing step.
 pub fn run_job(job: &Job, opts: &RunJobOptions) -> Result<JobReport, JobError> {
-    run_job_observed(job, opts, |_| {})
+    run_job_observed(job, opts, |_, _| {})
 }
 
-/// [`run_job`] with a callback after each finished (or, in dry run, planned) step.
+/// [`run_job`] with a callback after each finished (or, in dry run, planned) step. The callback
+/// gets the step report and the job's total step count.
 ///
 /// # Errors
 ///
@@ -302,7 +316,7 @@ pub fn run_job(job: &Job, opts: &RunJobOptions) -> Result<JobReport, JobError> {
 pub fn run_job_observed(
     job: &Job,
     opts: &RunJobOptions,
-    mut on_step: impl FnMut(&StepReport),
+    mut on_step: impl FnMut(&StepReport, usize),
 ) -> Result<JobReport, JobError> {
     job.validate()?;
     let root = opts.root.clone().unwrap_or_else(|| PathBuf::from("."));
@@ -335,17 +349,18 @@ pub fn run_job_observed(
                     note: out.note,
                     data: out.data,
                 },
-                Err(message) => {
+                Err(failure) => {
                     return Err(JobError::Step {
                         index,
                         op: step.op(),
-                        message,
+                        message: failure.message,
+                        path: failure.path,
                         completed: steps,
                     });
                 }
             }
         };
-        on_step(&report);
+        on_step(&report, job.steps.len());
         steps.push(report);
     }
     Ok(JobReport {

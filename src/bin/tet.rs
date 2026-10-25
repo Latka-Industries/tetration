@@ -211,13 +211,12 @@ fn run_write(cmd: Commands) -> Result<(), String> {
             inputs,
             out,
             jobs,
-            create,
+            create: _, // redundant: a missing package is always created
             quiet,
         } => run_ingest(&IngestOpts {
             inputs,
             out,
             jobs,
-            create,
             quiet,
         }),
         Commands::Publish {

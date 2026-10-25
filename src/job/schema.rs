@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Deserializer};
 
+use crate::catalog::ScaffoldFormat;
 use crate::query::cli::QueryOutputFormat;
 
 /// Job schema version accepted by this crate.
@@ -89,8 +90,9 @@ pub struct InfoStep {
     pub path: PathBuf,
     #[serde(default)]
     pub json: bool,
+    /// One-line summary. Omitted → quiet unless `json`; `false` restores the full text.
     #[serde(default)]
-    pub quiet: bool,
+    pub quiet: Option<bool>,
     #[serde(default)]
     pub all: bool,
     #[serde(default)]
@@ -122,8 +124,9 @@ pub struct VerifyStep {
     pub path: PathBuf,
     #[serde(default)]
     pub json: bool,
+    /// One-line summary. Omitted → quiet unless `json`; `false` restores the full text.
     #[serde(default)]
-    pub quiet: bool,
+    pub quiet: Option<bool>,
     #[serde(default)]
     pub repair: bool,
     #[serde(default)]
@@ -162,9 +165,10 @@ pub struct QueryStep {
     /// `--format` (`full`, `json`, `stats`, `plan`, `quiet`, `table`, `table-verbose`).
     #[serde(default, deserialize_with = "de_output_format")]
     pub format: Option<QueryOutputFormat>,
-    /// Shorthand for `format = "quiet"`.
+    /// Shorthand for `format = "quiet"`. Omitted → quiet unless `format` is set; `false` restores
+    /// the full text.
     #[serde(default)]
-    pub quiet: bool,
+    pub quiet: Option<bool>,
     #[serde(default)]
     pub preview: Option<usize>,
     #[serde(default)]
@@ -227,8 +231,8 @@ pub struct SemanticsScaffoldStep {
     #[serde(default)]
     pub output: Option<PathBuf>,
     /// `toml` (default) or `json`.
-    #[serde(default)]
-    pub format: Option<String>,
+    #[serde(default, deserialize_with = "de_scaffold_format")]
+    pub format: Option<ScaffoldFormat>,
 }
 
 /// A scalar attr value (`set = { frame_rate = 30 }`); stringified like `--set KEY=VAL`.
@@ -389,6 +393,16 @@ where
         .map_err(serde::de::Error::custom)
 }
 
+fn de_scaffold_format<'de, D>(d: D) -> Result<Option<ScaffoldFormat>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(d)?;
+    raw.map(|s| ScaffoldFormat::parse(&s))
+        .transpose()
+        .map_err(serde::de::Error::custom)
+}
+
 fn de_one_or_many<'de, D>(d: D) -> Result<Vec<PathBuf>, D::Error>
 where
     D: Deserializer<'de>,
@@ -403,6 +417,17 @@ where
         OneOrMany::One(p) => vec![p],
         OneOrMany::Many(v) => v,
     })
+}
+
+/// Resolve a step's optional `quiet`. Only `info` / `verify` / `query` default to quiet
+/// (`None` → `true`); `forced_verbose` is set when `json` / an explicit `format` already chose
+/// the output shape, which always wins over quiet.
+pub(super) fn effective_quiet(quiet: Option<bool>, forced_verbose: bool) -> bool {
+    if forced_verbose {
+        false
+    } else {
+        quiet.unwrap_or(true)
+    }
 }
 
 impl Step {
@@ -438,8 +463,12 @@ impl Step {
     /// Returns a message naming the offending field(s).
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Self::Info(s) if s.json && s.quiet => Err("`json` and `quiet` conflict".into()),
-            Self::Verify(s) if s.json && s.quiet => Err("`json` and `quiet` conflict".into()),
+            Self::Info(s) if s.json && s.quiet == Some(true) => {
+                Err("`json` and `quiet` conflict".into())
+            }
+            Self::Verify(s) if s.json && s.quiet == Some(true) => {
+                Err("`json` and `quiet` conflict".into())
+            }
             Self::Query(s) => s.validate(),
             Self::SemanticsApply(s) => {
                 if s.output.is_some() && !s.annotate {
@@ -447,12 +476,6 @@ impl Step {
                 }
                 if s.output.as_ref().is_some_and(|o| *o == s.from) {
                     return Err("`output` must not be the `from` file".into());
-                }
-                Ok(())
-            }
-            Self::SemanticsScaffold(s) => {
-                if let Some(f) = &s.format {
-                    crate::catalog::ScaffoldFormat::parse(f).map_err(|e| e.to_string())?;
                 }
                 Ok(())
             }
@@ -494,7 +517,7 @@ impl QueryStep {
             (None, None) => return Err("requires either `doc = \"path\"` or inline `query`".into()),
             _ => {}
         }
-        if self.format.is_some() && self.quiet {
+        if self.format.is_some() && self.quiet == Some(true) {
             return Err("`format` and `quiet` conflict".into());
         }
         if self.execute && self.tet.is_none() {
