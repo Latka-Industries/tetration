@@ -16,6 +16,7 @@ Full flag reference: [`docs/cli.md`](../../docs/cli.md).
 | `tet/semantics.rs` | `tet semantics`        | `catalog::semantics`              |
 | `tet/convert.rs` | `tet convert`            | `convert::convert_to_tet_*`       |
 | `tet/export.rs`  | `tet export`             | `export::export_tet_*`            |
+| `tet/run.rs`     | `tet run`                | `job::run_job_path_observed`      |
 | `tet/args.rs`    | clap `Cli` / `Commands`  | —                                 |
 | `tet/util.rs`    | stdin query read, errors | `parse_query_text`                |
 

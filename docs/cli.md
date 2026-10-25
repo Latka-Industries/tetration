@@ -10,6 +10,7 @@ Full flag lists: **`tet -h`** and **`tet <command> -h`** (always match the insta
 | [`tet query`](#tet-query) `[QUERY]`                | `q`    | Validate JSON/TOML; optional catalog + execute against `-t` |
 | [`tet qhist`](#tet-qhist) `[list\|run]`            | `hist` | Recent queries (platform cache; **not** the `.tet` footer)  |
 | [`tet semantics`](#tet-semantics) `apply\|scaffold\|set`  | —      | Stamp dims/attrs from TOML, or scaffold caller policy         |
+| [`tet run`](#tet-run) `<job.toml\|json>`          | —      | Run an ordered list of `tet` steps from a job file (fail-fast; [`job.md`](job.md)) |
 | [`tet worker`](#tet-worker) `[--job PATH]`         | —      | Distributed harness: `WorkerJobV1` JSON → `WorkerPartialV1` JSON |
 | [`tet convert`](#tet-convert) `<in> <out.tet>`     | —      | HDF5 / NetCDF / Zarr v3 / NumPy / CSV → `.tet` (auto-embeds ZONE/INDEX) |
 | [`tet index`](#tet-index) `<path.tet>`             | —      | (Re)embed or `--clear` ZONE/INDEX footer spills (0.7.0)     |
@@ -262,5 +263,23 @@ tet gc s3://bucket/prefix --apply --protect-generation 1
 Never deletes the generation named by `CURRENT` or `CURRENT-1`. A live `publishing/<G>` claim (heartbeat not stale) keeps staging and that generation.
 
 **Pin safety (`s3://`):** `tet gc` cannot see `TetPackagePin` / `PinnedPackedTet` handles held by other processes. Those `packed.tet` objects are deleted if they are older than `CURRENT-1` unless you pass `--protect-generation` or `?generation=G`. `CachingStore::prune` protects its own pin; the CLI does not open a pin for you. Local `.tet.d` gc is unchanged and does not take `--protect-generation`.
+
+## `tet run`
+
+Run a TOML or JSON **job file**: an ordered list of stock `tet` steps, fail-fast. Not Airflow (no DAG, conditionals, loops, or retries) and not query-pipeline ETL. Schema, op list, and library API: [`job.md`](job.md).
+
+```bash
+tet run job.toml
+tet run job.toml --dry-run
+tet run job.toml --root /data/run1
+```
+
+| Flag / arg  | Effect |
+| ----------- | ------ |
+| `JOB`       | `.toml` or `.json` (`schema_version = 1`, `[[step]]` / `"steps"`) |
+| `--dry-run` | Validate (including query documents) and print the plan; execute nothing |
+| `--root DIR` | Resolve relative paths against `DIR` (default: the job file's directory) |
+
+Ops: `info`, `verify`, `repair`, `query`, `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Query history is off. `semantics.wizard` needs a TTY on stdin.
 
 More examples: [`fixtures/queries/`](../fixtures/queries/), [`query_engine.md`](query_engine.md).

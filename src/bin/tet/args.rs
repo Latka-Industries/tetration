@@ -275,6 +275,22 @@ pub enum Commands {
     Qhist(QhistArgs),
     /// Declared science/media attrs and caller-policy stubs (not a plugin host).
     Semantics(SemanticsArgs),
+    /// Run a job file: ordered `tet` steps from TOML or JSON, fail-fast.
+    ///
+    /// Not a scheduler or DAG (no conditionals, loops, or retries) and not query-pipeline ETL.
+    /// Relative paths resolve against `--root` (default: the job file's directory).
+    /// See docs/job.md.
+    Run {
+        /// Job file (`.toml` or `.json`; `schema_version = 1`, `[[step]]` / `"steps"`).
+        #[arg(value_name = "JOB")]
+        job: PathBuf,
+        /// Validate the job and print the plan; execute nothing.
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+        /// Directory that relative paths in the job resolve against.
+        #[arg(long, value_name = "DIR")]
+        root: Option<PathBuf>,
+    },
     /// Run one distributed worker job (`WorkerJobV1` JSON → `WorkerPartialV1` JSON).
     ///
     /// Localhost harness for the thin distributed protocol (0.7.1). Reads job JSON from
