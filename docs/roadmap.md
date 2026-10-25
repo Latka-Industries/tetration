@@ -120,7 +120,7 @@ tet query '{"dataset":"temp","mean":[]}' -t 's3://bucket/path/climate?generation
 
 **Localhost N-process harness (THI-618):** `tet worker` runs one `WorkerJobV1` → `WorkerPartialV1`; `execute_sharded_scalar_fold_multiprocess` spawns N workers over one pinned `.tet` and merges partials. Still no network RPC / K8s fleet.
 
-**Shipped in 0.7.2 (THI-617):** distributed materialize / transform / tier-C on the thin protocol (`DenseShardPartial`, `write: ram` only; multiprocess materialize + median). Spill/sidecar/switch stay refuse-only. **Shipped in 0.7.3 (THI-612):** semantics profiles (four PRs + module split). **Shipped in 0.8.0 (THI-632):** one-file TOML apply (dims + attrs), combined scaffold/annotate, package `SEMANTICS.json` `dim_names`. **Shipped in 0.8.1 (THI-638 / #189):** metadata wizard; chunk-aligned `group_by` fast path. **Later (THI-630):** network RPC. Still not shipped: cluster scheduler / worker-local spill / multiprocess transform stats broadcast.
+**Shipped in 0.7.2 (THI-617):** distributed materialize / transform / tier-C on the thin protocol (`DenseShardPartial`, `write: ram` only; multiprocess materialize + median). Spill/sidecar/switch stay refuse-only. **Shipped in 0.7.3 (THI-612):** semantics profiles (four PRs + module split). **Shipped in 0.8.0 (THI-632):** one-file TOML apply (dims + attrs), combined scaffold/annotate, package `SEMANTICS.json` `dim_names`. **Shipped in 0.8.1 (THI-638 / #189):** metadata wizard; chunk-aligned `group_by` fast path. **Shipped in 0.8.2 (THI-645 / #191–#194):** `tet run` / `tetration::job` job-file sequencer (stock CLI ops, fail-fast, `--json`). **Later (THI-630):** network RPC. Still not shipped: cluster scheduler / worker-local spill / multiprocess transform stats broadcast.
 
 **Hygiene (before protocol):** THI-597 / THI-598 landed on `main` (squash [#112](https://github.com/Latka-Industries/tetration/pull/112)); THI-599 optional backlog.
 
@@ -158,6 +158,8 @@ GROUP BY region
 **Shipped in 0.8.0 (THI-632):** one-file `tet-semantics.toml` + `tet semantics apply` (stamp `dim_names` + attrs; policy stays in TOML); combined scaffold / `apply --annotate`; `ProfileContract` palette; package `SEMANTICS.json` includes `dim_names`. Still fold-inert.
 
 **Shipped in 0.8.1 (THI-638):** interactive `tet semantics wizard` (dialoguer + comfy-table; empty keeps last selection). Docs-site pins (THI-637) remain a follow-up.
+
+**Shipped in 0.8.2 (THI-645):** `tet run` job files sequence stock `tet` verbs (`tetration::job`); not semantics, not a query-pipeline ETL. tet-py `run_job` + docs-site pins follow (THI-648 / THI-649).
 
 **Still prospective:** full CF / PROV compliance suites, UCUM conversion graphs inside `packed.tet`, plugin / dynamic code load, required in-tree policy interpreter that mutates folds.
 

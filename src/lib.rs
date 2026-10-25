@@ -13,7 +13,7 @@
 //! reads a Zarr prefix one chunk at a time. `open_s3_package` pins an `s3://bucket/prefix` package
 //! and queries it with range reads.
 //!
-//! **Current line (0.8.1):** query wire includes closed `filter`, `group_by`, `window`, `align`,
+//! **Current line (0.8.2):** query wire includes closed `filter`, `group_by`, `window`, `align`,
 //! `pipeline`, and `label_filter`. Zone maps + secondary indexes (`value_postings`,
 //! `sorted_axis_range`, `coord_label_postings`) live as **embedded footer spills**
 //! (`history_version = 2`; convert / writer auto-embed) and/or generation sidecars.
@@ -21,7 +21,8 @@
 //! `dim_names` and attrs; policy stays in TOML), `ProfileContract` palette (`media.v1` / …),
 //! package `SEMANTICS.json` with `dim_names`, and advisory lint — all declare-only
 //! (fold-inert). Chunk-aligned label `group_by` reuses scalar slab folds when the kept axis
-//! has tile extent 1. Distributed query stays a thin protocol
+//! has tile extent 1. **`tet run` / [`job`]** sequences stock CLI ops from a TOML/JSON job
+//! file (fail-fast; `--json` / `StepReport.data`). Distributed query stays a thin protocol
 //! ([`docs/distributed_boundary.md`](../docs/distributed_boundary.md)): associative scalar
 //! folds plus dense materialize / tier-C / transform (`write: ram`) with an optional
 //! localhost N-process harness (`tet worker`). `layout_version` stays **1**; package / C ABI

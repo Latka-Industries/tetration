@@ -1,6 +1,6 @@
 # Distributed execution — product boundary (0.7.1 → 0.7.2)
 
-**Status:** 0.7.1 boundary locked (THI-615 / THI-616 / THI-618). **0.7.2 shipped** — materialize / transform / tier-C open (THI-617 / [#169](https://github.com/Latka-Industries/tetration/pull/169)) per the RFC below. Semantics profiles shipped in **0.7.3** (THI-612); one-file TOML apply in **0.8.0** (THI-632); metadata wizard in **0.8.1** (THI-638).  
+**Status:** 0.7.1 boundary locked (THI-615 / THI-616 / THI-618). **0.7.2 shipped** — materialize / transform / tier-C open (THI-617 / [#169](https://github.com/Latka-Industries/tetration/pull/169)) per the RFC below. Semantics profiles shipped in **0.7.3** (THI-612); one-file TOML apply in **0.8.0** (THI-632); metadata wizard in **0.8.1** (THI-638); `tet run` job sequencer in **0.8.2** (THI-645).  
 **Module:** [`query::distributed`](../src/query/distributed/README.md)
 
 ## Product shape
