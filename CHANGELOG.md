@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-25
+
+### Added
+
+- `tet run <job.toml|json>` (`--dry-run`, `--root DIR`): run an ordered list of stock `tet` steps from a job file, fail-fast (THI-645 / THI-646 / #191–#194). Closed v1 op set: `info`, `verify`, `repair`, `query` (`doc` or inline `query`), `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Not a scheduler or query-pipeline ETL; guide in `docs/job.md`.
+- Library `tetration::job` (`parse_job`, `run_job`, `run_job_path`): same executor, quiet and structured, calling the same public APIs as the CLI. Query history is off in jobs; `semantics.wizard` needs `allow_interactive`.
+- `tet run --json`: print the full `JobReport` as pretty JSON on stdout; progress, notes, and multi-line step dumps stay on stderr. Works with `--dry-run`. On a step failure the exit code is still 1; stdout carries completed steps plus an `error` object only when at least one step finished (`error.index` is 0-based). Nothing on stdout for first-step / parse / pre-flight errors.
+- `StepReport::data` is now filled for every executed step (was convert / export / verify / query only): `info` (the `tet info --json` envelope), `repair`, `index`, `ingest`, `publish` / `compact`, `pack`, `gc`, and `semantics.*` (apply / scaffold / set / wizard / lint / package-write). Library report types are serialized as-is; shapes in `docs/job.md`.
+- `Serialize` on `GcPlan`, `PublishValidation`, `PruneReport` (+ `PruneRefusal` / `PruneTarget` / `PruneRefuseReason`), `SemanticsApplyReport` / `StampedDataset`, `SemanticsLintReport` / `SemanticsLintFinding` / `SemanticsLintSeverity` / `SemanticsLintCode`, `WizardResult`, and `ScaffoldFormat`; new `query::cli::info_json_value` (the value behind `format_info_json`).
+
 ### Changed
 
 - `tet run` / `tetration::job` UX polish (THI-646): **`info` / `verify` / `query` steps default to quiet** when `quiet` is omitted (`quiet = false` restores full text; `json` / explicit `format` still win; `quiet = true` + `json` / `format` still conflicts). Other ops keep `quiet = false`. `quiet` on those three steps is now `Option<bool>`.
@@ -14,13 +24,9 @@
 
 - `open_or_create_package` had a dead `create` branch and a stale `--create` help text: a missing package is always created, an existing non-package path always fails. `--create` / `create = …` are documented as no-ops (behavior unchanged).
 
-### Added
+### Notes
 
-- `tet run --json` (THI-646): print the full `JobReport` as pretty JSON on stdout; progress, notes, and multi-line step dumps stay on stderr. Works with `--dry-run`. On a step failure the exit code is still 1; stdout carries completed steps plus an `error` object only when at least one step finished (`error.index` is 0-based). Nothing on stdout for first-step / parse / pre-flight errors.
-- `StepReport::data` is now filled for every executed step (was convert / export / verify / query only): `info` (the `tet info --json` envelope), `repair`, `index`, `ingest`, `publish` / `compact`, `pack`, `gc`, and `semantics.*` (apply / scaffold / set / wizard / lint / package-write). Library report types are serialized as-is; shapes in `docs/job.md`.
-- `Serialize` on `GcPlan`, `PublishValidation`, `PruneReport` (+ `PruneRefusal` / `PruneTarget` / `PruneRefuseReason`), `SemanticsApplyReport` / `StampedDataset`, `SemanticsLintReport` / `SemanticsLintFinding` / `SemanticsLintSeverity` / `SemanticsLintCode`, `WizardResult`, and `ScaffoldFormat`; new `query::cli::info_json_value` (the value behind `format_info_json`).
-- `tet run <job.toml|json>` (`--dry-run`, `--root DIR`): run an ordered list of stock `tet` steps from a job file, fail-fast (THI-646). Closed v1 op set: `info`, `verify`, `repair`, `query` (`doc` or inline `query`), `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Not a scheduler or query-pipeline ETL; guide in `docs/job.md`.
-- Library `tetration::job` (`parse_job`, `run_job`, `run_job_path`): same executor, quiet and structured, calling the same public APIs as the CLI. Query history is off in jobs; `semantics.wizard` needs `allow_interactive`.
+- Semver patch on the 0.8 line. Layout / package / C ABI / conformance pack milestone unchanged (**0.7.0**). No new Python API yet — pin **tet-py** (`run_job`) and docs site after crates.io publish (THI-648 / THI-649). Docs-site pins (THI-637) stay a follow-up.
 
 ## [0.8.1] - 2026-10-24
 
