@@ -433,6 +433,7 @@ to = "work/never.tet"
     let JobError::Step {
         index,
         op,
+        path,
         completed,
         ..
     } = &err
@@ -446,12 +447,14 @@ to = "work/never.tet"
         err.to_string().starts_with("step 2 (verify) failed"),
         "{err}"
     );
-    // The failing step names the resolved (absolute) path once, at the end.
+    // Prefer the structured path over Display: Windows temp dirs may render as
+    // short (`RUNNER~1`) vs long forms, and I/O wording differs by OS.
     let missing = dir.path().join("work/does-not-exist.tet");
-    assert!(
-        err.to_string()
-            .ends_with(&format!(": {}", missing.display())),
-        "{err}"
+    let reported = path.as_ref().expect("step error should carry a path");
+    assert_eq!(
+        reported.file_name(),
+        missing.file_name(),
+        "reported={reported:?} missing={missing:?}"
     );
     assert_eq!(
         err.to_string().matches("does-not-exist.tet").count(),

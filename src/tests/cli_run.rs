@@ -58,12 +58,10 @@ fn cli_run_step_failure_names_the_missing_path() {
         .unwrap();
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    let missing = dir.path().join("nope/missing.tet");
+    // Match step identity + basename only: Windows I/O wording differs, and temp
+    // dirs may surface as short (`RUNNER~1`) vs long paths in Display.
     assert!(
-        stderr.contains(&format!(
-            "error: step 1 (verify) failed: No such file or directory (os error 2): {}",
-            missing.display()
-        )),
+        stderr.contains("error: step 1 (verify) failed:") && stderr.contains("missing.tet"),
         "{stderr}"
     );
 }
