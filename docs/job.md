@@ -98,7 +98,7 @@ tet run fixtures/jobs/csv_verify_query.toml --json 2>/dev/null | jq '.steps[].da
 
 Each entry in `steps` is a `StepReport`: `index`, `op`, `status`, `description`, `elapsed_secs`, `stdout` (text the CLI prints), `note` (text for stderr), and **`data`**.
 
-**`step.data` is the programmatic grab bag.** Every executed step fills it with the structured result (serde of the library report type where one exists), so tooling never has to parse `stdout` / `note`. The Python bindings (tet-py) wrap the same `JobReport`.
+**`step.data` is the programmatic grab bag.** Every executed step fills it with the structured result (serde of the library report type where one exists), so tooling never has to parse `stdout` / `note`. tet-py is expected to expose the same `JobReport` shape once job bindings land.
 
 | `op` | `data` |
 | ---- | ------ |
@@ -121,7 +121,7 @@ Each entry in `steps` is a `StepReport`: `index`, `op`, `status`, `description`,
 
 `data` is set even when `quiet = true` suppresses the matching `note`.
 
-**Failures.** The exit code is still 1 and stderr still says `error: step N (op) failed: …`. If at least one step ran, stdout additionally holds the steps that completed as a `JobReport` plus an `error` object (`index`, `op`, `message`, `path`), so partial results are not lost. Parse, pre-flight, and I/O errors happen before step 1 and print nothing on stdout. Always check the exit code (or the `error` key) before treating stdout as a success report.
+**Failures.** The exit code is still 1 and stderr still says `error: step N (op) failed: …` (`N` is **1-based**). If at least one step **completed**, stdout additionally holds those steps as a `JobReport` plus an `error` object (`index`, `op`, `message`, `path`). `error.index` is **0-based** (same as `steps[].index`), so stderr “step 2” ↔ JSON `"index": 1`. `elapsed_secs` on a partial report is the sum of completed step times, not wall clock. First-step failures, parse, pre-flight, and I/O errors print nothing on stdout. Always check the exit code (or the `error` key) before treating stdout as a success report.
 
 ## Library API
 

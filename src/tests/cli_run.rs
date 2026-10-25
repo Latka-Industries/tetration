@@ -207,9 +207,32 @@ fn cli_run_json_step_failure_prints_partial_report_and_exits_nonzero() {
     let report = stdout_json(&out);
     assert_eq!(report["steps"].as_array().unwrap().len(), 1);
     assert_eq!(report["steps"][0]["data"]["dataset_count"], 2);
+    // stderr is 1-based ("step 2"); JSON error.index is 0-based.
     assert_eq!(report["error"]["index"], 1);
     assert_eq!(report["error"]["op"], "verify");
     assert!(report["error"]["message"].is_string());
+
+    // First-step failure: nothing completed → empty stdout (same contract as pre-flight).
+    std::fs::write(
+        &job,
+        "schema_version = 1\n[[step]]\nop = \"verify\"\npath = \"work/missing.tet\"\n",
+    )
+    .unwrap();
+    let first = tet_cmd()
+        .args(["run", job.to_str().unwrap(), "--json"])
+        .output()
+        .unwrap();
+    assert_eq!(first.status.code(), Some(1));
+    assert!(
+        first.stdout.is_empty(),
+        "first-step failure must not print partial JSON: {}",
+        String::from_utf8_lossy(&first.stdout)
+    );
+    let first_err = String::from_utf8_lossy(&first.stderr);
+    assert!(
+        first_err.contains("error: step 1 (verify) failed:"),
+        "{first_err}"
+    );
 
     // Pre-flight failure: nothing completed, so stdout stays empty.
     std::fs::write(&job, "schema_version = 1\n[[step]]\nop = \"nope\"\n").unwrap();

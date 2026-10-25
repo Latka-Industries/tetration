@@ -99,9 +99,9 @@ pub(crate) fn run_run(opts: RunCmdOpts) -> Result<(), String> {
     Ok(())
 }
 
-/// `--json` on failure: stdout gets the steps that completed (a [`JobReport`] plus an `error`
-/// object naming the failed step) so tooling can see partial results. Exit code stays 1.
-/// Failures before step 1 (parse / pre-flight / I/O) print nothing on stdout.
+/// `--json` on failure: if at least one step completed, stdout gets those steps (a [`JobReport`]
+/// plus an `error` object naming the failed step). Exit code stays 1. First-step failures,
+/// parse / pre-flight / I/O errors print nothing on stdout (same as “nothing completed”).
 fn print_partial_report(
     err: &JobError,
     job: &std::path::Path,
@@ -118,6 +118,11 @@ fn print_partial_report(
     else {
         return;
     };
+    // Match docs: empty stdout unless a step actually finished. A first-step failure still has
+    // `JobError::Step` but `completed` is empty — treat like pre-flight for the stdout contract.
+    if completed.is_empty() {
+        return;
+    }
     let root = root.map_or_else(
         || {
             job.parent()
@@ -126,6 +131,7 @@ fn print_partial_report(
         },
         PathBuf::from,
     );
+    // Partial reports sum completed step times (not wall clock — the job aborted mid-run).
     let partial = JobReport {
         dry_run,
         root,

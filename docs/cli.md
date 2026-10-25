@@ -280,7 +280,7 @@ tet run job.toml --json > report.json
 | `JOB`       | `.toml` or `.json` (`schema_version = 1`, `[[step]]` / `"steps"`) |
 | `--dry-run` | Validate (including query documents) and print the plan; execute nothing |
 | `--root DIR` | Resolve relative paths against `DIR` (default: the job file's directory) |
-| `--json` | Print the full `JobReport` as pretty JSON on stdout (progress stays on stderr); each `steps[].data` is the step's structured result. Works with `--dry-run`. On failure: exit 1, stdout holds completed steps plus an `error` object. See [`job.md`](job.md#machine-readable-output) |
+| `--json` | Print the full `JobReport` as pretty JSON on stdout (progress stays on stderr); each `steps[].data` is the step's structured result. Works with `--dry-run`. On failure: exit 1; stdout holds completed steps plus an `error` object only if a step finished (`error.index` is 0-based). See [`job.md`](job.md#machine-readable-output) |
 
 Ops: `info`, `verify`, `repair`, `query`, `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Query history is off. `semantics.wizard` needs a TTY on stdin.
 
