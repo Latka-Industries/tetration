@@ -29,8 +29,15 @@ fn cli_run_dry_run_prints_plan_and_executes_nothing() {
         .unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "stderr={stderr}");
-    assert!(stderr.contains("[1/3] plan convert "), "{stderr}");
-    assert!(stderr.contains("[3/3] plan query inline query"), "{stderr}");
+    // Status word is at the end: `[1/3] convert …  plan`
+    assert!(
+        stderr.contains("[1/3] convert ") && stderr.contains(" plan"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("[3/3] query dataset=temp @ ") && stderr.contains(" plan"),
+        "{stderr}"
+    );
     assert!(stderr.contains("dry run ok: 3 step(s) planned"), "{stderr}");
     assert!(!root.path().join("work").exists());
 

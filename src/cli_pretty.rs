@@ -107,11 +107,10 @@ enum StepTone {
     Ok,
 }
 
-/// Fixed-width (4) status word, coloured on stderr when pretty output is on.
-fn step_tag(tone: StepTone) -> String {
+fn style_status(tone: StepTone) -> String {
     let text = match tone {
         StepTone::Planned => "plan",
-        StepTone::Ok => "ok  ",
+        StepTone::Ok => "ok",
     };
     #[cfg(feature = "tetration-cli")]
     {
@@ -119,7 +118,7 @@ fn step_tag(tone: StepTone) -> String {
         let styled = style(text).for_stderr();
         match tone {
             StepTone::Planned => styled.dim(),
-            StepTone::Ok => styled.green(),
+            StepTone::Ok => styled.green().bold(),
         }
         .to_string()
     }
@@ -135,37 +134,111 @@ fn step_counter(index_1based: usize, total: usize) -> String {
     format!("[{index_1based:>width$}/{total}]")
 }
 
-/// Dry-run line: `[1/3] plan convert a.csv → a.tet`.
-#[must_use]
-pub fn step_planned(index_1based: usize, total: usize, description: &str) -> String {
-    format!(
-        "{} {} {description}",
-        step_counter(index_1based, total),
-        step_tag(StepTone::Planned)
-    )
-}
-
-/// Finished-step line: `[1/3] ok   convert a.csv → a.tet (0.12s)`.
-#[must_use]
-pub fn step_ok(index_1based: usize, total: usize, description: &str, elapsed_secs: f64) -> String {
-    format!(
-        "{} {} {description} ({elapsed_secs:.2}s)",
-        step_counter(index_1based, total),
-        step_tag(StepTone::Ok)
-    )
-}
-
-/// Dim, indented continuation line under a step (notes / skipped datasets).
-#[must_use]
-pub fn step_note_line(line: &str) -> String {
-    let text = format!("       {line}");
+/// Dim stderr text (plain when CLI pretty is off).
+fn stderr_dim(text: &str) -> String {
     #[cfg(feature = "tetration-cli")]
     {
         console::style(text).for_stderr().dim().to_string()
     }
     #[cfg(not(feature = "tetration-cli"))]
     {
-        text
+        text.to_owned()
+    }
+}
+
+/// Indent every line and dim for nesting under a step header on stderr.
+fn indent_stderr_dim(text: &str) -> String {
+    text.lines()
+        .map(|line| stderr_dim(&format!("    {line}")))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Dry-run line: `[1/3] convert a.csv → a.tet  plan`.
+#[must_use]
+pub fn step_planned(index_1based: usize, total: usize, description: &str) -> String {
+    format!(
+        "{} {description}  {}",
+        step_counter(index_1based, total),
+        style_status(StepTone::Planned)
+    )
+}
+
+/// Finished-step line: `[1/3] convert a.csv → a.tet  ok  0.12s`.
+#[must_use]
+pub fn step_ok(index_1based: usize, total: usize, description: &str, elapsed_secs: f64) -> String {
+    format!(
+        "{} {description}  {}  {}",
+        step_counter(index_1based, total),
+        style_status(StepTone::Ok),
+        stderr_dim(&format!("{elapsed_secs:.2}s"))
+    )
+}
+
+/// Dim, indented continuation line under a step (notes / non-kv quiet lines).
+#[must_use]
+pub fn step_note_line(line: &str) -> String {
+    indent_stderr_dim(line)
+}
+
+/// Parse a quiet `key=value key2=value2 …` line into ordered pairs.
+///
+/// Values may contain `=` (everything after the first `=`). Tokens without `=` are skipped.
+#[must_use]
+pub fn parse_kv_line(line: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for token in line.split_whitespace() {
+        let Some((k, v)) = token.split_once('=') else {
+            continue;
+        };
+        if k.is_empty() {
+            continue;
+        }
+        out.push((k.to_owned(), v.to_owned()));
+    }
+    out
+}
+
+/// Light kv table for quiet job results (indented under a step).
+///
+/// [`UTF8_NO_BORDERS`] — not the full box preset. Drops `memory_strategy`.
+#[must_use]
+pub fn step_kv_table(pairs: &[(String, String)]) -> String {
+    let pairs: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| k.as_str() != "memory_strategy")
+        .cloned()
+        .collect();
+    if pairs.is_empty() {
+        return String::new();
+    }
+
+    #[cfg(feature = "tetration-cli")]
+    {
+        use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_NO_BORDERS};
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_NO_BORDERS)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_header(vec![
+                Cell::new("field").add_attribute(Attribute::Bold),
+                Cell::new("value").add_attribute(Attribute::Bold),
+            ]);
+        for (k, v) in &pairs {
+            table.add_row(vec![Cell::new(k), Cell::new(v)]);
+        }
+        let mut out = indent_stderr_dim(&format!("{table}"));
+        out.push('\n');
+        out
+    }
+    #[cfg(not(feature = "tetration-cli"))]
+    {
+        let mut body = String::new();
+        let _ = writeln!(body, "field  value");
+        for (k, v) in &pairs {
+            let _ = writeln!(body, "{k}  {v}");
+        }
+        indent_stderr_dim(body.trim_end()) + "\n"
     }
 }
 
@@ -191,13 +264,42 @@ mod tests {
         let plain = |s: String| console_strip(&s);
         assert_eq!(
             plain(step_planned(1, 3, "convert a → b")),
-            "[1/3] plan convert a → b"
+            "[1/3] convert a → b  plan"
         );
         assert_eq!(
             plain(step_ok(2, 12, "verify x", 0.5)),
-            "[ 2/12] ok   verify x (0.50s)"
+            "[ 2/12] verify x  ok  0.50s"
         );
-        assert_eq!(plain(step_note_line("hi")), "       hi");
+        assert_eq!(plain(step_note_line("hi")), "    hi");
+    }
+
+    #[test]
+    fn parse_kv_line_splits_on_first_equals() {
+        let pairs = parse_kv_line("path=/a/b.tet status=ok mean=2.5 hint=x=y");
+        assert_eq!(
+            pairs,
+            vec![
+                ("path".into(), "/a/b.tet".into()),
+                ("status".into(), "ok".into()),
+                ("mean".into(), "2.5".into()),
+                ("hint".into(), "x=y".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn step_kv_table_is_light_vertical_and_drops_memory_strategy() {
+        let plain = console_strip(&step_kv_table(&[
+            ("path".into(), "work/a.tet".into()),
+            ("status".into(), "ok".into()),
+            ("memory_strategy".into(), "streaming_fold".into()),
+        ]));
+        assert!(plain.contains("field"), "{plain}");
+        assert!(plain.contains("path"), "{plain}");
+        assert!(plain.contains("work/a.tet"), "{plain}");
+        assert!(plain.contains("status"), "{plain}");
+        assert!(!plain.contains("memory_strategy"), "{plain}");
+        assert!(!plain.contains('┌'), "must not use UTF8_FULL box: {plain}");
     }
 
     fn console_strip(s: &str) -> String {

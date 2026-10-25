@@ -82,7 +82,7 @@ Notes:
 
 1. **Pre-flight** (also under `--dry-run`): schema and flag rules, then every query document is loaded and validated and the wizard rule is applied. A failure here means **no step ran**.
 2. **Run** steps in order. The first error stops the job; later steps do not run. Exit code is non-zero and stderr names the step and, when the failing operation touched a file, its resolved absolute path: `error: step 2 (verify) failed: No such file or directory (os error 2): /abs/path/work/x.tet`.
-3. Each step prints what the matching command would: query / info / verify output goes to **stdout**; progress and summary lines go to **stderr** as `[N/TOTAL] ok   <description> (1.23s)` (`plan` instead of `ok` under `--dry-run`), with notes indented underneath. Colour is used only when stderr is a terminal.
+3. Progress on **stderr**: `[N/TOTAL] <description>  ok  0.12s` (`plan` under `--dry-run`). Quiet one-line results (`info` / `verify` / `query` defaults) nest under the step as a light vertical kv table (`UTF8_NO_BORDERS`). Multi-line dumps (`quiet = false`, JSON, tables) still go to **stdout**. Colour only when stderr is a terminal.
 
 Steps call the same library functions as the CLI (no subprocess), so a step behaves like the equivalent `tet` command.
 

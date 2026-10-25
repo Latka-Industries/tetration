@@ -190,8 +190,20 @@ fn ensure_parent(path: &Path) -> StepResult<()> {
 // Describe (dry-run plan lines)
 // ---------------------------------------------------------------------------------------------
 
+/// Prefer job-relative paths in plan lines (absolute / off-root / s3 unchanged).
+fn display_path(root: &Path, path: &Path) -> String {
+    let abs_path = abs_or_s3(root, path);
+    if is_s3_target(&abs_path.to_string_lossy()) {
+        return abs_path.display().to_string();
+    }
+    abs_path.strip_prefix(root).map_or_else(
+        |_| abs_path.display().to_string(),
+        |rel| rel.display().to_string(),
+    )
+}
+
 pub(super) fn describe(step: &Step, root: &Path) -> String {
-    let p = |path: &Path| abs_or_s3(root, path).display().to_string();
+    let p = |path: &Path| display_path(root, path);
     match step {
         Step::Info(s) => format!("info {}", p(&s.path)),
         Step::Verify(s) => format!(
@@ -260,21 +272,21 @@ pub(super) fn describe(step: &Step, root: &Path) -> String {
 
 fn describe_query(s: &QueryStep, root: &Path) -> String {
     let source = match (&s.doc, &s.query) {
-        (Some(doc), _) => format!("doc {}", abs(root, doc).display()),
-        (None, Some(_)) => "inline query".to_owned(),
+        (Some(doc), _) => display_path(root, doc),
+        (None, Some(q)) => q
+            .get("dataset")
+            .and_then(|v| v.as_str())
+            .map_or_else(|| "inline".to_owned(), |d| format!("dataset={d}")),
         (None, None) => "query".to_owned(),
     };
-    let target = s.tet.as_ref().map_or_else(
-        || " (plan only)".to_owned(),
-        |t| {
-            format!(
-                " -t {}{}",
-                abs_or_s3(root, t).display(),
-                if s.execute { " -x" } else { "" }
-            )
-        },
-    );
-    format!("query {source}{target}")
+    match &s.tet {
+        None => format!("query {source} (plan)"),
+        Some(t) => format!(
+            "query {source} @ {}{}",
+            display_path(root, t),
+            if s.execute { " -x" } else { "" }
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -663,17 +675,43 @@ fn run_convert(s: &ConvertStep, root: &Path) -> StepResult<StepOutput> {
         convert_to_tet_with_options(&input, &out, options, None::<fn(ConvertProgress)>)
             .map_err(|e| fail_input(&input, e))?
     };
-    let mut note = format!(
-        "converted {} dataset(s) → {} ({:.2}s)",
-        report.dataset_count, report.output, report.elapsed_secs
+    // Quiet kv line → same light vertical table as verify/query under the step.
+    let names = report.dataset_names.join(",");
+    let dims = report
+        .datasets
+        .iter()
+        .map(|d| {
+            d.dims
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("×")
+        })
+        .collect::<Vec<_>>()
+        .join(";");
+    let mut quiet = format!(
+        "datasets={} names={names} dims={dims}",
+        report.dataset_count
     );
-    for skip in &report.skipped {
-        let _ = write!(note, "\n  skipped {}: {}", skip.path, skip.reason);
+    if !report.skipped.is_empty() {
+        let _ = write!(quiet, " skipped={}", report.skipped.len());
     }
+    let note = if report.skipped.is_empty() {
+        None
+    } else {
+        let mut n = String::new();
+        for skip in &report.skipped {
+            if !n.is_empty() {
+                n.push('\n');
+            }
+            let _ = write!(n, "skipped {}: {}", skip.path, skip.reason);
+        }
+        Some(n)
+    };
     Ok(StepOutput {
-        note: Some(note),
+        stdout: Some(quiet),
+        note,
         data: serde_json::to_value(&report).ok(),
-        ..StepOutput::default()
     })
 }
 
