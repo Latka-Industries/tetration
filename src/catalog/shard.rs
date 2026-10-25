@@ -686,7 +686,7 @@ pub fn part_id_from_path(path: &Path) -> String {
 }
 
 /// Result of [`validate_publish_parts`] / [`dry_run_publish_parts`]: claim checks passed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PublishValidation {
     /// Generation id that a real publish would seal (caller-supplied).
     pub generation: u64,

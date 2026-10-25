@@ -7,6 +7,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use serde::Serialize;
+
 use super::declare::{ATTR_SEMANTICS_PROFILE, declared_attrs, is_declared_key};
 use super::profiles::{PROV_LOG_V1, normalize_profile_id, recommended_keys_for_profile};
 use crate::catalog::history::HistoryEvent;
@@ -15,7 +17,8 @@ use crate::catalog::{CatalogError, TetFileSummaryV1, TetMetadataV1, read_tet_sum
 use crate::layout::mmap_file_read;
 
 /// Severity of a linter finding (advisory only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SemanticsLintSeverity {
     /// Missing recommended attr / history field for a claimed profile.
     Warning,
@@ -24,7 +27,8 @@ pub enum SemanticsLintSeverity {
 }
 
 /// Stable machine-readable lint code (advisory only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SemanticsLintCode {
     /// Legacy / alias profile id; prefer the canonical spelling.
     ProfileAlias,
@@ -59,7 +63,7 @@ impl std::fmt::Display for SemanticsLintCode {
 }
 
 /// One advisory finding from [`lint_declared_semantics`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SemanticsLintFinding {
     pub severity: SemanticsLintSeverity,
     /// Dataset catalog name, or `"*"` for file-wide notes.
@@ -70,7 +74,7 @@ pub struct SemanticsLintFinding {
 }
 
 /// Lint report (always “ok” for open/query — findings are advisory).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SemanticsLintReport {
     pub findings: Vec<SemanticsLintFinding>,
 }

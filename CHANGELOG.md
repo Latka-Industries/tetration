@@ -16,6 +16,9 @@
 
 ### Added
 
+- `tet run --json` (THI-646): print the full `JobReport` as pretty JSON on stdout; progress, notes, and multi-line step dumps stay on stderr. Works with `--dry-run`. On a step failure the exit code is still 1 and stdout carries the completed steps plus an `error` object (nothing on stdout for parse / pre-flight errors).
+- `StepReport::data` is now filled for every executed step (was convert / export / verify / query only): `info` (the `tet info --json` envelope), `repair`, `index`, `ingest`, `publish` / `compact`, `pack`, `gc`, and `semantics.*` (apply / scaffold / set / wizard / lint / package-write). Library report types are serialized as-is; shapes in `docs/job.md`.
+- `Serialize` on `GcPlan`, `PublishValidation`, `PruneReport` (+ `PruneRefusal` / `PruneTarget` / `PruneRefuseReason`), `SemanticsApplyReport` / `StampedDataset`, `SemanticsLintReport` / `SemanticsLintFinding` / `SemanticsLintSeverity` / `SemanticsLintCode`, `WizardResult`, and `ScaffoldFormat`; new `query::cli::info_json_value` (the value behind `format_info_json`).
 - `tet run <job.toml|json>` (`--dry-run`, `--root DIR`): run an ordered list of stock `tet` steps from a job file, fail-fast (THI-646). Closed v1 op set: `info`, `verify`, `repair`, `query` (`doc` or inline `query`), `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Not a scheduler or query-pipeline ETL; guide in `docs/job.md`.
 - Library `tetration::job` (`parse_job`, `run_job`, `run_job_path`): same executor, quiet and structured, calling the same public APIs as the CLI. Query history is off in jobs; `semantics.wizard` needs `allow_interactive`.
 

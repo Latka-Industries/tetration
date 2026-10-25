@@ -12,6 +12,8 @@
 
 use std::collections::BTreeSet;
 
+use serde::Serialize;
+
 use crate::catalog::CatalogError;
 use crate::catalog::package::{
     self, DEFAULT_PUBLISH_LOCK_STALE, TetPackagePin, format_generation_id,
@@ -68,7 +70,7 @@ impl PruneOptions {
 /// `keys` are the objects [`ReadAt::list_prefix`] saw under the planned prefixes.
 /// Apply deletes each whole prefix (directory markers included). Refused targets are
 /// not listed in `keys` and are not deleted.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct PruneReport {
     /// Staging session prefixes (`staging/<session>`).
     pub staging_sessions: Vec<String>,
@@ -91,7 +93,7 @@ impl PruneReport {
 }
 
 /// One withheld prune candidate.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct PruneRefusal {
     /// Staging session or sealed generation that was not planned for deletion.
     pub target: PruneTarget,
@@ -100,7 +102,8 @@ pub struct PruneRefusal {
 }
 
 /// A staging session or sealed generation prune considered, then withheld.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PruneTarget {
     /// `generations/<G>` (zero-padded id).
     Generation(u64),
@@ -109,7 +112,8 @@ pub enum PruneTarget {
 }
 
 /// Why [`prune_store`] left a candidate in place.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PruneRefuseReason {
     /// An open pin still names this generation's `packed.tet`.
     OpenPin,
