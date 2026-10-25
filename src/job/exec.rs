@@ -675,14 +675,43 @@ fn run_convert(s: &ConvertStep, root: &Path) -> StepResult<StepOutput> {
         convert_to_tet_with_options(&input, &out, options, None::<fn(ConvertProgress)>)
             .map_err(|e| fail_input(&input, e))?
     };
-    let mut note = format!("{} dataset(s)", report.dataset_count);
-    for skip in &report.skipped {
-        let _ = write!(note, "\nskipped {}: {}", skip.path, skip.reason);
+    // Quiet kv line → same light vertical table as verify/query under the step.
+    let names = report.dataset_names.join(",");
+    let dims = report
+        .datasets
+        .iter()
+        .map(|d| {
+            d.dims
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("×")
+        })
+        .collect::<Vec<_>>()
+        .join(";");
+    let mut quiet = format!(
+        "datasets={} names={names} dims={dims}",
+        report.dataset_count
+    );
+    if !report.skipped.is_empty() {
+        let _ = write!(quiet, " skipped={}", report.skipped.len());
     }
+    let note = if report.skipped.is_empty() {
+        None
+    } else {
+        let mut n = String::new();
+        for skip in &report.skipped {
+            if !n.is_empty() {
+                n.push('\n');
+            }
+            let _ = write!(n, "skipped {}: {}", skip.path, skip.reason);
+        }
+        Some(n)
+    };
     Ok(StepOutput {
-        note: Some(note),
+        stdout: Some(quiet),
+        note,
         data: serde_json::to_value(&report).ok(),
-        ..StepOutput::default()
     })
 }
 

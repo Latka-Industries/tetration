@@ -359,7 +359,9 @@ fn pipeline_csv_convert_verify_query_toml_and_json() {
         assert!(dir.path().join("work/table.tet").is_file());
 
         let convert = &report.steps[0];
-        assert!(convert.note.as_deref().unwrap().contains("2 dataset(s)"));
+        let convert_out = convert.stdout.as_deref().unwrap();
+        assert!(convert_out.contains("datasets=2"), "{convert_out}");
+        assert!(convert_out.contains("names=temp,n"), "{convert_out}");
         assert_eq!(convert.data.as_ref().unwrap()["dataset_count"], 2);
 
         let verify = &report.steps[1];
