@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- `tet run <job.toml|json>` (`--dry-run`, `--root DIR`): run an ordered list of stock `tet` steps from a job file, fail-fast (THI-646). Closed v1 op set: `info`, `verify`, `repair`, `query` (`doc` or inline `query`), `convert`, `export`, `index`, `semantics.apply` / `scaffold` / `set` / `wizard` / `lint` / `package-write`, `ingest`, `publish`, `compact`, `pack`, `gc`. Not a scheduler or query-pipeline ETL; guide in `docs/job.md`.
+- Library `tetration::job` (`parse_job`, `run_job`, `run_job_path`): same executor, quiet and structured, calling the same public APIs as the CLI. Query history is off in jobs; `semantics.wizard` needs `allow_interactive`.
+
 ## [0.8.1] - 2026-10-24
 
 ### Added

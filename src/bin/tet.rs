@@ -19,6 +19,8 @@ mod qhist;
 mod query;
 #[path = "tet/repair.rs"]
 mod repair;
+#[path = "tet/run.rs"]
+mod run;
 #[path = "tet/semantics.rs"]
 mod semantics;
 #[path = "tet/util.rs"]
@@ -44,6 +46,7 @@ use package_ops::{
 use qhist::run_qhist;
 use query::{QueryRunOpts, run_query};
 use repair::{RepairRunOpts, run_repair};
+use run::{RunCmdOpts, run_run};
 use semantics::run_semantics;
 use util::{cli_error, query_input_format, read_query_payload, resolve_stdout};
 use verify::{VerifyOutputMode, VerifyRunOpts, run_verify};
@@ -53,6 +56,7 @@ fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Commands::Semantics(args) => run_semantics(args.cmd),
         Commands::Worker { job } => run_worker(job),
+        Commands::Run { job, dry_run, root } => run_run(RunCmdOpts { job, dry_run, root }),
         cmd @ (Commands::Info { .. }
         | Commands::Query { .. }
         | Commands::Qhist(_)
@@ -158,6 +162,7 @@ fn run_read(cmd: Commands) -> Result<(), String> {
         | Commands::Pack { .. }
         | Commands::Gc { .. }
         | Commands::Semantics(_)
+        | Commands::Run { .. }
         | Commands::Worker { .. } => unreachable!("read commands only"),
     }
 }
@@ -277,6 +282,7 @@ fn run_write(cmd: Commands) -> Result<(), String> {
         | Commands::Verify { .. }
         | Commands::Repair { .. }
         | Commands::Semantics(_)
+        | Commands::Run { .. }
         | Commands::Worker { .. } => unreachable!("write commands only"),
     }
 }

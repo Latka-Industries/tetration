@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "steps": [
+    { "op": "convert", "from": "raw/table.csv", "to": "work/table.tet" },
+    { "op": "verify", "path": "work/table.tet", "quiet": true },
+    {
+      "op": "query",
+      "tet": "work/table.tet",
+      "execute": true,
+      "quiet": true,
+      "query": { "dataset": "temp", "mean": [] }
+    }
+  ]
+}
