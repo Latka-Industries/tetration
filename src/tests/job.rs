@@ -252,7 +252,9 @@ fn dry_run_plans_every_step_and_writes_nothing() {
     assert!(
         report.steps[2]
             .description
-            .starts_with("query inline query")
+            .starts_with("query dataset=temp @ "),
+        "{}",
+        report.steps[2].description
     );
     assert!(
         !dir.path().join("work").exists(),
@@ -357,13 +359,7 @@ fn pipeline_csv_convert_verify_query_toml_and_json() {
         assert!(dir.path().join("work/table.tet").is_file());
 
         let convert = &report.steps[0];
-        assert!(
-            convert
-                .note
-                .as_deref()
-                .unwrap()
-                .contains("converted 2 dataset")
-        );
+        assert!(convert.note.as_deref().unwrap().contains("2 dataset(s)"));
         assert_eq!(convert.data.as_ref().unwrap()["dataset_count"], 2);
 
         let verify = &report.steps[1];

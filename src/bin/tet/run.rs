@@ -3,7 +3,7 @@
 use std::io::IsTerminal;
 use std::path::PathBuf;
 
-use tetration::cli_pretty::{step_note_line, step_ok, step_planned};
+use tetration::cli_pretty::{parse_kv_line, step_kv_table, step_note_line, step_ok, step_planned};
 use tetration::job::{RunJobOptions, StepReport, StepStatus, run_job_path_observed};
 
 use crate::util::cli_error;
@@ -14,7 +14,8 @@ pub(crate) struct RunCmdOpts {
     pub root: Option<PathBuf>,
 }
 
-/// Step status line + notes on stderr, step stdout on stdout.
+/// Step status + notes on stderr. Quiet one-line results nest under the step;
+/// multi-line dumps (tables / JSON) stay on stdout so scripts can still capture them.
 fn print_step(report: &StepReport, total: usize) {
     let n = report.index + 1;
     let line = match report.status {
@@ -28,9 +29,21 @@ fn print_step(report: &StepReport, total: usize) {
         }
     }
     if let Some(out) = &report.stdout {
-        print!("{out}");
-        if !out.ends_with('\n') {
-            println!();
+        let trimmed = out.trim_end_matches('\n');
+        let line_count = trimmed.lines().count();
+        if line_count <= 1 && !trimmed.is_empty() {
+            // Quiet `key=value …` line → light vertical kv table under the step.
+            let pairs = parse_kv_line(trimmed);
+            if pairs.len() >= 2 {
+                eprint!("{}", step_kv_table(&pairs));
+            } else {
+                eprintln!("{}", step_note_line(trimmed));
+            }
+        } else if line_count > 1 {
+            print!("{out}");
+            if !out.ends_with('\n') {
+                println!();
+            }
         }
     }
 }

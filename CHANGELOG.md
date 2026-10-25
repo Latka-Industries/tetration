@@ -5,7 +5,7 @@
 ### Changed
 
 - `tet run` / `tetration::job` UX polish (THI-646): **`info` / `verify` / `query` steps default to quiet** when `quiet` is omitted (`quiet = false` restores full text; `json` / explicit `format` still win; `quiet = true` + `json` / `format` still conflicts). Other ops keep `quiet = false`. `quiet` on those three steps is now `Option<bool>`.
-- `tet run` prints `[N/TOTAL] ok   <step> (0.12s)` / `plan` lines (styled via `cli_pretty` when stderr is a terminal, plain ASCII otherwise) instead of `✓` / `·` glyphs. The job observer callback now also receives the total step count: `FnMut(&StepReport, usize)`.
+- `tet run` prints `[N/TOTAL] <step>  ok  0.12s` / `plan` (status at end; styled via `cli_pretty` when stderr is a terminal). Quiet one-line results nest as a light vertical kv table on stderr (`UTF8_NO_BORDERS`); multi-line dumps stay on stdout. Plan lines use job-relative paths and clearer query labels (`query dataset=… @ path -x`).
 - `JobError::Step` gains `path: Option<PathBuf>`; failing file operations append the resolved absolute path (`step 2 (verify) failed: No such file or directory (os error 2): /abs/path`).
 - `tet convert` and `tet run` share one progress-bar template (`cli_pretty::chunk_progress_style`); `QUERY_PREVIEW_DEFAULT` is now one public const in `query::cli`.
 - DRY: job + CLI share `convert::resolve_parallel_jobs`, `catalog::open_or_create_package`, and `catalog::resolve_tet_read_path` (new public helpers); `semantics.scaffold` `format` is deserialized straight into `ScaffoldFormat`.
