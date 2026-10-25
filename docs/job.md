@@ -98,7 +98,7 @@ tet run fixtures/jobs/csv_verify_query.toml --json 2>/dev/null | jq '.steps[].da
 
 Each entry in `steps` is a `StepReport`: `index`, `op`, `status`, `description`, `elapsed_secs`, `stdout` (text the CLI prints), `note` (text for stderr), and **`data`**.
 
-**`step.data` is the programmatic grab bag.** Every executed step fills it with the structured result (serde of the library report type where one exists), so tooling never has to parse `stdout` / `note`. tet-py is expected to expose the same `JobReport` shape once job bindings land.
+**`step.data` is the programmatic grab bag.** Every executed step fills it with the structured result (serde of the library report type where one exists), so tooling never has to parse `stdout` / `note`. tet-py exposes the same shape via `tet.run_job` (returns a `JobReport` dict).
 
 | `op` | `data` |
 | ---- | ------ |
