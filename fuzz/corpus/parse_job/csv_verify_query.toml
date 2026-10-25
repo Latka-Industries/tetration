@@ -1,0 +1,19 @@
+# CSV -> .tet -> verify -> query (no HDF5 / NetCDF needed).
+# Run from anywhere: tet run fixtures/jobs/csv_verify_query.toml
+# Outputs land under work/ next to this file (git-ignored).
+schema_version = 1
+
+[[step]]
+op = "convert"
+from = "raw/table.csv"
+to = "work/table.tet"
+
+[[step]]
+op = "verify"
+path = "work/table.tet"
+
+[[step]]
+op = "query"
+tet = "work/table.tet"
+execute = true
+query = { dataset = "temp", mean = [] }

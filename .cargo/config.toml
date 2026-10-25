@@ -1,0 +1,5 @@
+# Parallel `cargo test` opens shared HDF5/NetCDF fixtures from many threads.
+# Default HDF5 advisory locks then fail with errno 11 / NetCDF -101.
+# Test helpers also set this; config makes it race-free before any open.
+[env]
+HDF5_USE_FILE_LOCKING = "FALSE"

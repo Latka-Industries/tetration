@@ -1,0 +1,8 @@
+schema_version = 1
+[[step]]
+op = "convert"
+from = "raw/x.csv"
+to = "work/x.tet"
+[[step]]
+op = "verify"
+path = "work/x.tet"

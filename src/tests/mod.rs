@@ -2,6 +2,27 @@
 
 #![allow(dead_code)]
 
+/// Parallel `cargo test` opens the same read-only HDF5/NetCDF fixtures (and freshly
+/// written temp exports) from many threads. HDF5 advisory locks then fail with
+/// `errno = 11` / NetCDF `-101`. Disable locking once for the test process.
+#[cfg(any(feature = "tetration-hdf5", feature = "tetration-netcdf"))]
+pub(crate) fn ensure_hdf5_no_file_locking() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        // SAFETY: test harness only; must run before any HDF5/NetCDF open in this process.
+        unsafe {
+            std::env::set_var("HDF5_USE_FILE_LOCKING", "FALSE");
+        }
+    });
+}
+
+#[cfg(any(feature = "tetration-hdf5", feature = "tetration-netcdf"))]
+#[test]
+fn init_hdf5_no_file_locking_for_parallel_tests() {
+    ensure_hdf5_no_file_locking();
+}
+
 mod catalog;
 mod cell_filter;
 mod cli_convert;

@@ -23,6 +23,10 @@
 //! The executor is quiet: it returns text each step would print as
 //! [`StepReport::stdout`] / [`StepReport::note`] instead of printing, and takes no progress
 //! callbacks. Query history is off unless [`RunJobOptions::record_query_history`] is set.
+//!
+//! **Trust:** job documents are data — prefer `verify` before open on external bytes; the host
+//! owns `.tet` / package paths (see [`docs/job.md`](../../docs/job.md#trust-boundaries-jobs) and
+//! query [JSON security](../../docs/query_engine.md#json-security-input-and-output)).
 //! Full guide: [`docs/job.md`](../../docs/job.md).
 
 mod exec;

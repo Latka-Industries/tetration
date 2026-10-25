@@ -52,7 +52,7 @@ test-data/
 # Local maintainer docs (not for PR / not tracked)
 docs/.local/
 
-# cargo-fuzz: keep *.tet / *.pkgfuzz / *.json / *.bin seeds tracked; ignore mutated corpus + build/crash dirs
+# cargo-fuzz: keep *.tet / *.pkgfuzz / *.json / *.toml / *.bin seeds tracked; ignore mutated corpus + build/crash dirs
 fuzz/target/
 fuzz/artifacts/
 fuzz/coverage/
@@ -61,6 +61,7 @@ fuzz/corpus/**/*
 !fuzz/corpus/**/*.tet
 !fuzz/corpus/**/*.pkgfuzz
 !fuzz/corpus/**/*.json
+!fuzz/corpus/**/*.toml
 !fuzz/corpus/**/*.bin
 
 # Local UBLX browser config

@@ -32,7 +32,8 @@ nightly compiler`.
 | `verify_tet_bytes` | quick scan (`deep_decode: false`) | Hot loop — prefer this for file layout |
 | `verify_tet_bytes_deep` | `deep_decode: true` | Slower; decode walk |
 | `verify_tet_package` | package tree from length-prefixed blob | PROTOCOL / CURRENT / MANIFEST / packed.tet |
-| `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604; window pad/step/align/`min_count` seeds THI-607; label-range seeds THI-613) |
+| `parse_query_json` | UTF-8 query document text (capped) | Closed wire parse; no panic (THI-604; window pad/step/align/`min_count` seeds THI-607; label-range / `label_filter` seeds THI-613/614). **Post-0.6 shapes covered** via conformance accept/reject + named stubs (window, `group_by` labels, align, filter) — see fuzz-reseed notes. |
+| `parse_job` | UTF-8 job TOML/JSON text (capped) | `parse_job` parse + static validate only; no executor (THI-651). Seeds: `fixtures/jobs/*` + reject stubs (unknown op, bad `schema_version`, huge nesting). |
 | `secondary_index_json` | `INDEX.json` bytes (capped) | Deserialize + encode / kind filters; unknown `kind` → `Unknown` (THI-613) |
 | `secondary_index_seal` | tiny packed `.tet` from mutated tiles | Write + `prepare_secondary_index` / embed; value-postings cardinality early-abort |
 
@@ -58,12 +59,16 @@ empty `staging/` + `publishing/`) and calls `verify_tet_package`. Seeds are
 ```bash
 mise fuzz              # preferred (quick file target)
 mise fuzz-package      # package target (THI-481)
+mise fuzz-query        # query wire (THI-604)
+mise fuzz-job          # job file parse/validate (THI-651)
 mise fuzz-index        # INDEX.json / sorted_axis_range (THI-613)
 mise fuzz-index-seal   # seal-time value-postings from tiny packed.tet
 # or:
 cargo +nightly fuzz run verify_tet_bytes
 cargo +nightly fuzz run verify_tet_bytes_deep
 cargo +nightly fuzz run verify_tet_package
+cargo +nightly fuzz run parse_query_json
+cargo +nightly fuzz run parse_job
 cargo +nightly fuzz run secondary_index_json
 cargo +nightly fuzz run secondary_index_seal
 ```
@@ -71,6 +76,7 @@ cargo +nightly fuzz run secondary_index_seal
 Seeds are under `corpus/verify_tet_bytes/`, `corpus/verify_tet_bytes_deep/`
 (`*.tet` from `fixtures/small/tet/` plus tiny reject stubs),
 `corpus/verify_tet_package/` (`*.pkgfuzz`), `corpus/parse_query_json/` (`*.json`),
+`corpus/parse_job/` (`*.json` / `*.toml` from `fixtures/jobs/` plus reject stubs),
 `corpus/secondary_index_json/` (`INDEX.json` stubs), and
 `corpus/secondary_index_seal/` (`*.bin` tile headers + payloads). LibFuzzer mutates more
 inputs beside them; those hash-named files and `artifacts/` are gitignored.
@@ -89,22 +95,25 @@ cargo +nightly fuzz build verify_tet_bytes
 cargo +nightly fuzz build verify_tet_package
 ```
 
-## CI / local smoke (THI-379 / THI-481)
+## CI / local smoke (THI-379 / THI-481 / THI-651)
 
 Manual GitHub Actions job [`.github/workflows/fuzz-smoke.yml`](../.github/workflows/fuzz-smoke.yml)
 (`workflow_dispatch` only — no nightly schedule):
 
 - Ubuntu + nightly toolchain
-- `verify_tet_bytes` and `verify_tet_package` each for 60s
+- `verify_tet_bytes`, `verify_tet_package`, `parse_query_json`, `parse_job`, and index targets each for 60s
 - Not part of the PR Test Suite / MSRV matrix
 
 ```bash
 # local equivalents (prefer these day-to-day)
 mise fuzz-smoke
 mise fuzz-package-smoke
+mise fuzz-query-smoke
+mise fuzz-job-smoke
 mise fuzz-index-seal-smoke
 # or:
 cargo +nightly fuzz run verify_tet_bytes -- -max_total_time=60 -timeout=10
 cargo +nightly fuzz run verify_tet_package -- -max_total_time=60 -timeout=10
+cargo +nightly fuzz run parse_job -- -max_total_time=60 -timeout=10
 cargo +nightly fuzz run secondary_index_seal -- -max_total_time=60 -timeout=10
 ```

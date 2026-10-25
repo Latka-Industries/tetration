@@ -8,6 +8,7 @@ mkdir -p \
   fuzz/corpus/verify_tet_bytes_deep \
   fuzz/corpus/verify_tet_package \
   fuzz/corpus/parse_query_json \
+  fuzz/corpus/parse_job \
   fuzz/corpus/secondary_index_json \
   fuzz/corpus/secondary_index_seal
 
@@ -66,10 +67,72 @@ python3 "$enc" fuzz/corpus/verify_tet_package/reject_packed.pkgfuzz \
   --manifest-text "$(printf '{"generation":1,"protocol_version":2,"part_ids":["p0"],"packed_byte_len":%s}' "$reject_len")" \
   --packed "$reject"
 
-# --- query wire seeds (THI-604 / THI-613 label range) ---
+# --- query wire seeds (THI-604 / THI-613 label range; post-0.6 shapes via conformance) ---
+# Covered shapes: fixtures (mean/sum/var/slice/quantile) + conformance accept/reject
+# (window rolling/bins/pad/align/step, group_by labels, align, filter, write) +
+# label-range / label_filter stubs below. No separate pipeline/transform seed set —
+# those keys are exercised by mutations from the existing JSON tree.
 cp fixtures/queries/*.json fuzz/corpus/parse_query_json/ 2>/dev/null || true
 cp conformance/reject/queries/*.json fuzz/corpus/parse_query_json/ 2>/dev/null || true
 cp conformance/accept/queries/*.json fuzz/corpus/parse_query_json/ 2>/dev/null || true
+
+# --- job file seeds (THI-651): fixtures + reject stubs (parse/validate only) ---
+cp fixtures/jobs/*.json fixtures/jobs/*.toml fuzz/corpus/parse_job/ 2>/dev/null || true
+cat > fuzz/corpus/parse_job/ok_verify.json <<'EOF'
+{"schema_version":1,"steps":[{"op":"verify","path":"a.tet"}]}
+EOF
+cat > fuzz/corpus/parse_job/ok_verify.toml <<'EOF'
+schema_version = 1
+[[step]]
+op = "verify"
+path = "a.tet"
+EOF
+cat > fuzz/corpus/parse_job/ok_query_inline.json <<'EOF'
+{"schema_version":1,"steps":[{"op":"query","query":{"dataset":"a","mean":[]}}]}
+EOF
+cat > fuzz/corpus/parse_job/ok_convert_verify.toml <<'EOF'
+schema_version = 1
+[[step]]
+op = "convert"
+from = "raw/x.csv"
+to = "work/x.tet"
+[[step]]
+op = "verify"
+path = "work/x.tet"
+EOF
+cat > fuzz/corpus/parse_job/reject_unknown_op.json <<'EOF'
+{"schema_version":1,"steps":[{"op":"worker","path":"a.tet"}]}
+EOF
+cat > fuzz/corpus/parse_job/reject_unknown_op.toml <<'EOF'
+schema_version = 1
+[[step]]
+op = "qhist"
+path = "a.tet"
+EOF
+cat > fuzz/corpus/parse_job/reject_bad_schema_version.json <<'EOF'
+{"schema_version":2,"steps":[{"op":"verify","path":"a.tet"}]}
+EOF
+cat > fuzz/corpus/parse_job/reject_bad_schema_version.toml <<'EOF'
+schema_version = 99
+[[step]]
+op = "verify"
+path = "a.tet"
+EOF
+cat > fuzz/corpus/parse_job/reject_missing_schema.json <<'EOF'
+{"steps":[{"op":"verify","path":"a.tet"}]}
+EOF
+cat > fuzz/corpus/parse_job/reject_empty_steps.json <<'EOF'
+{"schema_version":1,"steps":[]}
+EOF
+cat > fuzz/corpus/parse_job/reject_unknown_top_level.json <<'EOF'
+{"schema_version":1,"retries":3,"steps":[{"op":"verify","path":"a.tet"}]}
+EOF
+# Deep nesting: serde_json recursion limit must fail closed (no panic).
+python3 - <<'PY'
+from pathlib import Path
+nested = "{" + "".join('"a":{' for _ in range(80)) + '"x":1' + "}" * 80 + "}\n"
+Path("fuzz/corpus/parse_job/reject_huge_nesting.json").write_text(nested)
+PY
 
 # --- secondary INDEX.json seeds (THI-613 sorted_axis_range) ---
 cat > fuzz/corpus/secondary_index_json/empty_indexes.json <<'EOF'
@@ -177,4 +240,4 @@ root.joinpath("f32_low_card.bin").write_bytes(
 print(f"secondary_index_seal: {len(list(root.glob('*.bin')))} seeds")
 PY
 
-echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package; $(ls fuzz/corpus/parse_query_json/*.json | wc -l) query; $(ls fuzz/corpus/secondary_index_json/*.json | wc -l) index; $(ls fuzz/corpus/secondary_index_seal/*.bin | wc -l) seal"
+echo "fuzz-reseed: $(ls fuzz/corpus/verify_tet_bytes/*.tet | wc -l) quick; $(ls fuzz/corpus/verify_tet_bytes_deep/*.tet | wc -l) deep; $(ls fuzz/corpus/verify_tet_package/*.pkgfuzz | wc -l) package; $(ls fuzz/corpus/parse_query_json/*.json | wc -l) query; $(ls fuzz/corpus/parse_job/*.{json,toml} 2>/dev/null | wc -l) job; $(ls fuzz/corpus/secondary_index_json/*.json | wc -l) index; $(ls fuzz/corpus/secondary_index_seal/*.bin | wc -l) seal"

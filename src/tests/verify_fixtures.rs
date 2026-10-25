@@ -122,6 +122,7 @@ mod convert_gate {
     }
 
     fn small_nc(stem: &str) -> std::path::PathBuf {
+        crate::tests::ensure_hdf5_no_file_locking();
         repo_root()
             .join("fixtures/small/netcdf")
             .join(format!("{stem}.nc"))
@@ -150,6 +151,7 @@ mod convert_gate_h5 {
     }
 
     fn small_h5(stem: &str) -> std::path::PathBuf {
+        crate::tests::ensure_hdf5_no_file_locking();
         repo_root()
             .join("fixtures/small/h5")
             .join(format!("{stem}.h5"))

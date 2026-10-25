@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- cargo-fuzz target `parse_job` (TOML/JSON parse + static validate only; seeds from `fixtures/jobs` + reject stubs); `mise fuzz-job` / `fuzz-job-smoke`; `fuzz-smoke` CI job (THI-651 / THI-650).
+- Crate trust-boundary checklist in `docs/query_engine.md` § JSON security and verify-first / host-owns-paths notes in `docs/job.md` (THI-652).
+
+### Notes
+
+- `parse_query_json` corpus: post-0.6 shapes (window, `group_by` labels, align, filter, label-range / `label_filter`) covered via conformance + named stubs; documented in `fuzz/README.md` / fuzz-reseed (no separate pipeline/transform seed ocean this cut).
+
 ## [0.8.2] - 2026-10-25
 
 ### Added
